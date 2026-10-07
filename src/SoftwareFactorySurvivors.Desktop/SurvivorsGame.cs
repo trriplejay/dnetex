@@ -53,13 +53,13 @@ public class SurvivorsGame : Game
         if (keyboard.IsKeyDown(Keys.Escape))
             Exit();
 
-        var input = ShipInput.FromKeys(
-            forward: keyboard.IsKeyDown(Keys.W),
-            backward: keyboard.IsKeyDown(Keys.S),
-            left: keyboard.IsKeyDown(Keys.A),
-            right: keyboard.IsKeyDown(Keys.D));
+        var direction = System.Numerics.Vector2.Zero;
+        if (keyboard.IsKeyDown(Keys.W)) direction += ShipInput.KeyToDirection(MovementKey.W);
+        if (keyboard.IsKeyDown(Keys.A)) direction += ShipInput.KeyToDirection(MovementKey.A);
+        if (keyboard.IsKeyDown(Keys.S)) direction += ShipInput.KeyToDirection(MovementKey.S);
+        if (keyboard.IsKeyDown(Keys.D)) direction += ShipInput.KeyToDirection(MovementKey.D);
 
-        _ship.Update(input.Thrust, input.Rotation, (float)gameTime.ElapsedGameTime.TotalSeconds);
+        _ship.Update(direction, (float)gameTime.ElapsedGameTime.TotalSeconds);
 
         base.Update(gameTime);
     }
@@ -68,17 +68,20 @@ public class SurvivorsGame : Game
     {
         GraphicsDevice.Clear(Color.Black);
 
-        // Closed outline: repeat the first vertex at the end of the line strip.
-        var corners = _ship.GetVertices();
-        var vertices = corners
-            .Append(corners[0])
-            .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), Color.White))
-            .ToArray();
-
-        foreach (var pass in _effect.CurrentTechnique.Passes)
+        foreach (var stroke in _ship.GetStrokes())
         {
-            pass.Apply();
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
+            if (stroke.Length < 2)
+                continue;
+
+            var vertices = stroke
+                .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), Color.White))
+                .ToArray();
+
+            foreach (var pass in _effect.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
+            }
         }
 
         base.Draw(gameTime);

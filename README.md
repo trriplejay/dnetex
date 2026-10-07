@@ -2,14 +2,13 @@
 
 A survivors-style game written in C# with [MonoGame](https://monogame.net/) (DesktopGL). It runs on macOS, Linux and Windows. It's an early work in progress.
 
-Current features: the game runs full screen with a ship (a triangle) in the middle. W/S thrust along the ship's heading; A/D rotate it.
+Current features: the game runs full screen with a ship shaped like the Quarterback q/b logo (an infinity symbol with a vertical line through it) in the middle. W/A/S/D move the ship.
 
 ## Controls
 
 | Key | Action |
 |---|---|
-| W / S | Thrust forward / backward along the ship's heading |
-| A / D | Rotate left / right |
+| W/A/S/D | Move the ship |
 | Esc | Quit (and leave full screen) |
 
 ## Project layout
