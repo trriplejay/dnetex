@@ -54,10 +54,10 @@ public class SurvivorsGame : Game
             Exit();
 
         var direction = System.Numerics.Vector2.Zero;
-        if (keyboard.IsKeyDown(Keys.Left)) direction.X -= 1;
-        if (keyboard.IsKeyDown(Keys.Right)) direction.X += 1;
-        if (keyboard.IsKeyDown(Keys.Up)) direction.Y -= 1;
-        if (keyboard.IsKeyDown(Keys.Down)) direction.Y += 1;
+        if (keyboard.IsKeyDown(Keys.W)) direction += ShipInput.KeyToDirection(MovementKey.W);
+        if (keyboard.IsKeyDown(Keys.A)) direction += ShipInput.KeyToDirection(MovementKey.A);
+        if (keyboard.IsKeyDown(Keys.S)) direction += ShipInput.KeyToDirection(MovementKey.S);
+        if (keyboard.IsKeyDown(Keys.D)) direction += ShipInput.KeyToDirection(MovementKey.D);
 
         _ship.Update(direction, (float)gameTime.ElapsedGameTime.TotalSeconds);
 

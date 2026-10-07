@@ -39,6 +39,21 @@ public class ShipTests
         Assert.Equal(Start + new Vector2(x, y) * Ship.Speed * 0.5f, ship.Position);
     }
 
+    [Theory]
+    [InlineData(MovementKey.W, 0, -1)]
+    [InlineData(MovementKey.A, -1, 0)]
+    [InlineData(MovementKey.S, 0, 1)]
+    [InlineData(MovementKey.D, 1, 0)]
+    public void Wasd_input_moves_ship_at_speed(MovementKey key, float x, float y)
+    {
+        var ship = new Ship(Start);
+        var direction = ShipInput.KeyToDirection(key);
+
+        ship.Update(direction, 0.5f);
+
+        Assert.Equal(Start + new Vector2(x, y) * Ship.Speed * 0.5f, ship.Position);
+    }
+
     [Fact]
     public void Diagonal_movement_is_not_faster_than_straight()
     {
