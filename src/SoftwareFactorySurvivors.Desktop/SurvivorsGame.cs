@@ -53,13 +53,13 @@ public class SurvivorsGame : Game
         if (keyboard.IsKeyDown(Keys.Escape))
             Exit();
 
-        var direction = System.Numerics.Vector2.Zero;
-        if (keyboard.IsKeyDown(Keys.Left)) direction.X -= 1;
-        if (keyboard.IsKeyDown(Keys.Right)) direction.X += 1;
-        if (keyboard.IsKeyDown(Keys.Up)) direction.Y -= 1;
-        if (keyboard.IsKeyDown(Keys.Down)) direction.Y += 1;
+        var input = ShipInput.FromKeys(
+            forward: keyboard.IsKeyDown(Keys.W),
+            backward: keyboard.IsKeyDown(Keys.S),
+            left: keyboard.IsKeyDown(Keys.A),
+            right: keyboard.IsKeyDown(Keys.D));
 
-        _ship.Update(direction, (float)gameTime.ElapsedGameTime.TotalSeconds);
+        _ship.Update(input.Thrust, input.Rotation, (float)gameTime.ElapsedGameTime.TotalSeconds);
 
         base.Update(gameTime);
     }
