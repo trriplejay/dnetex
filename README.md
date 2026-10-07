@@ -2,13 +2,13 @@
 
 A survivors-style game written in C# with [MonoGame](https://monogame.net/) (DesktopGL). It runs on macOS, Linux and Windows. It's an early work in progress.
 
-Current features: the game runs full screen with a ship (a triangle) in the middle. The arrow keys move the ship.
+Current features: the game runs full screen with a ship (a triangle) in the middle. W/A/S/D move the ship.
 
 ## Controls
 
 | Key | Action |
 |---|---|
-| Arrow keys | Move the ship |
+| W/A/S/D | Move the ship |
 | Esc | Quit (and leave full screen) |
 
 ## Project layout
