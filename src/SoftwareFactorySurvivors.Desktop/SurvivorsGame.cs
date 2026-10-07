@@ -68,17 +68,20 @@ public class SurvivorsGame : Game
     {
         GraphicsDevice.Clear(Color.Black);
 
-        // Closed outline: repeat the first vertex at the end of the line strip.
-        var corners = _ship.GetVertices();
-        var vertices = corners
-            .Append(corners[0])
-            .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), Color.White))
-            .ToArray();
-
-        foreach (var pass in _effect.CurrentTechnique.Passes)
+        foreach (var stroke in _ship.GetStrokes())
         {
-            pass.Apply();
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
+            if (stroke.Length < 2)
+                continue;
+
+            var vertices = stroke
+                .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), Color.White))
+                .ToArray();
+
+            foreach (var pass in _effect.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
+            }
         }
 
         base.Draw(gameTime);
