@@ -1,29 +1,10 @@
-using System.Numerics;
-
 namespace SoftwareFactorySurvivors.Core;
 
-public enum MovementKey
-{
-    None,
-    W,
-    A,
-    S,
-    D,
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-/// <summary>Converts movement keys to directions in screen coordinates.</summary>
+/// <summary>Translates held controls into independent thrust and rotation intents.</summary>
 public static class ShipInput
 {
-    public static Vector2 KeyToDirection(MovementKey key) => key switch
-    {
-        MovementKey.W => new Vector2(0, -1),
-        MovementKey.A => new Vector2(-1, 0),
-        MovementKey.S => new Vector2(0, 1),
-        MovementKey.D => new Vector2(1, 0),
-        _ => Vector2.Zero,
-    };
+    /// <summary>Opposing controls cancel on each axis; released controls contribute zero.</summary>
+    public static (float Thrust, float Rotation) FromKeys(bool forward, bool backward, bool left, bool right)
+        => ((forward ? 1f : 0f) - (backward ? 1f : 0f),
+            (right ? 1f : 0f) - (left ? 1f : 0f));
 }
