@@ -79,7 +79,30 @@ public class SurvivorsGame : Game
     {
         GraphicsDevice.Clear(Color.Black);
 
-        foreach (var stroke in _ship.GetStrokes().Concat(_lasers.Select(laser => laser.GetLine())))
+        var shipStrokes = _ship.GetStrokes();
+
+        for (var strokeIndex = 0; strokeIndex < shipStrokes.Count; strokeIndex++)
+        {
+            var stroke = shipStrokes[strokeIndex];
+            if (stroke.Length < 2)
+                continue;
+
+            var vertices = stroke
+                .Select((p, vertexIndex) =>
+                {
+                    var rgb = ShipRendering.ColorFor(strokeIndex, vertexIndex);
+                    return new VertexPositionColor(new Vector3(p.X, p.Y, 0), new Color(rgb.R, rgb.G, rgb.B));
+                })
+                .ToArray();
+
+            foreach (var pass in _effect.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
+            }
+        }
+
+        foreach (var stroke in _lasers.Select(laser => laser.GetLine()))
         {
             if (stroke.Length < 2)
                 continue;
