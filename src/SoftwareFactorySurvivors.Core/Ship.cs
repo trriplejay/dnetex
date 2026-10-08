@@ -10,6 +10,9 @@ public class Ship
     /// <summary>Movement speed in pixels per second.</summary>
     public const float Speed = 200f;
 
+    /// <summary>Turning speed in radians per second.</summary>
+    public const float TurnSpeed = MathF.PI;
+
     // Two touching loops and a separate bar, in fixed-up local coordinates.
     // Screen Y grows downward: the front (-10) is shorter than the rear (+16).
     private static readonly Vector2[][] LocalStrokes =
@@ -39,19 +42,34 @@ public class Ship
 
     public Vector2 Position { get; private set; }
 
-    /// <summary>
-    /// Moves the ship in <paramref name="direction"/> for <paramref name="elapsedSeconds"/>.
-    /// Diagonal input is normalized so it isn't faster than straight movement.
-    /// </summary>
-    public void Update(Vector2 direction, float elapsedSeconds)
-    {
-        if (direction == Vector2.Zero)
-            return;
+    /// <summary>Radians clockwise from up (screen -Y); zero faces up.</summary>
+    public float Heading { get; private set; } = 0f;
 
-        Position += Vector2.Normalize(direction) * Speed * elapsedSeconds;
+    /// <summary>Turns in place: negative input turns left, positive input turns right.</summary>
+    public void Turn(float turn, float elapsedSeconds)
+    {
+        Heading += turn * TurnSpeed * elapsedSeconds;
     }
 
-    /// <summary>The logo's separate strokes in world (screen) coordinates, without rotation.</summary>
-    public IReadOnlyList<Vector2[]> GetStrokes() =>
-        LocalStrokes.Select(stroke => stroke.Select(p => p + Position).ToArray()).ToArray();
+    /// <summary>Thrusts forward (positive) or backward (negative) along Heading.</summary>
+    public void Thrust(float thrust, float elapsedSeconds)
+    {
+        var forward = new Vector2(MathF.Sin(Heading), -MathF.Cos(Heading));
+        Position += forward * thrust * Speed * elapsedSeconds;
+    }
+
+    /// <summary>Applies steering before thrust for this frame.</summary>
+    public void Update(float turn, float thrust, float elapsedSeconds)
+    {
+        Turn(turn, elapsedSeconds);
+        Thrust(thrust, elapsedSeconds);
+    }
+
+    /// <summary>The logo's separate strokes rotated by Heading around Position.</summary>
+    public IReadOnlyList<Vector2[]> GetStrokes()
+    {
+        var rotation = Matrix3x2.CreateRotation(Heading);
+        return LocalStrokes.Select(stroke => stroke
+            .Select(p => Vector2.Transform(p, rotation) + Position).ToArray()).ToArray();
+    }
 }

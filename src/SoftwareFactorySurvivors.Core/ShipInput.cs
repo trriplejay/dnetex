@@ -1,5 +1,3 @@
-using System.Numerics;
-
 namespace SoftwareFactorySurvivors.Core;
 
 public enum MovementKey
@@ -15,15 +13,20 @@ public enum MovementKey
     Right,
 }
 
-/// <summary>Converts movement keys to directions in screen coordinates.</summary>
+/// <summary>Converts movement keys to independent steering and thrust inputs.</summary>
 public static class ShipInput
 {
-    public static Vector2 KeyToDirection(MovementKey key) => key switch
+    public static float KeyToTurn(MovementKey key) => key switch
     {
-        MovementKey.W => new Vector2(0, -1),
-        MovementKey.A => new Vector2(-1, 0),
-        MovementKey.S => new Vector2(0, 1),
-        MovementKey.D => new Vector2(1, 0),
-        _ => Vector2.Zero,
+        MovementKey.A => -1f,
+        MovementKey.D => 1f,
+        _ => 0f,
+    };
+
+    public static float KeyToThrust(MovementKey key) => key switch
+    {
+        MovementKey.W => 1f,
+        MovementKey.S => -1f,
+        _ => 0f,
     };
 }
