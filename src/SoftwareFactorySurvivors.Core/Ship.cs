@@ -45,6 +45,10 @@ public class Ship
     /// <summary>Radians clockwise from up (screen -Y); zero faces up.</summary>
     public float Heading { get; private set; } = 0f;
 
+    public Vector2 Forward => new(MathF.Sin(Heading), -MathF.Cos(Heading));
+
+    public Vector2 Nose => Vector2.Transform(new Vector2(0, -10), Matrix3x2.CreateRotation(Heading)) + Position;
+
     /// <summary>Turns in place: negative input turns left, positive input turns right.</summary>
     public void Turn(float turn, float elapsedSeconds)
     {
@@ -54,8 +58,7 @@ public class Ship
     /// <summary>Thrusts forward (positive) or backward (negative) along Heading.</summary>
     public void Thrust(float thrust, float elapsedSeconds)
     {
-        var forward = new Vector2(MathF.Sin(Heading), -MathF.Cos(Heading));
-        Position += forward * thrust * Speed * elapsedSeconds;
+        Position += Forward * thrust * Speed * elapsedSeconds;
     }
 
     /// <summary>Applies steering before thrust for this frame.</summary>
