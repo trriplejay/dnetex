@@ -270,6 +270,35 @@ public class ShipTests
         AssertRotatedStrokes(original, ship, -MathF.PI / 4f);
     }
 
+    [Theory]
+    [InlineData(0f, 0f, -1f)]
+    [InlineData(0.5f, 1f, 0f)]
+    [InlineData(-0.5f, -1f, 0f)]
+    [InlineData(1f, 0f, 1f)]
+    public void Nose_and_forward_follow_heading_and_position(float turnSeconds, float x, float y)
+    {
+        var ship = new Ship(Start);
+        ship.Turn(1f, turnSeconds);
+        ship.Thrust(1f, 0.25f);
+
+        var expectedForward = new Vector2(x, y);
+        AssertPointNear(expectedForward, ship.Forward);
+        Assert.Equal(1f, ship.Forward.Length(), precision: 5);
+        AssertPointNear(Start + expectedForward * 60f, ship.Nose);
+        AssertPointNear(ship.GetStrokes()[2][0], ship.Nose);
+    }
+
+    [Fact]
+    public void Nose_and_forward_follow_an_oblique_heading()
+    {
+        var ship = new Ship(Start);
+        ship.Turn(1f, 0.25f);
+        var component = 1f / MathF.Sqrt(2f);
+
+        AssertPointNear(new Vector2(component, -component), ship.Forward);
+        AssertPointNear(Start + new Vector2(10f * component, -10f * component), ship.Nose);
+    }
+
     private static void ApplyKey(Ship ship, MovementKey key, float seconds) =>
         ship.Update(ShipInput.KeyToTurn(key), ShipInput.KeyToThrust(key), seconds);
 

@@ -13,6 +13,8 @@ public class SurvivorsGame : Game
     private readonly GraphicsDeviceManager _graphics;
     private BasicEffect _effect = null!;
     private Ship _ship = null!;
+    private readonly FiringTimer _firingTimer = new();
+    private readonly List<Laser> _lasers = [];
 
     public SurvivorsGame()
     {
@@ -60,7 +62,15 @@ public class SurvivorsGame : Game
         if (keyboard.IsKeyDown(Keys.W)) thrust += ShipInput.KeyToThrust(MovementKey.W);
         if (keyboard.IsKeyDown(Keys.S)) thrust += ShipInput.KeyToThrust(MovementKey.S);
 
-        _ship.Update(turn, thrust, (float)gameTime.ElapsedGameTime.TotalSeconds);
+        var elapsedSeconds = (float)gameTime.ElapsedGameTime.TotalSeconds;
+        _ship.Update(turn, thrust, elapsedSeconds);
+
+        foreach (var laser in _lasers)
+            laser.Update(elapsedSeconds);
+
+        _lasers.AddRange(_firingTimer.Update(elapsedSeconds, _ship.Nose, _ship.Heading));
+        var viewport = GraphicsDevice.Viewport;
+        _lasers.RemoveAll(laser => laser.IsExpired(viewport.Width, viewport.Height));
 
         base.Update(gameTime);
     }
@@ -69,7 +79,7 @@ public class SurvivorsGame : Game
     {
         GraphicsDevice.Clear(Color.Black);
 
-        foreach (var stroke in _ship.GetStrokes())
+        foreach (var stroke in _ship.GetStrokes().Concat(_lasers.Select(laser => laser.GetLine())))
         {
             if (stroke.Length < 2)
                 continue;
