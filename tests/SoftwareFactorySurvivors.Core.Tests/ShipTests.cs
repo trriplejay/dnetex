@@ -16,6 +16,26 @@ public class ShipTests
     }
 
     [Fact]
+    public void Oblique_nose_sits_at_the_lengthened_sixteen_pixel_extent()
+    {
+        var ship = new Ship(Start);
+        ship.Turn(1f, 0.25f);
+        var component = 1f / MathF.Sqrt(2f);
+
+        AssertPointNear(Start + new Vector2(16f * component, -16f * component), ship.Nose);
+        AssertPointNear(ship.GetStrokes()[2][0], ship.Nose);
+    }
+
+    [Fact]
+    public void Default_heading_centre_bar_reaches_sixteen_forward_and_back()
+    {
+        var ship = new Ship(Start);
+
+        Assert.Equal(new[] { Start + new Vector2(0, -16), Start + new Vector2(0, 16) },
+            ship.GetStrokes()[2]);
+    }
+
+    [Fact]
     public void New_ship_faces_up_and_thrust_preserves_heading()
     {
         var ship = new Ship(Start);
