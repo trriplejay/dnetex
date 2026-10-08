@@ -300,6 +300,47 @@ public class ShipTests
         Assert.Equal(ship.GetStrokes()[2][0], ship.Nose);
     }
 
+    [Fact]
+    public void Centre_bar_reaches_sixteen_units_forward_and_back()
+    {
+        var ship = new Ship(Start);
+
+        Assert.Equal(new[] { Start + new Vector2(0, -16), Start + new Vector2(0, 16) },
+            ship.GetStrokes()[2]);
+    }
+
+    [Fact]
+    public void Default_nose_is_the_centre_bar_front_endpoint()
+    {
+        var ship = new Ship(Start);
+        var front = ship.GetStrokes()[2][0];
+
+        Assert.Equal(Start + new Vector2(0, -16), front);
+        Assert.Equal(front, ship.Nose);
+    }
+
+    [Fact]
+    public void Oblique_nose_reaches_the_sixteen_unit_front_endpoint()
+    {
+        var ship = new Ship(Start);
+        ship.Turn(1f, 0.25f);
+        var component = 1f / MathF.Sqrt(2f);
+
+        AssertPointNear(Start + new Vector2(16f * component, -16f * component), ship.Nose);
+        Assert.Equal(ship.GetStrokes()[2][0], ship.Nose);
+    }
+
+    [Fact]
+    public void Frontmost_stroke_point_is_sixteen_units_ahead_of_position()
+    {
+        var ship = new Ship(Start);
+
+        var minLocalY = ship.GetStrokes().SelectMany(stroke => stroke).Min(point => point.Y)
+            - ship.Position.Y;
+
+        Assert.Equal(-16f, minLocalY, precision: 3);
+    }
+
     private static void ApplyKey(Ship ship, MovementKey key, float seconds) =>
         ship.Update(ShipInput.KeyToTurn(key), ShipInput.KeyToThrust(key), seconds);
 
