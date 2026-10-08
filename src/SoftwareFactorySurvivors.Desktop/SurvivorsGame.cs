@@ -79,13 +79,18 @@ public class SurvivorsGame : Game
     {
         GraphicsDevice.Clear(Color.Black);
 
-        foreach (var stroke in _ship.GetStrokes().Concat(_lasers.Select(laser => laser.GetLine())))
+        var shipStrokes = _ship.GetStrokes();
+        var centreBar = shipStrokes.Count > 2 ? shipStrokes[2] : null;
+        foreach (var stroke in shipStrokes.Concat(_lasers.Select(laser => laser.GetLine())))
         {
             if (stroke.Length < 2)
                 continue;
 
             var vertices = stroke
-                .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), Color.White))
+                .Select((p, index) => new VertexPositionColor(new Vector3(p.X, p.Y, 0),
+                    ReferenceEquals(stroke, centreBar) && index == 0
+                        ? new Color(200, 255, 0)
+                        : Color.White))
                 .ToArray();
 
             foreach (var pass in _effect.CurrentTechnique.Passes)
