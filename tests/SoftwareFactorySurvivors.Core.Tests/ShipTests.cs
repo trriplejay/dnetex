@@ -297,6 +297,7 @@ public class ShipTests
 
         AssertPointNear(new Vector2(component, -component), ship.Forward);
         AssertPointNear(Start + new Vector2(16f * component, -16f * component), ship.Nose);
+        Assert.Equal(ship.GetStrokes()[2][0], ship.Nose);
     }
 
     private static void ApplyKey(Ship ship, MovementKey key, float seconds) =>

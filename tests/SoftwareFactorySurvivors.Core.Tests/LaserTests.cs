@@ -77,11 +77,17 @@ public class LaserTests
 
         var line = laser.GetLine();
 
+        Assert.Equal(13f, Laser.Length);
         Assert.Equal(2, line.Length);
         AssertPointNear(laser.Position, line[0]);
         Assert.Equal(13f, Vector2.Distance(line[0], line[1]), precision: 3);
         var component = 13f / MathF.Sqrt(2f);
         AssertPointNear(line[0] + new Vector2(component, -component), line[1]);
+
+        var upwardLaser = new Laser(Start, 0f);
+        upwardLaser.Update(elapsed);
+        var upwardLine = upwardLaser.GetLine();
+        Assert.Equal(13f, Vector2.Distance(upwardLine[0], upwardLine[1]));
     }
 
     [Fact]
