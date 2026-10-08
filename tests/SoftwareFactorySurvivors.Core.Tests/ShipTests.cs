@@ -16,189 +16,281 @@ public class ShipTests
     }
 
     [Fact]
-    public void No_input_does_not_move_ship()
+    public void New_ship_faces_up_and_thrust_preserves_heading()
     {
         var ship = new Ship(Start);
+
+        Assert.Equal(0f, ship.Heading);
+        ship.Thrust(1f, 0.5f);
+
+        Assert.Equal(Start + new Vector2(0, -100), ship.Position);
+        Assert.Equal(0f, ship.Heading);
+    }
+
+    [Fact]
+    public void No_input_preserves_position_and_heading_after_turning()
+    {
+        var ship = new Ship(Start);
+        ship.Turn(1f, 0.25f);
+        var heading = ship.Heading;
 
         ship.Update(0f, 0f, 1f);
 
         Assert.Equal(Start, ship.Position);
+        Assert.Equal(heading, ship.Heading);
     }
 
     [Fact]
-    public void Default_heading_renders_tip_up()
+    public void Turning_accumulates_heading_without_moving()
     {
         var ship = new Ship(Start);
 
-        var vertices = ship.GetVertices();
+        ship.Turn(1f, 0.25f);
+        Assert.Equal(MathF.PI / 4f, ship.Heading, precision: 5);
+        Assert.Equal(Start, ship.Position);
 
-        Assert.Equal(0f, ship.Heading);
-        Assert.Equal(3, vertices.Length);
-        Assert.Equal(vertices.Min(p => p.Y), vertices[0].Y);
-        Assert.True(vertices[0].Y < ship.Position.Y, "nose should point up");
-        AssertVector(Start + new Vector2(0, -12), vertices[0]);
-        AssertVector(Start + new Vector2(9, 9), vertices[1]);
-        AssertVector(Start + new Vector2(-9, 9), vertices[2]);
+        ship.Turn(1f, 0.25f);
+        Assert.Equal(MathF.PI / 2f, ship.Heading, precision: 5);
+        Assert.Equal(Start, ship.Position);
+
+        ship.Turn(-1f, 0.5f);
+        Assert.Equal(0f, ship.Heading, precision: 5);
+        Assert.Equal(Start, ship.Position);
+    }
+
+    [Theory]
+    [InlineData(MovementKey.A, MovementKey.W, -1, 0)]
+    [InlineData(MovementKey.D, MovementKey.W, 1, 0)]
+    [InlineData(MovementKey.A, MovementKey.S, 1, 0)]
+    [InlineData(MovementKey.D, MovementKey.S, -1, 0)]
+    [InlineData(MovementKey.None, MovementKey.W, 0, -1)]
+    [InlineData(MovementKey.None, MovementKey.S, 0, 1)]
+    public void Thrust_follows_heading_after_keyboard_turn(
+        MovementKey steering, MovementKey thrust, float x, float y)
+    {
+        var ship = new Ship(Start);
+        ApplyKey(ship, steering, 0.5f);
+        var heading = ship.Heading;
+
+        ApplyKey(ship, thrust, 0.5f);
+
+        AssertPointNear(Start + new Vector2(x, y) * 100f, ship.Position);
+        Assert.Equal(heading, ship.Heading);
+    }
+
+    [Theory]
+    [InlineData(MovementKey.W, 1)]
+    [InlineData(MovementKey.S, -1)]
+    public void Thrust_at_oblique_heading_keeps_speed_and_heading(MovementKey key, float sign)
+    {
+        var ship = new Ship(Start);
+        ApplyKey(ship, MovementKey.D, 0.25f);
+        var heading = ship.Heading;
+
+        ApplyKey(ship, key, 0.5f);
+
+        var component = sign * 100f / MathF.Sqrt(2f);
+        AssertPointNear(Start + new Vector2(component, -component), ship.Position);
+        Assert.Equal(100f, Vector2.Distance(Start, ship.Position), precision: 3);
+        Assert.Equal(heading, ship.Heading);
     }
 
     [Fact]
-    public void Vertices_rotate_a_quarter_turn_about_position()
+    public void Simultaneous_turn_and_thrust_uses_new_heading()
     {
         var ship = new Ship(Start);
-        ship.Update(0f, 1f, 0.25f);
 
-        var vertices = ship.GetVertices();
+        ship.Update(ShipInput.KeyToTurn(MovementKey.D), ShipInput.KeyToThrust(MovementKey.W), 0.5f);
 
         Assert.Equal(MathF.PI / 2f, ship.Heading, precision: 5);
-        Assert.Equal(3, vertices.Length);
-        AssertVector(Start + new Vector2(12, 0), vertices[0]);
-        AssertVector(Start + new Vector2(-9, 9), vertices[1]);
-        AssertVector(Start + new Vector2(-9, -9), vertices[2]);
-    }
-
-    [Theory]
-    [InlineData(0f, true, 0f, -100f)]
-    [InlineData(0f, false, 0f, 100f)]
-    [InlineData(0.25f, true, 100f, 0f)]
-    [InlineData(0.25f, false, -100f, 0f)]
-    [InlineData(-0.25f, true, -100f, 0f)]
-    [InlineData(0.125f, true, 70.71068f, -70.71068f)]
-    [InlineData(0.125f, false, -70.71068f, 70.71068f)]
-    public void Thrust_follows_heading_in_both_directions(
-        float turns, bool forward, float expectedX, float expectedY)
-    {
-        var ship = new Ship(Start);
-        ship.Update(0f, MathF.Sign(turns), MathF.Abs(turns));
-        var heading = ship.Heading;
-        var input = ShipInput.FromKeys(forward, !forward, false, false);
-
-        ship.Update(input.Thrust, input.Rotation, 0.5f);
-
-        AssertVector(Start + new Vector2(expectedX, expectedY), ship.Position);
-        Assert.Equal(heading, ship.Heading);
-    }
-
-    [Theory]
-    [InlineData(1f, 0.125f)]
-    [InlineData(-1f, 0.5f)]
-    [InlineData(1f, 1f)]
-    public void Thrust_preserves_200_pixels_per_second(float thrust, float elapsed)
-    {
-        var ship = new Ship(Start);
-        ship.Update(0f, 1f, 0.125f);
-
-        ship.Update(thrust, 0f, elapsed);
-
-        Assert.Equal(200f, Ship.Speed);
-        Assert.Equal(200f * elapsed, Vector2.Distance(Start, ship.Position), precision: 3);
-    }
-
-    [Theory]
-    [InlineData(true, -1f)]
-    [InlineData(false, 1f)]
-    public void Rotation_keys_turn_visually_without_translation(bool left, float sign)
-    {
-        var ship = new Ship(Start);
-        var input = ShipInput.FromKeys(false, false, left, !left);
-
-        ship.Update(input.Thrust, input.Rotation, 0.25f);
-
-        Assert.Equal(sign * MathF.PI / 2f, ship.Heading, precision: 5);
-        Assert.Equal(Start, ship.Position);
-        AssertVector(Start + new Vector2(sign * 12f, 0f), ship.GetVertices()[0]);
-    }
-
-    [Theory]
-    [InlineData(-1f)]
-    [InlineData(1f)]
-    public void Rotation_advances_each_active_frame_and_stops_on_release(float rotation)
-    {
-        var ship = new Ship(Start);
-        for (var frame = 1; frame <= 3; frame++)
-        {
-            ship.Update(0f, rotation, 0.125f);
-            Assert.Equal(rotation * frame * MathF.PI / 4f, ship.Heading, precision: 5);
-        }
-        var heading = ship.Heading;
-
-        ship.Update(0f, 0f, 0.5f);
-
-        Assert.Equal(heading, ship.Heading);
-        Assert.Equal(Start, ship.Position);
-    }
-
-    [Theory]
-    [InlineData(1, -1f)]
-    [InlineData(1, 1f)]
-    [InlineData(60, -1f)]
-    [InlineData(60, 1f)]
-    public void One_second_accumulates_a_full_turn_regardless_of_frame_count(int frames, float rotation)
-    {
-        var ship = new Ship(Start);
-
-        for (var frame = 0; frame < frames; frame++)
-            ship.Update(0f, rotation, 1f / frames);
-
-        Assert.Equal(2f * MathF.PI, Ship.RotationSpeed, precision: 5);
-        Assert.Equal(rotation * 2f * MathF.PI, ship.Heading, precision: 5);
+        AssertPointNear(Start + new Vector2(100, 0), ship.Position);
     }
 
     [Fact]
-    public void Simultaneous_rotation_and_thrust_use_new_heading_and_curve_path()
+    public void Zero_elapsed_time_preserves_position_and_heading()
     {
         var ship = new Ship(Start);
-        var input = ShipInput.FromKeys(true, false, false, true);
-        var displacements = new Vector2[3];
+        ship.Turn(-1f, 0.25f);
+        var heading = ship.Heading;
 
-        for (var frame = 0; frame < displacements.Length; frame++)
-        {
-            var before = ship.Position;
-            ship.Update(input.Thrust, input.Rotation, 0.125f);
-            displacements[frame] = ship.Position - before;
-        }
+        ship.Update(1f, 1f, 0f);
 
-        Assert.Equal(3f * MathF.PI / 4f, ship.Heading, precision: 5);
-        AssertVector(new Vector2(17.67767f, -17.67767f), displacements[0]);
-        AssertVector(new Vector2(25f, 0f), displacements[1]);
-        AssertVector(new Vector2(17.67767f, 17.67767f), displacements[2]);
-        for (var frame = 1; frame < displacements.Length; frame++)
+        Assert.Equal(Start, ship.Position);
+        Assert.Equal(heading, ship.Heading);
+    }
+
+    [Fact]
+    public void Logo_has_multiple_strokes_instead_of_three_corners()
+    {
+        var ship = new Ship(Start);
+
+        var strokes = ship.GetStrokes();
+
+        Assert.True(strokes.Count >= 3);
+        Assert.All(strokes, stroke => Assert.NotEqual(3, stroke.Length));
+    }
+
+    [Fact]
+    public void Loops_are_finely_segmented_curves_on_either_side_of_position()
+    {
+        var ship = new Ship(Start);
+
+        var loops = ship.GetStrokes().OrderByDescending(stroke => stroke.Length).Take(2).ToArray();
+
+        Assert.Equal(2, loops.Length);
+        Assert.All(loops, loop =>
         {
-            var previous = displacements[frame - 1];
-            var current = displacements[frame];
-            Assert.True(MathF.Abs(previous.X * current.Y - previous.Y * current.X) > 1f,
-                "Successive displacements should not be parallel");
+            Assert.True(loop.Length >= 33);
+            Assert.Equal(loop[0], loop[^1]);
+            Assert.True(loop.Min(p => p.Y) < Start.Y);
+            Assert.True(loop.Max(p => p.Y) > Start.Y);
+            Assert.True(Enumerable.Range(0, loop.Length - 2).Any(i =>
+            {
+                var first = loop[i + 1] - loop[i];
+                var second = loop[i + 2] - loop[i + 1];
+                return MathF.Abs(first.X * second.Y - first.Y * second.X) > 0.001f;
+            }), "Loop points must curve rather than lie on one straight line");
+        });
+        Assert.Contains(loops, loop => loop.Min(p => p.X) < Start.X && loop.Max(p => p.X) <= Start.X);
+        Assert.Contains(loops, loop => loop.Min(p => p.X) >= Start.X && loop.Max(p => p.X) > Start.X);
+    }
+
+    [Fact]
+    public void Mid_line_is_a_separate_vertical_stroke_with_distinct_endpoints()
+    {
+        var ship = new Ship(Start);
+
+        var strokes = ship.GetStrokes();
+        var bar = Assert.Single(strokes, stroke => stroke.All(p => MathF.Abs(p.X - Start.X) < 0.001f));
+
+        Assert.True(bar.Length >= 2);
+        Assert.True(bar.Min(p => p.Y) < Start.Y);
+        Assert.True(bar.Max(p => p.Y) > Start.Y);
+        var loops = strokes.Where(stroke => !ReferenceEquals(stroke, bar)).ToArray();
+        Assert.Equal(2, loops.Length);
+        Assert.All(bar, point => Assert.All(loops, loop =>
+            Assert.DoesNotContain(loop, loopPoint => Vector2.Distance(point, loopPoint) < 0.001f)));
+    }
+
+    [Fact]
+    public void Front_extent_is_strictly_shorter_than_rear_extent()
+    {
+        var ship = new Ship(Start);
+
+        var points = ship.GetStrokes().SelectMany(stroke => stroke).ToArray();
+        var minY = points.Min(p => p.Y) - ship.Position.Y;
+        var maxY = points.Max(p => p.Y) - ship.Position.Y;
+
+        Assert.True(minY < 0);
+        Assert.True(maxY > 0);
+        Assert.True(MathF.Abs(minY) < MathF.Abs(maxY));
+    }
+
+    [Fact]
+    public void Right_turn_rotates_every_stroke_about_position()
+    {
+        var ship = new Ship(Start);
+        var original = ship.GetStrokes();
+
+        ApplyKey(ship, MovementKey.D, 0.5f);
+        Assert.Equal(Start, ship.Position);
+        Assert.Equal(MathF.PI / 2f, ship.Heading, precision: 5);
+
+        var turned = ship.GetStrokes();
+        Assert.Equal(original.Count, turned.Count);
+        for (var stroke = 0; stroke < original.Count; stroke++)
+        {
+            Assert.Equal(original[stroke].Length, turned[stroke].Length);
+            for (var point = 0; point < original[stroke].Length; point++)
+            {
+                var local = original[stroke][point] - Start;
+                var expected = ship.Position + new Vector2(-local.Y, local.X);
+                Assert.True(Vector2.Distance(expected, turned[stroke][point]) < 0.001f);
+            }
         }
+        Assert.NotEqual(original[2][0], turned[2][0]);
+    }
+
+    [Fact]
+    public void Default_heading_emits_fixed_up_logo_points()
+    {
+        var ship = new Ship(Start);
+
+        var strokes = ship.GetStrokes();
+
+        Assert.Equal(3, strokes.Count);
+        for (var loop = 0; loop < 2; loop++)
+        {
+            Assert.Equal(49, strokes[loop].Length);
+            var centerX = loop == 0 ? -8f : 8f;
+            for (var point = 0; point < 48; point++)
+            {
+                var angle = Math.Tau * point / 48;
+                var expected = Start + new Vector2(
+                    centerX + (float)(8 * Math.Cos(angle)), (float)(6 * Math.Sin(angle)));
+                AssertPointNear(expected, strokes[loop][point]);
+            }
+            Assert.Equal(strokes[loop][0], strokes[loop][48]);
+        }
+        Assert.Equal(new[] { Start + new Vector2(0, -10), Start + new Vector2(0, 16) }, strokes[2]);
     }
 
     [Theory]
-    [InlineData(false, false, false, false, 0f, 0f)]
-    [InlineData(false, false, false, true, 0f, 1f)]
-    [InlineData(false, false, true, false, 0f, -1f)]
-    [InlineData(false, false, true, true, 0f, 0f)]
-    [InlineData(false, true, false, false, -1f, 0f)]
-    [InlineData(false, true, false, true, -1f, 1f)]
-    [InlineData(false, true, true, false, -1f, -1f)]
-    [InlineData(false, true, true, true, -1f, 0f)]
-    [InlineData(true, false, false, false, 1f, 0f)]
-    [InlineData(true, false, false, true, 1f, 1f)]
-    [InlineData(true, false, true, false, 1f, -1f)]
-    [InlineData(true, false, true, true, 1f, 0f)]
-    [InlineData(true, true, false, false, 0f, 0f)]
-    [InlineData(true, true, false, true, 0f, 1f)]
-    [InlineData(true, true, true, false, 0f, -1f)]
-    [InlineData(true, true, true, true, 0f, 0f)]
-    public void Held_keys_map_to_independent_intents(
-        bool forward, bool backward, bool left, bool right, float thrust, float rotation)
+    [InlineData(-1, 0.25f)]
+    [InlineData(1, 0.123f)]
+    [InlineData(1, 1.25f)]
+    public void Every_stroke_rotates_by_heading_about_position(float turn, float seconds)
     {
-        var input = ShipInput.FromKeys(forward, backward, left, right);
+        var ship = new Ship(Start);
+        var original = ship.GetStrokes();
 
-        Assert.Equal(thrust, input.Thrust);
-        Assert.Equal(rotation, input.Rotation);
+        ship.Turn(turn, seconds);
+
+        Assert.Equal(Start, ship.Position);
+        AssertRotatedStrokes(original, ship, ship.Heading);
+        Assert.NotEqual(original[2][0], ship.GetStrokes()[2][0]);
     }
 
-    private static void AssertVector(Vector2 expected, Vector2 actual)
+    [Fact]
+    public void Left_then_forward_wires_input_to_heading_position_and_drawn_logo()
     {
-        Assert.Equal(expected.X, actual.X, precision: 3);
-        Assert.Equal(expected.Y, actual.Y, precision: 3);
+        var ship = new Ship(Start);
+        var original = ship.GetStrokes();
+
+        ApplyKey(ship, MovementKey.A, 0.25f);
+        Assert.Equal(-MathF.PI / 4f, ship.Heading, precision: 5);
+        Assert.Equal(Start, ship.Position);
+
+        ApplyKey(ship, MovementKey.W, 0.5f);
+
+        var component = 100f / MathF.Sqrt(2f);
+        AssertPointNear(Start + new Vector2(-component, -component), ship.Position);
+        Assert.True(ship.Position.X < Start.X);
+        Assert.Equal(-MathF.PI / 4f, ship.Heading, precision: 5);
+        AssertRotatedStrokes(original, ship, -MathF.PI / 4f);
     }
+
+    private static void ApplyKey(Ship ship, MovementKey key, float seconds) =>
+        ship.Update(ShipInput.KeyToTurn(key), ShipInput.KeyToThrust(key), seconds);
+
+    private static void AssertRotatedStrokes(IReadOnlyList<Vector2[]> original, Ship ship, float angle)
+    {
+        var rotated = ship.GetStrokes();
+        Assert.Equal(original.Count, rotated.Count);
+        for (var stroke = 0; stroke < original.Count; stroke++)
+        {
+            Assert.Equal(original[stroke].Length, rotated[stroke].Length);
+            for (var point = 0; point < original[stroke].Length; point++)
+            {
+                var local = original[stroke][point] - Start;
+                var expected = ship.Position + new Vector2(
+                    (float)(local.X * Math.Cos(angle) - local.Y * Math.Sin(angle)),
+                    (float)(local.X * Math.Sin(angle) + local.Y * Math.Cos(angle)));
+                AssertPointNear(expected, rotated[stroke][point]);
+            }
+        }
+    }
+
+    private static void AssertPointNear(Vector2 expected, Vector2 actual) =>
+        Assert.True(Vector2.Distance(expected, actual) < 0.001f, $"Expected {expected}, actual {actual}");
 }

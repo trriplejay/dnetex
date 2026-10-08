@@ -10,16 +10,30 @@ public class Ship
     /// <summary>Movement speed in pixels per second.</summary>
     public const float Speed = 200f;
 
-    /// <summary>Angular speed in radians per second (one full turn).</summary>
-    public const float RotationSpeed = 2f * MathF.PI;
+    /// <summary>Turning speed in radians per second.</summary>
+    public const float TurnSpeed = MathF.PI;
 
-    // Triangle outline relative to the ship's center, pointing up (screen Y grows downward).
-    private static readonly Vector2[] Shape =
+    // Two touching loops and a separate bar, in fixed-up local coordinates.
+    // Screen Y grows downward: the front (-10) is shorter than the rear (+16).
+    private static readonly Vector2[][] LocalStrokes =
     [
-        new(0, -12),
-        new(9, 9),
-        new(-9, 9),
+        CreateLoop(-8f),
+        CreateLoop(8f),
+        [new(0, -10), new(0, 16)],
     ];
+
+    private static Vector2[] CreateLoop(float centerX)
+    {
+        const int segments = 48;
+        var points = new Vector2[segments + 1];
+        for (var i = 0; i < segments; i++)
+        {
+            var angle = MathF.Tau * i / segments;
+            points[i] = new Vector2(centerX + 8f * MathF.Cos(angle), 6f * MathF.Sin(angle));
+        }
+        points[segments] = points[0];
+        return points;
+    }
 
     public Ship(Vector2 position)
     {
@@ -28,25 +42,34 @@ public class Ship
 
     public Vector2 Position { get; private set; }
 
-    /// <summary>Orientation in radians: zero points up; positive turns right on screen.</summary>
-    public float Heading { get; private set; }
+    /// <summary>Radians clockwise from up (screen -Y); zero faces up.</summary>
+    public float Heading { get; private set; } = 0f;
 
-    /// <summary>
-    /// Applies rotation first, then thrust along the resulting heading for this frame.
-    /// Thrust is +1 forward / -1 backward; rotation is -1 left / +1 right; zero is idle.
-    /// </summary>
-    public void Update(float thrust, float rotation, float elapsedSeconds)
+    /// <summary>Turns in place: negative input turns left, positive input turns right.</summary>
+    public void Turn(float turn, float elapsedSeconds)
     {
-        Heading += rotation * RotationSpeed * elapsedSeconds;
+        Heading += turn * TurnSpeed * elapsedSeconds;
+    }
 
-        var forward = Vector2.Transform(-Vector2.UnitY, Matrix3x2.CreateRotation(Heading));
+    /// <summary>Thrusts forward (positive) or backward (negative) along Heading.</summary>
+    public void Thrust(float thrust, float elapsedSeconds)
+    {
+        var forward = new Vector2(MathF.Sin(Heading), -MathF.Cos(Heading));
         Position += forward * thrust * Speed * elapsedSeconds;
     }
 
-    /// <summary>The triangle's corners rotated about Position in world (screen) coordinates.</summary>
-    public Vector2[] GetVertices()
+    /// <summary>Applies steering before thrust for this frame.</summary>
+    public void Update(float turn, float thrust, float elapsedSeconds)
+    {
+        Turn(turn, elapsedSeconds);
+        Thrust(thrust, elapsedSeconds);
+    }
+
+    /// <summary>The logo's separate strokes rotated by Heading around Position.</summary>
+    public IReadOnlyList<Vector2[]> GetStrokes()
     {
         var rotation = Matrix3x2.CreateRotation(Heading);
-        return Shape.Select(p => Vector2.Transform(p, rotation) + Position).ToArray();
+        return LocalStrokes.Select(stroke => stroke
+            .Select(p => Vector2.Transform(p, rotation) + Position).ToArray()).ToArray();
     }
 }
