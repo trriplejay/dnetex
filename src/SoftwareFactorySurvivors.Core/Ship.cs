@@ -13,13 +13,16 @@ public class Ship
     /// <summary>Turning speed in radians per second.</summary>
     public const float TurnSpeed = MathF.PI;
 
+    /// <summary>The head reaches FrontExtent units forward from centre, equal to the rear's 16 units.</summary>
+    public const float FrontExtent = 16f;
+
     // Two touching loops and a separate bar, in fixed-up local coordinates.
-    // Screen Y grows downward: the centre bar is equal-length, 16 forward (-16) and 16 back (+16) from centre.
+    // Screen Y grows downward: the centre bar is equal-length, 16 forward and 16 back from centre.
     private static readonly Vector2[][] LocalStrokes =
     [
         CreateLoop(-8f),
         CreateLoop(8f),
-        [new(0, -16), new(0, 16)],
+        [new(0, -FrontExtent), new(0, 16)],
     ];
 
     private static Vector2[] CreateLoop(float centerX)
@@ -47,7 +50,7 @@ public class Ship
 
     public Vector2 Forward => new(MathF.Sin(Heading), -MathF.Cos(Heading));
 
-    public Vector2 Nose => Vector2.Transform(new Vector2(0, -16), Matrix3x2.CreateRotation(Heading)) + Position;
+    public Vector2 Nose => Vector2.Transform(new Vector2(0, -FrontExtent), Matrix3x2.CreateRotation(Heading)) + Position;
 
     /// <summary>Turns in place: negative input turns left, positive input turns right.</summary>
     public void Turn(float turn, float elapsedSeconds)

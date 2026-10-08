@@ -184,6 +184,8 @@ public class ShipTests
         Assert.True(minY < 0);
         Assert.True(maxY > 0);
         Assert.Equal(MathF.Abs(minY), MathF.Abs(maxY), precision: 3);
+        Assert.Equal(-16f, minY, precision: 3);
+        Assert.Equal(16f, maxY, precision: 3);
     }
 
     [Fact]
