@@ -1,4 +1,3 @@
-using System.Numerics;
 using SoftwareFactorySurvivors.Core;
 
 namespace SoftwareFactorySurvivors.Core.Tests;
@@ -6,21 +5,14 @@ namespace SoftwareFactorySurvivors.Core.Tests;
 public class ShipRenderingTests
 {
     [Fact]
-    public void Only_the_head_tip_vertex_is_exactly_lime()
+    public void Ship_is_lime_green()
     {
-        var ship = new Ship(new Vector2(320, 240));
-        var strokes = ship.GetStrokes();
-        Assert.Equal(ship.Nose, strokes[2][0]);
+        Assert.Equal(new RgbColor(200, 255, 0), ShipRendering.Color);
+    }
 
-        for (var strokeIndex = 0; strokeIndex < strokes.Count; strokeIndex++)
-        {
-            for (var vertexIndex = 0; vertexIndex < strokes[strokeIndex].Length; vertexIndex++)
-            {
-                var expected = strokeIndex == 2 && vertexIndex == 0
-                    ? new RgbColor(200, 255, 0)
-                    : new RgbColor(255, 255, 255);
-                Assert.Equal(expected, ShipRendering.ColorFor(strokeIndex, vertexIndex));
-            }
-        }
+    [Fact]
+    public void Ship_strokes_are_4_5px()
+    {
+        Assert.Equal(4.5f, ShipRendering.StrokeWidth);
     }
 }

@@ -14,12 +14,12 @@ public class Ship
     public const float TurnSpeed = MathF.PI;
 
     // Two touching loops and a separate bar, in fixed-up local coordinates.
-    // Screen Y grows downward: the front (-10) is shorter than the rear (+16).
+    // The tail (+39) is 15px longer than the head (-24) so players can tell front from back.
     private static readonly Vector2[][] LocalStrokes =
     [
-        CreateLoop(-8f),
-        CreateLoop(8f),
-        [new(0, -10), new(0, 16)],
+        CreateLoop(-12f),
+        CreateLoop(12f),
+        [new(0, -24), new(0, 39)],
     ];
 
     private static Vector2[] CreateLoop(float centerX)
@@ -29,7 +29,7 @@ public class Ship
         for (var i = 0; i < segments; i++)
         {
             var angle = MathF.Tau * i / segments;
-            points[i] = new Vector2(centerX + 8f * MathF.Cos(angle), 6f * MathF.Sin(angle));
+            points[i] = new Vector2(centerX + 12f * MathF.Cos(angle), 9f * MathF.Sin(angle));
         }
         points[segments] = points[0];
         return points;
@@ -47,7 +47,7 @@ public class Ship
 
     public Vector2 Forward => new(MathF.Sin(Heading), -MathF.Cos(Heading));
 
-    public Vector2 Nose => Vector2.Transform(new Vector2(0, -10), Matrix3x2.CreateRotation(Heading)) + Position;
+    public Vector2 Nose => Vector2.Transform(new Vector2(0, -24), Matrix3x2.CreateRotation(Heading)) + Position;
 
     /// <summary>Turns in place: negative input turns left, positive input turns right.</summary>
     public void Turn(float turn, float elapsedSeconds)

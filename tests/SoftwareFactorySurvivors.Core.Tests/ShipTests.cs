@@ -173,7 +173,7 @@ public class ShipTests
     }
 
     [Fact]
-    public void Front_extent_is_strictly_shorter_than_rear_extent()
+    public void Tail_extends_15px_further_than_the_head()
     {
         var ship = new Ship(Start);
 
@@ -183,7 +183,7 @@ public class ShipTests
 
         Assert.True(minY < 0);
         Assert.True(maxY > 0);
-        Assert.True(MathF.Abs(minY) < MathF.Abs(maxY));
+        Assert.Equal(MathF.Abs(minY) + 15f, MathF.Abs(maxY), precision: 5);
     }
 
     [Fact]
@@ -222,17 +222,17 @@ public class ShipTests
         for (var loop = 0; loop < 2; loop++)
         {
             Assert.Equal(49, strokes[loop].Length);
-            var centerX = loop == 0 ? -8f : 8f;
+            var centerX = loop == 0 ? -12f : 12f;
             for (var point = 0; point < 48; point++)
             {
                 var angle = Math.Tau * point / 48;
                 var expected = Start + new Vector2(
-                    centerX + (float)(8 * Math.Cos(angle)), (float)(6 * Math.Sin(angle)));
+                    centerX + (float)(12 * Math.Cos(angle)), (float)(9 * Math.Sin(angle)));
                 AssertPointNear(expected, strokes[loop][point]);
             }
             Assert.Equal(strokes[loop][0], strokes[loop][48]);
         }
-        Assert.Equal(new[] { Start + new Vector2(0, -10), Start + new Vector2(0, 16) }, strokes[2]);
+        Assert.Equal(new[] { Start + new Vector2(0, -24), Start + new Vector2(0, 39) }, strokes[2]);
     }
 
     [Theory]
@@ -284,7 +284,7 @@ public class ShipTests
         var expectedForward = new Vector2(x, y);
         AssertPointNear(expectedForward, ship.Forward);
         Assert.Equal(1f, ship.Forward.Length(), precision: 5);
-        AssertPointNear(Start + expectedForward * 60f, ship.Nose);
+        AssertPointNear(Start + expectedForward * 74f, ship.Nose);
         AssertPointNear(ship.GetStrokes()[2][0], ship.Nose);
     }
 
@@ -296,7 +296,27 @@ public class ShipTests
         var component = 1f / MathF.Sqrt(2f);
 
         AssertPointNear(new Vector2(component, -component), ship.Forward);
-        AssertPointNear(Start + new Vector2(10f * component, -10f * component), ship.Nose);
+        AssertPointNear(Start + new Vector2(24f * component, -24f * component), ship.Nose);
+    }
+
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(0.3f)]
+    [InlineData(1.1f)]
+    public void Ship_rotates_about_the_point_where_the_loops_and_bar_cross(float turnSeconds)
+    {
+        var ship = new Ship(Start);
+        ship.Turn(1f, turnSeconds);
+
+        var strokes = ship.GetStrokes();
+
+        Assert.All(strokes.Take(2), loop =>
+            Assert.Contains(loop, p => Vector2.Distance(p, ship.Position) < 0.001f));
+        var bar = strokes[2];
+        var along = bar[1] - bar[0];
+        var toPosition = ship.Position - bar[0];
+        Assert.Equal(0f, along.X * toPosition.Y - along.Y * toPosition.X, precision: 2);
+        Assert.InRange(Vector2.Dot(toPosition, along) / along.LengthSquared(), 0f, 1f);
     }
 
     private static void ApplyKey(Ship ship, MovementKey key, float seconds) =>

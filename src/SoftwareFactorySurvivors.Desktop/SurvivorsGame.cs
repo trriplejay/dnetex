@@ -78,46 +78,46 @@ public class SurvivorsGame : Game
     protected override void Draw(GameTime gameTime)
     {
         GraphicsDevice.Clear(Color.Black);
+        // Thick strokes are triangle strips whose winding alternates, so draw both faces.
+        GraphicsDevice.RasterizerState = RasterizerState.CullNone;
 
-        var shipStrokes = _ship.GetStrokes();
+        var shipColor = new Color(ShipRendering.Color.R, ShipRendering.Color.G, ShipRendering.Color.B);
 
-        for (var strokeIndex = 0; strokeIndex < shipStrokes.Count; strokeIndex++)
+        foreach (var stroke in _ship.GetStrokes())
         {
-            var stroke = shipStrokes[strokeIndex];
             if (stroke.Length < 2)
                 continue;
 
-            var vertices = stroke
-                .Select((p, vertexIndex) =>
-                {
-                    var rgb = ShipRendering.ColorFor(strokeIndex, vertexIndex);
-                    return new VertexPositionColor(new Vector3(p.X, p.Y, 0), new Color(rgb.R, rgb.G, rgb.B));
-                })
+            var vertices = StrokeGeometry.Thicken(stroke, ShipRendering.StrokeWidth)
+                .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), shipColor))
                 .ToArray();
 
             foreach (var pass in _effect.CurrentTechnique.Passes)
             {
                 pass.Apply();
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
+                GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleStrip, vertices, 0, vertices.Length - 2);
             }
         }
 
         foreach (var stroke in _lasers.Select(laser => laser.GetLine()))
-        {
-            if (stroke.Length < 2)
-                continue;
-
-            var vertices = stroke
-                .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), Color.White))
-                .ToArray();
-
-            foreach (var pass in _effect.CurrentTechnique.Passes)
-            {
-                pass.Apply();
-                GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
-            }
-        }
+            DrawLineStrip(stroke, Color.White);
 
         base.Draw(gameTime);
+    }
+
+    private void DrawLineStrip(System.Numerics.Vector2[] stroke, Color color)
+    {
+        if (stroke.Length < 2)
+            return;
+
+        var vertices = stroke
+            .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), color))
+            .ToArray();
+
+        foreach (var pass in _effect.CurrentTechnique.Passes)
+        {
+            pass.Apply();
+            GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
+        }
     }
 }
