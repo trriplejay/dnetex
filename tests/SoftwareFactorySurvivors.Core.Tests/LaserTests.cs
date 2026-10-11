@@ -59,7 +59,7 @@ public class LaserTests
         var laser = Assert.Single(timer.Update(1f, ship.Nose, ship.Heading));
         var spawn = laser.Position;
 
-        ship.Turn(1f, 0.5f);
+        ship.AimAt(ship.Position + new Vector2(100, 0));
         laser.Update(0.5f);
 
         Assert.Equal(0f, laser.Heading);

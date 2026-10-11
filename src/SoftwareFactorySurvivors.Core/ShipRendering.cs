@@ -9,5 +9,5 @@ public static class ShipRendering
     public static readonly RgbColor Color = new(200, 255, 0);
 
     /// <summary>Drawn width of the ship's strokes in pixels.</summary>
-    public const float StrokeWidth = 4.5f;
+    public const float StrokeWidth = 2f;
 }

@@ -55,14 +55,14 @@ public class FiringTimerTests
         var ship = new Ship(new Vector2(320, 240));
         var timer = new FiringTimer();
         Assert.Empty(timer.Update(0.5f, ship.Nose, ship.Heading));
-        ship.Update(1f, 1f, 0.5f);
+        ship.Update(new Vector2(1, 0), new Vector2(10_000, 240), 0.5f);
 
         var first = Assert.Single(timer.Update(0.5f, ship.Nose, ship.Heading));
 
         AssertPointNear(new Vector2(444, 240), first.Position);
         AssertPointNear(ship.Nose, first.Position);
         Assert.Equal(ship.Heading, first.Heading);
-        ship.Update(1f, 1f, 0.5f);
+        ship.Update(new Vector2(1, 0), new Vector2(10_000, 240), 0.5f);
         var second = Assert.Single(timer.Update(1f, ship.Nose, ship.Heading));
         AssertPointNear(ship.Nose, second.Position);
         Assert.Equal(ship.Heading, second.Heading);
