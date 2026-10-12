@@ -5,7 +5,8 @@ namespace SoftwareFactorySurvivors.Core;
 /// <summary>
 /// Every few seconds, creates minions at the owner's position and throws each at its own random spot near the
 /// player. A throw can come in several waves a moment apart. Minions fly to their spots at speedMultiplier
-/// times their own speed, then behave like normal enemies of their type.
+/// times their own speed, then behave like normal enemies of their type, except that they're worth no experience
+/// (so a boss can't be farmed for levels).
 /// </summary>
 /// <param name="minLandingDistance">Closest the landing spot can be to the player, so throws aren't instant hits.</param>
 /// <param name="minionsPerWave">How many minions each wave throws at once.</param>
@@ -51,6 +52,6 @@ public sealed class ThrowMinions(
         var distance = minLandingDistance + random.NextSingle() * (maxLandingDistance - minLandingDistance);
         var spot = playerPosition + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * distance;
         var flight = new Thrown(spot, minion.Speed * speedMultiplier, minion.CreateMovement(minion.Speed));
-        return new Enemy(minion, owner.Position, flight);
+        return new Enemy(minion, owner.Position, flight, experience: 0);
     }
 }

@@ -27,6 +27,8 @@ public sealed class GameSession
     private readonly IReadOnlyList<EnemyType> _roster;
     private readonly List<BossArrival> _bossesToCome;
     private readonly List<Enemy> _bosses = [];
+    private readonly IReadOnlyList<SpawnPause> _spawnPauses;
+    private readonly List<RingSpawn> _ringsToCome;
     private readonly FiringTimer _firingTimer = new();
     private readonly List<Laser> _lasers = [];
     private readonly List<Enemy> _enemies = [];
@@ -34,19 +36,24 @@ public sealed class GameSession
 
     /// <param name="roster">Enemy types that join the spawner at their arrival times; defaults to EnemyRoster.All.</param>
     /// <param name="bosses">Bosses and when they enter; defaults to EnemyRoster.Bosses.</param>
+    /// <param name="spawnPauses">When regular spawning stops; defaults to EnemyRoster.SpawnPauses.</param>
+    /// <param name="rings">Rings of enemies around the ship and when they appear; defaults to EnemyRoster.Rings.</param>
     /// <param name="start">
     /// Debug start point. The clock starts at its time, with every enemy type that has arrived by then; bosses
     /// due earlier are skipped, while one due at exactly that time enters on the first frame. Starting above
-    /// level 1 offers the upgrade cards for each level skipped before anything moves.
+    /// level 1 offers the upgrade cards for each level skipped before anything moves. Rings follow the same rule as bosses.
     /// </param>
     public GameSession(Vector2 shipPosition, Random random, IReadOnlyList<EnemyType>? roster = null,
-        IReadOnlyList<BossArrival>? bosses = null, StartOptions? start = null)
+        IReadOnlyList<BossArrival>? bosses = null, StartOptions? start = null,
+        IReadOnlyList<SpawnPause>? spawnPauses = null, IReadOnlyList<RingSpawn>? rings = null)
     {
         start ??= StartOptions.Default;
         _random = random;
         _roster = roster ?? EnemyRoster.All;
         ElapsedSeconds = start.StartSeconds;
         _bossesToCome = [.. (bosses ?? EnemyRoster.Bosses).Where(arrival => arrival.AtSeconds >= ElapsedSeconds)];
+        _spawnPauses = spawnPauses ?? EnemyRoster.SpawnPauses;
+        _ringsToCome = [.. (rings ?? EnemyRoster.Rings).Where(ring => ring.AtSeconds >= ElapsedSeconds)];
         Ship = new Ship(shipPosition);
         Spawner = new EnemySpawner(random);
         Leveling = new Leveling(start.StartLevel);
@@ -71,6 +78,9 @@ public sealed class GameSession
 
     public bool IsBossActive => _bosses.Count > 0;
 
+    /// <summary>True during a scheduled lull, when regular spawning stops.</summary>
+    public bool IsSpawningPaused => _spawnPauses.Any(pause => pause.Covers(ElapsedSeconds));
+
     /// <summary>Seconds survived, stopping at SurvivalSeconds.</summary>
     public float ElapsedSeconds { get; private set; }
 
@@ -87,8 +97,8 @@ public sealed class GameSession
 
     public bool IsChoosingUpgrade => UpgradeOffer is not null;
 
-    /// <summary>Adds an enemy directly, for spawns that don't come from the edge spawner.</summary>
-    public void AddEnemy(Enemy enemy) => _enemies.Add(enemy);
+    /// <summary>Adds an enemy (and any shield orbiting it) directly, for spawns that don't come from the edge spawner.</summary>
+    public void AddEnemy(Enemy enemy) => AddEnemies([enemy]);
 
     /// <summary>Applies the chosen card, then offers the next level-up's cards or resumes play.</summary>
     public void ChooseUpgrade(int index)
@@ -124,15 +134,19 @@ public sealed class GameSession
             _lasers.AddRange(Volley(shot.Position, shot.Heading));
 
         AddArrivedBosses(width, height);
-        // Regular spawns wait while a boss is alive; the spawner's timing is frozen, not saved up.
-        if (!IsBossActive)
-            _enemies.AddRange(Spawner.Update(elapsedSeconds, width, height));
+        AddArrivedRings();
+        // Regular spawns wait while a boss is alive or during a lull; the spawner's timing is frozen, not saved up.
+        if (!IsBossActive && !IsSpawningPaused)
+            AddEnemies(Spawner.Update(elapsedSeconds, width, height));
         foreach (var enemy in _enemies)
             enemy.Update(Ship.Position, elapsedSeconds);
         foreach (var enemy in _enemies.ToArray())
-            _enemies.AddRange(enemy.UseAbility(Ship.Position, elapsedSeconds, _random));
+            AddEnemies(enemy.UseAbility(Ship.Position, elapsedSeconds, _random));
 
         ResolveLaserHits();
+        // A boss can respawn its shield when a hit moves it into a new phase.
+        foreach (var enemy in _enemies.ToArray())
+            _enemies.AddRange(enemy.TakeNewShields());
         _lasers.RemoveAll(laser => laser.IsExpired(width, height));
         ResolveContact();
 
@@ -157,7 +171,25 @@ public sealed class GameSession
             _bossesToCome.Remove(arrival);
             var boss = Spawner.SpawnAtEdge(arrival.Type, width, height);
             _bosses.Add(boss);
-            _enemies.Add(boss);
+            AddEnemies([boss]);
+        }
+    }
+
+    private void AddEnemies(IEnumerable<Enemy> enemies)
+    {
+        foreach (var enemy in enemies)
+        {
+            _enemies.Add(enemy);
+            _enemies.AddRange(enemy.TakeNewShields());
+        }
+    }
+
+    private void AddArrivedRings()
+    {
+        foreach (var ring in _ringsToCome.Where(ring => ring.AtSeconds <= ElapsedSeconds).ToArray())
+        {
+            _ringsToCome.Remove(ring);
+            AddEnemies(ring.Spawn(Ship.Position, _random));
         }
     }
 
@@ -186,7 +218,7 @@ public sealed class GameSession
                 if (enemy.IsDead)
                 {
                     Score += PointsPerKill;
-                    _pendingLevelUps += Leveling.Add(enemy.Type.Experience);
+                    _pendingLevelUps += Leveling.Add(enemy.Experience);
                 }
                 if (laser.RegisterHit(enemy))
                     return true;

@@ -11,9 +11,9 @@ internal static class TestEnemies
 
     public static Enemy Stationary(EnemyType type, Vector2 position) => new(type, position, new Stay());
 
-    /// <summary>A session with no enemy spawns and no bosses, so only what a test adds is in play.</summary>
+    /// <summary>A session with no enemy spawns, bosses or rings, so only what a test adds is in play.</summary>
     public static GameSession QuietSession(Vector2 shipPosition) =>
-        new(shipPosition, new Random(1), roster: [], bosses: []);
+        new(shipPosition, new Random(1), roster: [], bosses: [], rings: []);
 
     private sealed class Stay : IMovementPattern
     {

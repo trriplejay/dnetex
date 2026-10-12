@@ -54,11 +54,11 @@ public class StartOptionsTests
     [Fact]
     public void Boss_due_at_the_start_time_enters_on_the_first_frame_but_earlier_bosses_are_skipped()
     {
-        var atBoss = new GameSession(Center, new Random(1), start: new StartOptions(StartSeconds: 120f));
+        var atBoss = new GameSession(Center, new Random(1), start: new StartOptions(StartSeconds: 180f));
         atBoss.Update(Vector2.Zero, null, 1f / 60f, 1000f, 800f);
         Assert.Same(EnemyRoster.GeminiBoss, Assert.Single(atBoss.Bosses).Type);
 
-        var afterBoss = new GameSession(Center, new Random(1), start: new StartOptions(StartSeconds: 121f));
+        var afterBoss = new GameSession(Center, new Random(1), start: new StartOptions(StartSeconds: 181f));
         for (var i = 0; i < 60; i++)
             afterBoss.Update(Vector2.Zero, null, 1f / 60f, 1000f, 800f);
         Assert.False(afterBoss.IsBossActive);

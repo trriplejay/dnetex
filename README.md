@@ -19,9 +19,11 @@ Enemies are white line-art logos of AI companies, each with its own hit points, 
 | Apple Intelligence | 10 | Spirals in wide | 9 | 6:00 |
 | Meta | 20 | Slow tank | 15 | 7:00 |
 
-**Bosses.** At 2:00 the Gemini Boss enters: a Gemini logo 4× normal size with 40 hit points that crawls toward you at a third of a regular Gemini's speed. Every 3 seconds it throws a regular Gemini at a random spot 80–180 px from you; the thrown Gemini flies there at 4× Gemini speed, then lands and chases normally. It gets more dangerous as it is worn down: at 75% health it throws 3 Geminis at a time and they fly twice as fast (8× Gemini speed); at 50% it throws 5; at 25% it throws two waves of 5, 0.25 s apart, and starts moving like Claude (creeping, then lunging) at 4× its own speed. Phases are data on the enemy type (`EnemyType.Phases`), so any boss can have them. While a boss is alive no other enemies spawn; regular spawning resumes once it's defeated. A boss isn't destroyed by touching the ship, and its health bar runs down the right side of the screen, notched at each phase. Bosses are scheduled in `EnemyRoster.Bosses`.
+**Lull and ring.** From 1:20 to 1:30 regular spawning stops. At 1:30 it resumes at the normal rates, and 16 Geminis appear in a ring 500 px around the ship and close in from every side; they are spaced so you can still slip between two of them if you fly straight at the ring. Lulls and rings are scheduled in `EnemyRoster.SpawnPauses` and `EnemyRoster.Rings`.
 
-Kills give experience; level *n* needs 5 × *n*^1.5 experience (5, 14, 26, 40, 56 …). Each level pauses the game and offers three random upgrade cards; the one you pick lasts for the rest of the game:
+**Bosses.** At 3:00 the Gemini Boss enters: a Gemini logo 4× normal size with 40 hit points that crawls toward you at a third of a regular Gemini's speed. Five regular Geminis orbit it at 10× Gemini speed as a shield: the boss takes no damage, and lasers that reach it are absorbed, until all five are dead (its health bar is grey while shielded). The shield respawns at each phase: 5 Geminis at 75%, 10 at 50%, and 10 orbiting twice as far out at 25%. Shields are data on the enemy type (`EnemyType.Shield`). Every 3 seconds it throws a regular Gemini at a random spot 80–180 px from you; the thrown Gemini flies there at 4× Gemini speed, then lands and chases normally. Thrown Geminis still score a point when killed but give no experience. It gets more dangerous as it is worn down: at 75% health it throws 3 Geminis at a time and they fly twice as fast (8× Gemini speed); at 50% it throws 5; at 25% it throws two waves of 5, 0.25 s apart, and starts moving like Claude (creeping, then lunging) at 4× its own speed. Phases are data on the enemy type (`EnemyType.Phases`), so any boss can have them. While a boss is alive no other enemies spawn; regular spawning resumes once it's defeated. A boss isn't destroyed by touching the ship, and its health bar runs down the right side of the screen, notched at each phase. Bosses are scheduled in `EnemyRoster.Bosses`.
+
+Kills give experience; level *n* needs 3.5 × *n*^1.5 experience (4, 10, 18, 28, 39 …). Each level pauses the game and offers three random upgrade cards; the one you pick lasts for the rest of the game:
 
 | Upgrade | Effect per pick |
 |---|---|
@@ -119,7 +121,7 @@ dotnet run --project src/SoftwareFactorySurvivors.Desktop    # play the game
 For debugging, arguments after `--` choose where the game starts:
 
 ```sh
-dotnet run --project src/SoftwareFactorySurvivors.Desktop -- --time 2:00 --level 5
+dotnet run --project src/SoftwareFactorySurvivors.Desktop -- --time 3:00 --level 5
 ```
 
 - `--time MM:SS` (or whole seconds) starts the clock there, with every enemy type that has arrived by then. A boss due at exactly that time enters straight away; bosses due earlier are skipped.

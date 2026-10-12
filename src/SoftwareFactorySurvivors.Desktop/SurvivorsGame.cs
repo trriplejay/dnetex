@@ -233,7 +233,9 @@ public class SurvivorsGame : Game
             DrawLineStrip([new(left, top), new(right, top), new(right, bottom), new(left, bottom), new(left, top)], Color.White);
             var filled = barHeight * boss.HitPoints / boss.Type.HitPoints;
             if (filled > 1f)
-                DrawThickStroke([new(left + barWidth / 2f, bottom), new(left + barWidth / 2f, bottom - filled)], barWidth - 4f, Color.White);
+                // Greyed out while its shield makes it immune to damage.
+                DrawThickStroke([new(left + barWidth / 2f, bottom), new(left + barWidth / 2f, bottom - filled)], barWidth - 4f,
+                    boss.IsShielded ? Color.Gray : Color.White);
             // Notches where the boss changes behaviour.
             foreach (var phase in boss.Type.Phases ?? [])
             {

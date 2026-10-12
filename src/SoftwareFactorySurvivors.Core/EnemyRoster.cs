@@ -76,6 +76,8 @@ public static class EnemyRoster
     /// at 75% health it throws 3 at a time, and they fly twice as fast (8x Gemini speed);
     /// at 50% it throws 5;
     /// at 25% it throws two waves of 5, 0.25 seconds apart, and starts moving like Claude at 4x its own speed.
+    /// Five regular Geminis orbit it at 10x Gemini speed as a shield; it takes no damage until all five are dead.
+    /// The shield respawns at each phase: 5 again at 75%, 10 at 50%, and 10 orbiting twice as far out at 25%.
     /// It never spawns on the regular schedule; see Bosses.
     /// </summary>
     public static readonly EnemyType GeminiBoss = new(
@@ -85,19 +87,38 @@ public static class EnemyRoster
         CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 4f),
         Phases:
         [
-            new(0.75f, CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 8f, perWave: 3)),
-            new(0.50f, CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 8f, perWave: 5)),
+            new(0.75f, CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 8f, perWave: 3),
+                Shield: GeminiShield(count: 5)),
+            new(0.50f, CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 8f, perWave: 5),
+                Shield: GeminiShield(count: 10)),
             new(0.25f,
                 CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 8f, perWave: 5, waves: 2, secondsBetweenWaves: 0.25f),
-                CreateMovement: () => Claude.CreateMovement(4f * GeminiBossSpeed)),
-        ]);
+                CreateMovement: () => Claude.CreateMovement(4f * GeminiBossSpeed),
+                Shield: GeminiShield(count: 10, orbitRadius: 2f * GeminiShieldRadius)),
+        ],
+        Shield: GeminiShield(count: 5));
+
+    /// <summary>How far the Gemini Boss's shield orbits from its centre, just clear of its outline.</summary>
+    private const float GeminiShieldRadius = 115f;
+
+    private static EnemyShield GeminiShield(int count, float orbitRadius = GeminiShieldRadius) =>
+        new(Gemini, count, orbitRadius, SpeedMultiplier: 10f);
 
     private static ThrowMinions ThrowGeminis(float flightSpeedMultiplier, int perWave = 1, int waves = 1, float secondsBetweenWaves = 0f) =>
         new(Gemini, secondsBetweenThrows: 3f, flightSpeedMultiplier, minLandingDistance: 80f, maxLandingDistance: 180f,
             perWave, waves, secondsBetweenWaves);
 
     /// <summary>Bosses and when they appear. While any boss is alive, regular spawning pauses.</summary>
-    public static IReadOnlyList<BossArrival> Bosses { get; } = [new(120f, GeminiBoss)];
+    public static IReadOnlyList<BossArrival> Bosses { get; } = [new(180f, GeminiBoss)];
+
+    /// <summary>Stretches of the clock when regular spawning stops.</summary>
+    public static IReadOnlyList<SpawnPause> SpawnPauses { get; } = [new(80f, 90f)];
+
+    /// <summary>
+    /// Rings of enemies that appear around the ship. At 1:30, after the lull, 16 Geminis surround it 500 px out:
+    /// spaced widely enough that a ship flying straight at the ring can still slip between two of them.
+    /// </summary>
+    public static IReadOnlyList<RingSpawn> Rings { get; } = [new(90f, Gemini, Count: 16, Radius: 500f)];
 
     public static IReadOnlyList<EnemyType> All { get; } =
         [HuggingFace, Gemini, ChatGpt, Claude, Grok, Copilot, Cursor, Perplexity, AppleIntelligence, Meta];

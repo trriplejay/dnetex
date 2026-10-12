@@ -6,7 +6,8 @@ namespace SoftwareFactorySurvivors.Core;
 public sealed class Enemy
 {
     /// <param name="movement">Overrides the type's own movement pattern, e.g. to hold an enemy still in tests.</param>
-    public Enemy(EnemyType type, Vector2 position, IMovementPattern? movement = null)
+    /// <param name="experience">Overrides the experience the type is worth, e.g. 0 for minions a boss throws.</param>
+    public Enemy(EnemyType type, Vector2 position, IMovementPattern? movement = null, int? experience = null)
     {
         if (!(type.HitPoints > 0f))
             throw new ArgumentOutOfRangeException(nameof(type), "Enemy types need positive hit points.");
@@ -17,15 +18,37 @@ public sealed class Enemy
         Type = type;
         Position = position;
         HitPoints = type.HitPoints;
+        Experience = experience ?? type.Experience;
         Movement = movement ?? type.CreateMovement(type.Speed);
         Ability = type.CreateAbility?.Invoke();
+        Shields = _newShields = CreateShields(type.Shield);
     }
 
     public EnemyType Type { get; }
     public Vector2 Position { get; private set; }
     public float HitPoints { get; private set; }
+
+    /// <summary>Experience the player gains for killing this enemy.</summary>
+    public int Experience { get; }
     public IMovementPattern Movement { get; private set; }
     public IEnemyAbility? Ability { get; private set; }
+
+    /// <summary>The enemies orbiting this one as its current shield (a phase can replace it with a fresh one).</summary>
+    public IReadOnlyList<Enemy> Shields { get; private set; }
+
+    // Shield enemies created since the game last collected them with TakeNewShields.
+    private IReadOnlyList<Enemy> _newShields;
+
+    /// <summary>Returns shield enemies spawned since the last call, so the game can add them to play.</summary>
+    public IReadOnlyList<Enemy> TakeNewShields()
+    {
+        var created = _newShields;
+        _newShields = [];
+        return created;
+    }
+
+    /// <summary>True while any shield enemy is alive; damage is ignored until they're all dead.</summary>
+    public bool IsShielded => Shields.Any(shield => !shield.IsDead);
 
     /// <summary>How many of the type's Phases have kicked in so far (0 before the first).</summary>
     public int PhasesReached { get; private set; }
@@ -47,8 +70,22 @@ public sealed class Enemy
 
     public void TakeDamage(float damage)
     {
+        if (IsShielded)
+            return;
         HitPoints = MathF.Max(0f, HitPoints - damage);
         EnterReachedPhases();
+    }
+
+    private Enemy[] CreateShields(EnemyShield? shield)
+    {
+        if (shield is null)
+            return [];
+
+        return Enumerable.Range(0, shield.Count).Select(i =>
+        {
+            var orbit = new Orbit(this, shield.OrbitRadius, shield.Type.Speed * shield.SpeedMultiplier, MathF.Tau * i / shield.Count);
+            return new Enemy(shield.Type, orbit.CurrentPosition, orbit);
+        }).ToArray();
     }
 
     // A single big hit can cross several thresholds; each one's changes apply in order.
@@ -62,6 +99,9 @@ public sealed class Enemy
                 Ability = phase.CreateAbility();
             if (phase.CreateMovement is not null)
                 Movement = phase.CreateMovement();
+            // If one hit crosses several phases, only the last phase's shield appears.
+            if (phase.Shield is not null)
+                Shields = _newShields = CreateShields(phase.Shield);
         }
     }
 

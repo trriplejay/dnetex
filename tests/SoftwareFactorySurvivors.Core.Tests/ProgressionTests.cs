@@ -13,7 +13,7 @@ public class ProgressionTests
     [Fact]
     public void Experience_needed_per_level_grows_faster_than_linearly()
     {
-        int[] expected = [5, 14, 26, 40, 56];
+        int[] expected = [4, 10, 18, 28, 39];
         Assert.Equal(expected, Enumerable.Range(1, 5).Select(Leveling.Required));
 
         for (var level = 2; level < 30; level++)
@@ -29,13 +29,13 @@ public class ProgressionTests
     {
         var leveling = new Leveling();
 
-        Assert.Equal(0, leveling.Add(4));
+        Assert.Equal(0, leveling.Add(3));
         Assert.Equal(1, leveling.Level);
 
-        Assert.Equal(2, leveling.Add(5 + 14 - 4 + 3));
+        Assert.Equal(2, leveling.Add(4 + 10 - 3 + 3));
         Assert.Equal(3, leveling.Level);
         Assert.Equal(3, leveling.Experience);
-        Assert.Equal(26, leveling.ExperienceToNextLevel);
+        Assert.Equal(18, leveling.ExperienceToNextLevel);
     }
 
     [Fact]
@@ -125,8 +125,8 @@ public class ProgressionTests
     public void Several_levels_at_once_offer_cards_one_level_at_a_time()
     {
         var session = TestEnemies.QuietSession(Center);
-        // One kill worth 30 experience: 5 for level 2 plus 14 for level 3, with 11 left over.
-        var bigPrize = EnemyRoster.Meta with { Experience = 30 };
+        // One kill worth 20 experience: 4 for level 2 plus 10 for level 3, with 6 left over.
+        var bigPrize = EnemyRoster.Meta with { Experience = 20 };
         session.AddEnemy(TestEnemies.Stationary(bigPrize, Center + new Vector2(0, -150)));
         session.Stats.Damage = 100f;
 
@@ -134,7 +134,7 @@ public class ProgressionTests
             session.Update(Vector2.Zero, null, Frame, Width, Height);
 
         Assert.Equal(3, session.Leveling.Level);
-        Assert.Equal(11, session.Leveling.Experience);
+        Assert.Equal(6, session.Leveling.Experience);
         session.ChooseUpgrade(1);
         Assert.True(session.IsChoosingUpgrade);
         session.ChooseUpgrade(2);
