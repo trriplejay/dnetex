@@ -67,17 +67,34 @@ public static class EnemyRoster
         DefaultSpawnsPerMinute: 3f, ArrivesAtSeconds: 420f, SpinSpeed: 0f,
         speed => new ChasePlayer(speed), LogoShapes.Meta(32f));
 
+    private const float GeminiBossSpeed = 30f;
+
     /// <summary>
-    /// A giant Gemini (4x size) that crawls toward the player and every few seconds throws a regular Gemini
+    /// A giant Gemini (4x size) that crawls toward the player and every 3 seconds throws a regular Gemini
     /// at a random spot near them; the thrown Gemini flies at 4x its speed, then lands and chases normally.
+    /// It gets more dangerous as it's worn down:
+    /// at 75% health it throws 3 at a time, and they fly twice as fast (8x Gemini speed);
+    /// at 50% it throws 5;
+    /// at 25% it throws two waves of 5, 0.25 seconds apart, and starts moving like Claude at 4x its own speed.
     /// It never spawns on the regular schedule; see Bosses.
     /// </summary>
     public static readonly EnemyType GeminiBoss = new(
-        "Gemini Boss", Radius: 80f, HitPoints: 20f, Speed: 30f, Experience: 30,
+        "Gemini Boss", Radius: 80f, HitPoints: 40f, Speed: GeminiBossSpeed, Experience: 30,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
         speed => new ChasePlayer(speed), LogoShapes.Gemini(80f),
-        CreateAbility: () => new ThrowMinions(Gemini, secondsBetweenThrows: 3f, speedMultiplier: 4f,
-            minLandingDistance: 80f, maxLandingDistance: 180f));
+        CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 4f),
+        Phases:
+        [
+            new(0.75f, CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 8f, perWave: 3)),
+            new(0.50f, CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 8f, perWave: 5)),
+            new(0.25f,
+                CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 8f, perWave: 5, waves: 2, secondsBetweenWaves: 0.25f),
+                CreateMovement: () => Claude.CreateMovement(4f * GeminiBossSpeed)),
+        ]);
+
+    private static ThrowMinions ThrowGeminis(float flightSpeedMultiplier, int perWave = 1, int waves = 1, float secondsBetweenWaves = 0f) =>
+        new(Gemini, secondsBetweenThrows: 3f, flightSpeedMultiplier, minLandingDistance: 80f, maxLandingDistance: 180f,
+            perWave, waves, secondsBetweenWaves);
 
     /// <summary>Bosses and when they appear. While any boss is alive, regular spawning pauses.</summary>
     public static IReadOnlyList<BossArrival> Bosses { get; } = [new(120f, GeminiBoss)];

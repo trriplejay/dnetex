@@ -11,6 +11,9 @@ public sealed class Enemy
         if (!(type.HitPoints > 0f))
             throw new ArgumentOutOfRangeException(nameof(type), "Enemy types need positive hit points.");
 
+        if (type.Phases is { } phases && phases.Zip(phases.Skip(1)).Any(pair => pair.Second.AtHealthFraction >= pair.First.AtHealthFraction))
+            throw new ArgumentException("Phases must be listed from the highest health fraction down.", nameof(type));
+
         Type = type;
         Position = position;
         HitPoints = type.HitPoints;
@@ -21,8 +24,11 @@ public sealed class Enemy
     public EnemyType Type { get; }
     public Vector2 Position { get; private set; }
     public float HitPoints { get; private set; }
-    public IMovementPattern Movement { get; }
-    public IEnemyAbility? Ability { get; }
+    public IMovementPattern Movement { get; private set; }
+    public IEnemyAbility? Ability { get; private set; }
+
+    /// <summary>How many of the type's Phases have kicked in so far (0 before the first).</summary>
+    public int PhasesReached { get; private set; }
 
     /// <summary>Radians the logo has spun since it spawned.</summary>
     public float Rotation { get; private set; }
@@ -42,6 +48,21 @@ public sealed class Enemy
     public void TakeDamage(float damage)
     {
         HitPoints = MathF.Max(0f, HitPoints - damage);
+        EnterReachedPhases();
+    }
+
+    // A single big hit can cross several thresholds; each one's changes apply in order.
+    private void EnterReachedPhases()
+    {
+        var phases = Type.Phases ?? [];
+        while (!IsDead && PhasesReached < phases.Count && HitPoints <= Type.HitPoints * phases[PhasesReached].AtHealthFraction)
+        {
+            var phase = phases[PhasesReached++];
+            if (phase.CreateAbility is not null)
+                Ability = phase.CreateAbility();
+            if (phase.CreateMovement is not null)
+                Movement = phase.CreateMovement();
+        }
     }
 
     /// <summary>The logo outline in screen coordinates, used for both drawing and contact.</summary>

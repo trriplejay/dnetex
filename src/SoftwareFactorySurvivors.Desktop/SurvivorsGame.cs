@@ -14,6 +14,9 @@ public class SurvivorsGame : Game
     private BasicEffect _effect = null!;
     private GameSession _session = null!;
 
+    // Debug start time and level, applied to every new game including restarts.
+    private readonly StartOptions _start;
+
     // Kept for as long as the game runs; a new session doesn't clear it.
     private readonly HighScoreTable _highScores = new();
     private InitialsEntry _initials = new();
@@ -22,8 +25,9 @@ public class SurvivorsGame : Game
     private KeyboardState _previousKeyboard;
     private MouseState _previousMouse;
 
-    public SurvivorsGame()
+    public SurvivorsGame(StartOptions? start = null)
     {
+        _start = start ?? StartOptions.Default;
         _graphics = new GraphicsDeviceManager(this);
         Window.Title = "Software Factory Survivors";
         IsMouseVisible = true;
@@ -46,7 +50,7 @@ public class SurvivorsGame : Game
     private void StartSession()
     {
         var viewport = GraphicsDevice.Viewport;
-        _session = new GameSession(new System.Numerics.Vector2(viewport.Width / 2f, viewport.Height / 2f), Random.Shared);
+        _session = new GameSession(new System.Numerics.Vector2(viewport.Width / 2f, viewport.Height / 2f), Random.Shared, start: _start);
         _initials = new InitialsEntry();
         _scoreSaved = false;
         _savedRank = null;
@@ -156,7 +160,7 @@ public class SurvivorsGame : Game
         DrawText($"SCORE {_session.Score}", new(center.X, 84f), 16f, 2f, Color.White);
         DrawPlayerStatus();
         if (!_session.IsFinished)
-            DrawBossHealth(center);
+            DrawBossHealth();
 
         if (_session.UpgradeOffer is { } offer && !_session.IsFinished)
         {
@@ -209,21 +213,34 @@ public class SurvivorsGame : Game
     }
 
     /// <summary>Each living boss's name and a health bar, under the clock.</summary>
-    private void DrawBossHealth(System.Numerics.Vector2 center)
+    /// <summary>A tall health bar per living boss down the right side of the screen, draining from the top, notched at its phases.</summary>
+    private void DrawBossHealth()
     {
-        const float barWidth = 400f;
-        var top = 124f;
+        const float barWidth = 16f;
+        const float rightMargin = 40f;
+        const float labelHeight = 16f;
+        var viewport = GraphicsDevice.Viewport;
+        var barHeight = viewport.Height * 0.6f;
+        var top = (viewport.Height - barHeight) / 2f;
+        var bottom = top + barHeight;
+        var right = viewport.Width - rightMargin;
+
         foreach (var boss in _session.Bosses)
         {
-            DrawText(boss.Type.Name.ToUpperInvariant(), new(center.X, top), 16f, 2f, Color.White);
-            var left = center.X - barWidth / 2f;
-            var barTop = top + 18f;
-            DrawLineStrip([new(left, barTop), new(left + barWidth, barTop), new(left + barWidth, barTop + 10f),
-                new(left, barTop + 10f), new(left, barTop)], Color.White);
-            var filled = barWidth * boss.HitPoints / boss.Type.HitPoints;
+            var left = right - barWidth;
+            var name = boss.Type.Name.ToUpperInvariant();
+            DrawTextLeft(name, new(right - VectorText.MeasureWidth(name, labelHeight), top - 24f), labelHeight, 2f, Color.White);
+            DrawLineStrip([new(left, top), new(right, top), new(right, bottom), new(left, bottom), new(left, top)], Color.White);
+            var filled = barHeight * boss.HitPoints / boss.Type.HitPoints;
             if (filled > 1f)
-                DrawThickStroke([new(left, barTop + 5f), new(left + filled, barTop + 5f)], 8f, Color.White);
-            top += 48f;
+                DrawThickStroke([new(left + barWidth / 2f, bottom), new(left + barWidth / 2f, bottom - filled)], barWidth - 4f, Color.White);
+            // Notches where the boss changes behaviour.
+            foreach (var phase in boss.Type.Phases ?? [])
+            {
+                var y = bottom - barHeight * phase.AtHealthFraction;
+                DrawLineStrip([new(left - 8f, y), new(left, y)], Color.White);
+            }
+            right -= barWidth + 48f;
         }
     }
 

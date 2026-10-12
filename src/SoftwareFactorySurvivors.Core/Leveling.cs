@@ -8,7 +8,14 @@ namespace SoftwareFactorySurvivors.Core;
 /// </summary>
 public sealed class Leveling
 {
-    public int Level { get; private set; } = 1;
+    public Leveling(int startLevel = 1)
+    {
+        if (startLevel < 1)
+            throw new ArgumentOutOfRangeException(nameof(startLevel));
+        Level = startLevel;
+    }
+
+    public int Level { get; private set; }
 
     /// <summary>Experience earned toward the next level.</summary>
     public int Experience { get; private set; }

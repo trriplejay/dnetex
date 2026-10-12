@@ -34,15 +34,25 @@ public sealed class GameSession
 
     /// <param name="roster">Enemy types that join the spawner at their arrival times; defaults to EnemyRoster.All.</param>
     /// <param name="bosses">Bosses and when they enter; defaults to EnemyRoster.Bosses.</param>
+    /// <param name="start">
+    /// Debug start point. The clock starts at its time, with every enemy type that has arrived by then; bosses
+    /// due earlier are skipped, while one due at exactly that time enters on the first frame. Starting above
+    /// level 1 offers the upgrade cards for each level skipped before anything moves.
+    /// </param>
     public GameSession(Vector2 shipPosition, Random random, IReadOnlyList<EnemyType>? roster = null,
-        IReadOnlyList<BossArrival>? bosses = null)
+        IReadOnlyList<BossArrival>? bosses = null, StartOptions? start = null)
     {
+        start ??= StartOptions.Default;
         _random = random;
         _roster = roster ?? EnemyRoster.All;
-        _bossesToCome = [.. bosses ?? EnemyRoster.Bosses];
+        ElapsedSeconds = start.StartSeconds;
+        _bossesToCome = [.. (bosses ?? EnemyRoster.Bosses).Where(arrival => arrival.AtSeconds >= ElapsedSeconds)];
         Ship = new Ship(shipPosition);
         Spawner = new EnemySpawner(random);
+        Leveling = new Leveling(start.StartLevel);
+        _pendingLevelUps = start.StartLevel - 1;
         AddArrivedEnemyTypes();
+        OfferNextUpgrade();
     }
 
     public Ship Ship { get; }
@@ -51,7 +61,7 @@ public sealed class GameSession
     public EnemySpawner Spawner { get; }
 
     public PlayerStats Stats { get; } = new();
-    public Leveling Leveling { get; } = new();
+    public Leveling Leveling { get; }
 
     public IReadOnlyList<Laser> Lasers => _lasers;
     public IReadOnlyList<Enemy> Enemies => _enemies;

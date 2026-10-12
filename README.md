@@ -19,7 +19,7 @@ Enemies are white line-art logos of AI companies, each with its own hit points, 
 | Apple Intelligence | 10 | Spirals in wide | 9 | 6:00 |
 | Meta | 20 | Slow tank | 15 | 7:00 |
 
-**Bosses.** At 2:00 the Gemini Boss enters: a Gemini logo 4× normal size with 20 hit points that crawls toward you at a third of a regular Gemini's speed. Every 3 seconds it throws a regular Gemini at a random spot 80–180 px from you; the thrown Gemini flies there at 4× Gemini speed, then lands and chases normally. While a boss is alive no other enemies spawn; regular spawning resumes once it's defeated. A boss isn't destroyed by touching the ship, and its health bar shows under the clock. Bosses are scheduled in `EnemyRoster.Bosses`.
+**Bosses.** At 2:00 the Gemini Boss enters: a Gemini logo 4× normal size with 40 hit points that crawls toward you at a third of a regular Gemini's speed. Every 3 seconds it throws a regular Gemini at a random spot 80–180 px from you; the thrown Gemini flies there at 4× Gemini speed, then lands and chases normally. It gets more dangerous as it is worn down: at 75% health it throws 3 Geminis at a time and they fly twice as fast (8× Gemini speed); at 50% it throws 5; at 25% it throws two waves of 5, 0.25 s apart, and starts moving like Claude (creeping, then lunging) at 4× its own speed. Phases are data on the enemy type (`EnemyType.Phases`), so any boss can have them. While a boss is alive no other enemies spawn; regular spawning resumes once it's defeated. A boss isn't destroyed by touching the ship, and its health bar runs down the right side of the screen, notched at each phase. Bosses are scheduled in `EnemyRoster.Bosses`.
 
 Kills give experience; level *n* needs 5 × *n*^1.5 experience (5, 14, 26, 40, 56 …). Each level pauses the game and offers three random upgrade cards; the one you pick lasts for the rest of the game:
 
@@ -115,6 +115,17 @@ dotnet build                                                 # build everything
 dotnet test                                                  # run the unit tests
 dotnet run --project src/SoftwareFactorySurvivors.Desktop    # play the game
 ```
+
+For debugging, arguments after `--` choose where the game starts:
+
+```sh
+dotnet run --project src/SoftwareFactorySurvivors.Desktop -- --time 2:00 --level 5
+```
+
+- `--time MM:SS` (or whole seconds) starts the clock there, with every enemy type that has arrived by then. A boss due at exactly that time enters straight away; bosses due earlier are skipped.
+- `--level N` starts the ship at level N, offering the upgrade cards for each skipped level before play begins.
+
+Both apply again when you restart with Enter.
 
 ## Publishing a standalone build
 
