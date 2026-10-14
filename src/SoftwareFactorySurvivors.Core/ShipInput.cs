@@ -1,32 +1,17 @@
+using System.Numerics;
+
 namespace SoftwareFactorySurvivors.Core;
 
-public enum MovementKey
-{
-    None,
-    W,
-    A,
-    S,
-    D,
-    Up,
-    Down,
-    Left,
-    Right,
-}
-
-/// <summary>Converts movement keys to independent steering and thrust inputs.</summary>
+/// <summary>Turns the held WASD keys into a screen movement direction.</summary>
 public static class ShipInput
 {
-    public static float KeyToTurn(MovementKey key) => key switch
+    /// <summary>
+    /// W up, A left, S down, D right. Opposite keys cancel, and diagonals are normalized so they move at
+    /// the same speed as a single key.
+    /// </summary>
+    public static Vector2 Direction(bool up, bool left, bool down, bool right)
     {
-        MovementKey.A => -1f,
-        MovementKey.D => 1f,
-        _ => 0f,
-    };
-
-    public static float KeyToThrust(MovementKey key) => key switch
-    {
-        MovementKey.W => 1f,
-        MovementKey.S => -1f,
-        _ => 0f,
-    };
+        var direction = new Vector2((right ? 1 : 0) - (left ? 1 : 0), (down ? 1 : 0) - (up ? 1 : 0));
+        return direction == Vector2.Zero ? direction : Vector2.Normalize(direction);
+    }
 }

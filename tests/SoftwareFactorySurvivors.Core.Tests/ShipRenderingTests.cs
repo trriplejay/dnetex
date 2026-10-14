@@ -11,8 +11,8 @@ public class ShipRenderingTests
     }
 
     [Fact]
-    public void Ship_strokes_are_4_5px()
+    public void Ship_strokes_are_2px()
     {
-        Assert.Equal(4.5f, ShipRendering.StrokeWidth);
+        Assert.Equal(2f, ShipRendering.StrokeWidth);
     }
 }

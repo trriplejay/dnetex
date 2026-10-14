@@ -16,107 +16,104 @@ public class ShipTests
     }
 
     [Fact]
-    public void New_ship_faces_up_and_thrust_preserves_heading()
+    public void New_ship_faces_up()
     {
         var ship = new Ship(Start);
 
         Assert.Equal(0f, ship.Heading);
-        ship.Thrust(1f, 0.5f);
-
-        Assert.Equal(Start + new Vector2(0, -100), ship.Position);
-        Assert.Equal(0f, ship.Heading);
-    }
-
-    [Fact]
-    public void No_input_preserves_position_and_heading_after_turning()
-    {
-        var ship = new Ship(Start);
-        ship.Turn(1f, 0.25f);
-        var heading = ship.Heading;
-
-        ship.Update(0f, 0f, 1f);
-
-        Assert.Equal(Start, ship.Position);
-        Assert.Equal(heading, ship.Heading);
-    }
-
-    [Fact]
-    public void Turning_accumulates_heading_without_moving()
-    {
-        var ship = new Ship(Start);
-
-        ship.Turn(1f, 0.25f);
-        Assert.Equal(MathF.PI / 4f, ship.Heading, precision: 5);
-        Assert.Equal(Start, ship.Position);
-
-        ship.Turn(1f, 0.25f);
-        Assert.Equal(MathF.PI / 2f, ship.Heading, precision: 5);
-        Assert.Equal(Start, ship.Position);
-
-        ship.Turn(-1f, 0.5f);
-        Assert.Equal(0f, ship.Heading, precision: 5);
-        Assert.Equal(Start, ship.Position);
     }
 
     [Theory]
-    [InlineData(MovementKey.A, MovementKey.W, -1, 0)]
-    [InlineData(MovementKey.D, MovementKey.W, 1, 0)]
-    [InlineData(MovementKey.A, MovementKey.S, 1, 0)]
-    [InlineData(MovementKey.D, MovementKey.S, -1, 0)]
-    [InlineData(MovementKey.None, MovementKey.W, 0, -1)]
-    [InlineData(MovementKey.None, MovementKey.S, 0, 1)]
-    public void Thrust_follows_heading_after_keyboard_turn(
-        MovementKey steering, MovementKey thrust, float x, float y)
+    [InlineData(0f, -1f, 0f)]
+    [InlineData(1f, 0f, 0.5f)]
+    [InlineData(0f, 1f, 1f)]
+    [InlineData(-1f, 0f, -0.5f)]
+    [InlineData(1f, -1f, 0.25f)]
+    [InlineData(-1f, 1f, -0.75f)]
+    public void Aiming_snaps_the_heading_straight_at_the_target(float x, float y, float halfTurns)
     {
         var ship = new Ship(Start);
-        ApplyKey(ship, steering, 0.5f);
+
+        ship.AimAt(Start + new Vector2(x, y) * 250f);
+
+        Assert.Equal(halfTurns * MathF.PI, ship.Heading, precision: 5);
+        AssertPointNear(Vector2.Normalize(new Vector2(x, y)), ship.Forward);
+        Assert.Equal(Start, ship.Position);
+    }
+
+    [Fact]
+    public void Aiming_at_the_ship_itself_keeps_the_heading()
+    {
+        var ship = new Ship(Start);
+        ship.AimAt(Start + new Vector2(5, 0));
+
+        ship.AimAt(Start);
+
+        Assert.Equal(MathF.PI / 2f, ship.Heading, precision: 5);
+    }
+
+    [Theory]
+    [InlineData(true, false, false, false, 0f, -1f)]
+    [InlineData(false, true, false, false, -1f, 0f)]
+    [InlineData(false, false, true, false, 0f, 1f)]
+    [InlineData(false, false, false, true, 1f, 0f)]
+    public void Wasd_moves_in_screen_directions_whatever_the_heading(bool w, bool a, bool s, bool d, float x, float y)
+    {
+        var ship = new Ship(Start);
+        ship.AimAt(Start + new Vector2(-3, 7));
         var heading = ship.Heading;
 
-        ApplyKey(ship, thrust, 0.5f);
+        ship.Update(ShipInput.Direction(w, a, s, d), null, 0.5f);
 
         AssertPointNear(Start + new Vector2(x, y) * 100f, ship.Position);
         Assert.Equal(heading, ship.Heading);
     }
 
-    [Theory]
-    [InlineData(MovementKey.W, 1)]
-    [InlineData(MovementKey.S, -1)]
-    public void Thrust_at_oblique_heading_keeps_speed_and_heading(MovementKey key, float sign)
+    [Fact]
+    public void Diagonal_movement_is_no_faster_than_straight()
     {
         var ship = new Ship(Start);
-        ApplyKey(ship, MovementKey.D, 0.25f);
-        var heading = ship.Heading;
 
-        ApplyKey(ship, key, 0.5f);
+        ship.Update(ShipInput.Direction(up: true, left: false, down: false, right: true), null, 0.5f);
 
-        var component = sign * 100f / MathF.Sqrt(2f);
-        AssertPointNear(Start + new Vector2(component, -component), ship.Position);
         Assert.Equal(100f, Vector2.Distance(Start, ship.Position), precision: 3);
-        Assert.Equal(heading, ship.Heading);
+        var component = 100f / MathF.Sqrt(2f);
+        AssertPointNear(Start + new Vector2(component, -component), ship.Position);
     }
 
     [Fact]
-    public void Simultaneous_turn_and_thrust_uses_new_heading()
+    public void Opposite_keys_cancel_and_overlong_directions_are_capped()
+    {
+        Assert.Equal(Vector2.Zero, ShipInput.Direction(up: true, left: true, down: true, right: true));
+        Assert.Equal(new Vector2(1, 0), ShipInput.Direction(up: true, left: false, down: true, right: true));
+
+        var ship = new Ship(Start);
+        ship.Move(new Vector2(30, 40), 0.5f);
+        Assert.Equal(100f, Vector2.Distance(Start, ship.Position), precision: 3);
+    }
+
+    [Fact]
+    public void Update_moves_first_then_aims_from_the_new_position()
     {
         var ship = new Ship(Start);
+        var target = Start + new Vector2(100, -100);
 
-        ship.Update(ShipInput.KeyToTurn(MovementKey.D), ShipInput.KeyToThrust(MovementKey.W), 0.5f);
+        ship.Update(new Vector2(1, 0), target, 0.5f);
 
-        Assert.Equal(MathF.PI / 2f, ship.Heading, precision: 5);
+        // After moving 100px right the target is straight up, not up-and-right.
         AssertPointNear(Start + new Vector2(100, 0), ship.Position);
+        Assert.Equal(0f, ship.Heading, precision: 5);
     }
 
     [Fact]
-    public void Zero_elapsed_time_preserves_position_and_heading()
+    public void Zero_elapsed_time_does_not_move_but_still_aims()
     {
         var ship = new Ship(Start);
-        ship.Turn(-1f, 0.25f);
-        var heading = ship.Heading;
 
-        ship.Update(1f, 1f, 0f);
+        ship.Update(new Vector2(1, 0), Start + new Vector2(0, 50), 0f);
 
         Assert.Equal(Start, ship.Position);
-        Assert.Equal(heading, ship.Heading);
+        Assert.Equal(MathF.PI, ship.Heading, precision: 5);
     }
 
     [Fact]
@@ -173,7 +170,7 @@ public class ShipTests
     }
 
     [Fact]
-    public void Tail_extends_15px_further_than_the_head()
+    public void Head_and_tail_extents_are_the_same_length()
     {
         var ship = new Ship(Start);
 
@@ -183,16 +180,16 @@ public class ShipTests
 
         Assert.True(minY < 0);
         Assert.True(maxY > 0);
-        Assert.Equal(MathF.Abs(minY) + 15f, MathF.Abs(maxY), precision: 5);
+        Assert.Equal(MathF.Abs(minY), MathF.Abs(maxY), precision: 5);
     }
 
     [Fact]
-    public void Right_turn_rotates_every_stroke_about_position()
+    public void Aiming_right_rotates_every_stroke_about_position()
     {
         var ship = new Ship(Start);
         var original = ship.GetStrokes();
 
-        ApplyKey(ship, MovementKey.D, 0.5f);
+        Face(ship, MathF.PI / 2f);
         Assert.Equal(Start, ship.Position);
         Assert.Equal(MathF.PI / 2f, ship.Heading, precision: 5);
 
@@ -232,7 +229,7 @@ public class ShipTests
             }
             Assert.Equal(strokes[loop][0], strokes[loop][48]);
         }
-        Assert.Equal(new[] { Start + new Vector2(0, -24), Start + new Vector2(0, 39) }, strokes[2]);
+        Assert.Equal(new[] { Start + new Vector2(0, -24), Start + new Vector2(0, 24) }, strokes[2]);
     }
 
     [Theory]
@@ -244,7 +241,7 @@ public class ShipTests
         var ship = new Ship(Start);
         var original = ship.GetStrokes();
 
-        ship.Turn(turn, seconds);
+        Face(ship, turn * MathF.PI * seconds);
 
         Assert.Equal(Start, ship.Position);
         AssertRotatedStrokes(original, ship, ship.Heading);
@@ -252,16 +249,16 @@ public class ShipTests
     }
 
     [Fact]
-    public void Left_then_forward_wires_input_to_heading_position_and_drawn_logo()
+    public void Aiming_up_left_then_moving_up_left_wires_input_to_heading_position_and_drawn_logo()
     {
         var ship = new Ship(Start);
         var original = ship.GetStrokes();
 
-        ApplyKey(ship, MovementKey.A, 0.25f);
+        ship.AimAt(Start + new Vector2(-50, -50));
         Assert.Equal(-MathF.PI / 4f, ship.Heading, precision: 5);
         Assert.Equal(Start, ship.Position);
 
-        ApplyKey(ship, MovementKey.W, 0.5f);
+        ship.Update(ShipInput.Direction(up: true, left: true, down: false, right: false), null, 0.5f);
 
         var component = 100f / MathF.Sqrt(2f);
         AssertPointNear(Start + new Vector2(-component, -component), ship.Position);
@@ -278,8 +275,8 @@ public class ShipTests
     public void Nose_and_forward_follow_heading_and_position(float turnSeconds, float x, float y)
     {
         var ship = new Ship(Start);
-        ship.Turn(1f, turnSeconds);
-        ship.Thrust(1f, 0.25f);
+        Face(ship, MathF.PI * turnSeconds);
+        ship.Move(ship.Forward, 0.25f);
 
         var expectedForward = new Vector2(x, y);
         AssertPointNear(expectedForward, ship.Forward);
@@ -292,7 +289,7 @@ public class ShipTests
     public void Nose_and_forward_follow_an_oblique_heading()
     {
         var ship = new Ship(Start);
-        ship.Turn(1f, 0.25f);
+        Face(ship, MathF.PI / 4f);
         var component = 1f / MathF.Sqrt(2f);
 
         AssertPointNear(new Vector2(component, -component), ship.Forward);
@@ -306,7 +303,7 @@ public class ShipTests
     public void Ship_rotates_about_the_point_where_the_loops_and_bar_cross(float turnSeconds)
     {
         var ship = new Ship(Start);
-        ship.Turn(1f, turnSeconds);
+        Face(ship, MathF.PI * turnSeconds);
 
         var strokes = ship.GetStrokes();
 
@@ -319,8 +316,9 @@ public class ShipTests
         Assert.InRange(Vector2.Dot(toPosition, along) / along.LengthSquared(), 0f, 1f);
     }
 
-    private static void ApplyKey(Ship ship, MovementKey key, float seconds) =>
-        ship.Update(ShipInput.KeyToTurn(key), ShipInput.KeyToThrust(key), seconds);
+    /// <summary>Aims the ship so it faces heading (radians clockwise from up).</summary>
+    private static void Face(Ship ship, float heading) =>
+        ship.AimAt(ship.Position + new Vector2(MathF.Sin(heading), -MathF.Cos(heading)) * 100f);
 
     private static void AssertRotatedStrokes(IReadOnlyList<Vector2[]> original, Ship ship, float angle)
     {
