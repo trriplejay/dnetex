@@ -45,6 +45,25 @@ public static class Collision
         return false;
     }
 
+    /// <summary>
+    /// True when a filled disc touches any of the strokes (a segment comes within the radius of its centre),
+    /// or its centre lies inside a closed one.
+    /// </summary>
+    public static bool CircleTouches(Vector2 center, float radius, IReadOnlyList<Vector2[]> strokes)
+    {
+        foreach (var stroke in strokes)
+        {
+            for (var i = 0; i < stroke.Length - 1; i++)
+            {
+                if (PointSegmentDistance(center, stroke[i], stroke[i + 1]) <= radius)
+                    return true;
+            }
+            if (ContainsPoint(stroke, center))
+                return true;
+        }
+        return false;
+    }
+
     public static float SegmentDistance(Vector2 p1, Vector2 p2, Vector2 q1, Vector2 q2)
     {
         if (SegmentsIntersect(p1, p2, q1, q2))

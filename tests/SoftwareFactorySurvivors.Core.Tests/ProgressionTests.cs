@@ -50,6 +50,15 @@ public class ProgressionTests
             Assert.Equal(3, offer.Distinct().Count());
         }
 
+        for (var seed = 0; seed < 200; seed++)
+        {
+            var offer = Upgrades.Offer(stats, new Random(seed), count: 100);
+            Assert.DoesNotContain(Upgrade.Ballista, offer);
+            Assert.DoesNotContain(Upgrade.Bola, offer);
+        }
+        Assert.DoesNotContain(Upgrade.Ballista, Upgrades.All);
+        Assert.DoesNotContain(Upgrade.Bola, Upgrades.All);
+
         stats.ProjectileCount = Upgrades.MaxProjectileCount;
         for (var seed = 0; seed < 20; seed++)
         {
@@ -84,7 +93,7 @@ public class ProgressionTests
         Upgrades.Apply(Upgrade.MaxHitPoints, stats);
         Assert.Equal((2, 2), (stats.HitPoints, stats.MaxHitPoints));
 
-        foreach (var upgrade in Upgrades.All)
+        foreach (var upgrade in Upgrades.All.Concat(Upgrades.WeaponPaths))
             Assert.NotEmpty(VectorText.GetStrokes(Upgrades.Title(upgrade) + " " + Upgrades.Describe(upgrade, stats), Vector2.Zero, 10f));
     }
 
@@ -135,9 +144,12 @@ public class ProgressionTests
 
         Assert.Equal(3, session.Leveling.Level);
         Assert.Equal(6, session.Leveling.Experience);
+        Assert.Equal(GameSession.UpgradeChoices, session.UpgradeOffer!.Count);
         session.ChooseUpgrade(1);
         Assert.True(session.IsChoosingUpgrade);
-        session.ChooseUpgrade(2);
+        // The second round grants level 3: the two weapon paths.
+        Assert.Equal(Upgrades.WeaponPaths, session.UpgradeOffer);
+        session.ChooseUpgrade(1);
         Assert.False(session.IsChoosingUpgrade);
         Assert.Throws<InvalidOperationException>(() => session.ChooseUpgrade(0));
     }
