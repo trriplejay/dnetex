@@ -28,7 +28,7 @@ Kills give experience; level *n* needs 3.5 × *n*^1.5 experience (4, 10, 18, 28,
 | Upgrade | Effect per pick |
 |---|---|
 | Attack speed | +0.25 volleys per second (starts at 1) |
-| Projectile size | Lasers +50% wider and longer |
+| Projectile size | Lasers +100% wider and longer |
 | Projectiles | +1 laser per volley, fanned out (max 9) |
 | Damage | +1 damage per hit |
 | Piercing | Lasers pass through +1 more enemy |

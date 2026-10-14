@@ -67,9 +67,9 @@ public class ProgressionTests
         Upgrades.Apply(Upgrade.AttackSpeed, stats);
         Assert.Equal(1.25f, stats.AttacksPerSecond);
 
-        Assert.Equal("100% > 150%", Upgrades.Describe(Upgrade.ProjectileSize, stats));
+        Assert.Equal("100% > 200%", Upgrades.Describe(Upgrade.ProjectileSize, stats));
         Upgrades.Apply(Upgrade.ProjectileSize, stats);
-        Assert.Equal(1.5f, stats.ProjectileScale);
+        Assert.Equal(2f, stats.ProjectileScale);
 
         Upgrades.Apply(Upgrade.ProjectileCount, stats);
         Assert.Equal(2, stats.ProjectileCount);
@@ -192,7 +192,7 @@ public class ProgressionTests
         var laser = new Laser(Center, 0f, scale: 2f);
 
         Assert.Equal(26f, laser.Length);
-        Assert.Equal(4f, laser.Width);
+        Assert.Equal(8f, laser.Width);
         Assert.Equal(26f, Vector2.Distance(laser.GetLine()[0], laser.GetLine()[1]), precision: 3);
     }
 

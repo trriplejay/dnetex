@@ -14,7 +14,7 @@ public enum Upgrade
 public static class Upgrades
 {
     public const float AttackSpeedStep = 0.25f;
-    public const float ProjectileScaleStep = 0.5f;
+    public const float ProjectileScaleStep = 1f;
     public const int MaxProjectileCount = 9;
     public const float DamageStep = 1f;
 

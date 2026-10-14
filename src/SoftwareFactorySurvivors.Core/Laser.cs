@@ -8,7 +8,7 @@ public sealed class Laser : Projectile
     public const float BaseLength = 13f;
 
     /// <summary>Drawn and hit-tested width at 100% projectile size.</summary>
-    public const float BaseWidth = 2f;
+    public const float BaseWidth = 4f;
 
     private readonly HashSet<Enemy> _hitEnemies = [];
 
