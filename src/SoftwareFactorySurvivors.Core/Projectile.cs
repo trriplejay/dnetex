@@ -2,50 +2,64 @@ using System.Numerics;
 
 namespace SoftwareFactorySurvivors.Core;
 
-/// <summary>A straight-flying projectile whose drawable segment determines its expiry.</summary>
+/// <summary>
+/// A straight-flying projectile. Its shape (see GetShape) is what's drawn, what hits enemies and what decides
+/// when it has left the screen. It damages each enemy at most once and is used up after 1 + pierce enemies.
+/// </summary>
 public abstract class Projectile
 {
-    protected Projectile(Vector2 position, float heading, float speed)
+    private readonly HashSet<Enemy> _hitEnemies = [];
+
+    /// <param name="scale">Multiplies every dimension of the shape (the projectile size upgrade).</param>
+    /// <param name="pierce">How many extra enemies it passes through before it's used up.</param>
+    protected Projectile(Vector2 position, float heading, float speed, float scale = 1f, int pierce = 0)
     {
         Position = position;
         Heading = heading;
         Speed = speed;
+        Scale = scale;
+        PierceRemaining = pierce;
     }
 
     public Vector2 Position { get; private set; }
     public float Heading { get; }
     public float Speed { get; }
+    public float Scale { get; }
+    public int PierceRemaining { get; private set; }
 
     protected Vector2 Forward => new(MathF.Sin(Heading), -MathF.Cos(Heading));
 
     public void Update(float elapsedSeconds)
     {
         Position += Forward * Speed * elapsedSeconds;
+        Advance(elapsedSeconds);
     }
 
-    public abstract Vector2[] GetLine();
-
-    /// <summary>True only when the entire segment is outside [0,width] × [0,height].</summary>
-    public bool IsExpired(float width, float height)
+    /// <summary>Per-frame state beyond straight flight, e.g. spinning; called after the position moves.</summary>
+    protected virtual void Advance(float elapsedSeconds)
     {
-        var line = GetLine();
-        var direction = line[1] - line[0];
-        var enter = 0f;
-        var exit = 1f;
-        return !IntersectsAxis(line[0].X, direction.X, width, ref enter, ref exit)
-            || !IntersectsAxis(line[0].Y, direction.Y, height, ref enter, ref exit);
     }
 
-    // Clip the segment's parameter interval against both closed rectangle slabs.
-    private static bool IntersectsAxis(float origin, float direction, float maximum, ref float enter, ref float exit)
-    {
-        if (direction == 0f)
-            return origin >= 0f && origin <= maximum;
+    /// <summary>The current shape in screen coordinates, used for drawing, hits and expiry alike.</summary>
+    public abstract ProjectileShape GetShape();
 
-        var first = -origin / direction;
-        var last = (maximum - origin) / direction;
-        enter = MathF.Max(enter, MathF.Min(first, last));
-        exit = MathF.Min(exit, MathF.Max(first, last));
-        return enter <= exit;
+    /// <summary>True when the projectile's shape touches the given enemy outline.</summary>
+    public bool Touches(IReadOnlyList<Vector2[]> enemyStrokes) => GetShape().Touches(enemyStrokes);
+
+    /// <summary>True only when the entire shape is outside [0,width] × [0,height].</summary>
+    public bool IsExpired(float width, float height) => !GetShape().Overlaps(width, height);
+
+    /// <summary>A piercing projectile hits each enemy at most once.</summary>
+    public bool HasHit(Enemy enemy) => _hitEnemies.Contains(enemy);
+
+    /// <summary>Records a hit and returns true when the projectile is used up and should disappear.</summary>
+    public bool RegisterHit(Enemy enemy)
+    {
+        _hitEnemies.Add(enemy);
+        if (PierceRemaining == 0)
+            return true;
+
+        PierceRemaining--;
+        return false;
     }
 }

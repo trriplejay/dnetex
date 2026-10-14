@@ -5,7 +5,8 @@ namespace SoftwareFactorySurvivors.Core;
 /// <summary>
 /// One play-through: the ship, its lasers and the enemies, plus the player's level and upgrades.
 /// It ends in defeat when the ship runs out of hit points, or in victory when it is still alive after
-/// SurvivalSeconds. Each level gained pauses play until the player picks one of three offered upgrades.
+/// SurvivalSeconds. Each level gained pauses play until the player picks one of three offered upgrades;
+/// the round for level 3 instead offers the two weapon paths, Ballista and Bola, and the pick lasts all game.
 /// </summary>
 public sealed class GameSession
 {
@@ -23,6 +24,9 @@ public sealed class GameSession
 
     public const int UpgradeChoices = 3;
 
+    /// <summary>The level whose round offers the weapon paths instead of general upgrades.</summary>
+    public const int WeaponPathLevel = 3;
+
     private readonly Random _random;
     private readonly IReadOnlyList<EnemyType> _roster;
     private readonly List<BossArrival> _bossesToCome;
@@ -30,7 +34,7 @@ public sealed class GameSession
     private readonly IReadOnlyList<SpawnPause> _spawnPauses;
     private readonly List<RingSpawn> _ringsToCome;
     private readonly FiringTimer _firingTimer = new();
-    private readonly List<Laser> _lasers = [];
+    private readonly List<Projectile> _lasers = [];
     private readonly List<Enemy> _enemies = [];
     private int _pendingLevelUps;
 
@@ -70,7 +74,8 @@ public sealed class GameSession
     public PlayerStats Stats { get; } = new();
     public Leveling Leveling { get; }
 
-    public IReadOnlyList<Laser> Lasers => _lasers;
+    /// <summary>Projectiles in flight: lasers, or the chosen weapon path's projectiles once one is picked.</summary>
+    public IReadOnlyList<Projectile> Lasers => _lasers;
     public IReadOnlyList<Enemy> Enemies => _enemies;
 
     /// <summary>Bosses currently alive. While there are any, the regular spawner is paused.</summary>
@@ -193,13 +198,18 @@ public sealed class GameSession
         }
     }
 
-    private IEnumerable<Laser> Volley(Vector2 nose, float heading)
+    private IEnumerable<Projectile> Volley(Vector2 nose, float heading)
     {
         var count = Stats.ProjectileCount;
         for (var i = 0; i < count; i++)
         {
             var offset = (i - (count - 1) / 2f) * VolleySpreadRadians;
-            yield return new Laser(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce);
+            yield return Stats.WeaponPath switch
+            {
+                WeaponPath.Ballista => new Ballista(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
+                WeaponPath.Bola => new Bola(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
+                _ => new Laser(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
+            };
         }
     }
 
@@ -207,11 +217,10 @@ public sealed class GameSession
     {
         _lasers.RemoveAll(laser =>
         {
-            var line = laser.GetLine();
+            var shape = laser.GetShape();
             foreach (var enemy in _enemies)
             {
-                if (enemy.IsDead || laser.HasHit(enemy)
-                    || !Collision.ThickSegmentTouches(line[0], line[1], laser.Width / 2f, enemy.GetStrokes()))
+                if (enemy.IsDead || laser.HasHit(enemy) || !shape.Touches(enemy.GetStrokes()))
                     continue;
 
                 enemy.TakeDamage(Stats.Damage);
@@ -256,7 +265,13 @@ public sealed class GameSession
 
     private void OfferNextUpgrade()
     {
-        if (UpgradeOffer is null && _pendingLevelUps > 0)
-            UpgradeOffer = Upgrades.Offer(Stats, _random, UpgradeChoices);
+        if (UpgradeOffer is not null || _pendingLevelUps <= 0)
+            return;
+
+        // Rounds are offered oldest first, so this round grants the lowest level still waiting for its cards.
+        var levelGranted = Leveling.Level - _pendingLevelUps + 1;
+        UpgradeOffer = levelGranted == WeaponPathLevel
+            ? Upgrades.WeaponPaths
+            : Upgrades.Offer(Stats, _random, UpgradeChoices);
     }
 }

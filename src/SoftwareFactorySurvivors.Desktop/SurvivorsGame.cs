@@ -152,8 +152,8 @@ public class SurvivorsGame : Game
             foreach (var stroke in _session.Enemies.SelectMany(enemy => enemy.GetStrokes()))
                 DrawThickStroke(stroke, EnemyRendering.StrokeWidth, ToColor(EnemyRendering.Color));
 
-            foreach (var laser in _session.Lasers)
-                DrawThickStroke(laser.GetLine(), laser.Width, Color.White);
+            foreach (var projectile in _session.Lasers)
+                DrawProjectile(projectile.GetShape(), Color.White);
         }
 
         DrawText(GameClock.Format(_session.ElapsedSeconds), new(center.X, 40f), 32f, 3f, Color.White);
@@ -267,7 +267,54 @@ public class SurvivorsGame : Game
             DrawText(Upgrades.Describe(offer[i], _session.Stats), new(cardCenter.X, topLeft.Y + size.Y - 40f), 14f, 2f, Color.White);
         }
 
-        DrawText("PRESS 1 2 OR 3 OR CLICK A CARD", center + new System.Numerics.Vector2(0, size.Y / 2f + 50f), 16f, 2f, Color.White);
+        DrawText($"PRESS {CardKeysPrompt(offer.Count)} OR CLICK A CARD", center + new System.Numerics.Vector2(0, size.Y / 2f + 50f), 16f, 2f, Color.White);
+    }
+
+    /// <summary>"1", "1 OR 2", "1 2 OR 3": only the keys for the cards actually shown.</summary>
+    private static string CardKeysPrompt(int count) => count switch
+    {
+        <= 1 => "1",
+        _ => string.Join(" ", Enumerable.Range(1, count - 1)) + $" OR {count}",
+    };
+
+    /// <summary>Draws the same Core shape the projectile is hit-tested with: thick lines, filled polygons and discs.</summary>
+    private void DrawProjectile(ProjectileShape shape, Color color)
+    {
+        foreach (var line in shape.Lines)
+            DrawThickStroke([line.A, line.B], line.HalfWidth * 2f, color);
+        foreach (var polygon in shape.Polygons)
+            FillConvexPolygon(polygon, color);
+        foreach (var circle in shape.Circles)
+            FillCircle(circle.Center, circle.Radius, color);
+    }
+
+    private void FillCircle(System.Numerics.Vector2 center, float radius, Color color)
+    {
+        const int segments = 16;
+        var outline = Enumerable.Range(0, segments + 1)
+            .Select(i => center + radius * new System.Numerics.Vector2(MathF.Cos(i * MathF.Tau / segments), MathF.Sin(i * MathF.Tau / segments)))
+            .ToArray();
+        FillConvexPolygon(outline, color);
+    }
+
+    /// <summary>Fills a closed convex outline (first point equals last) as a triangle fan from its first point.</summary>
+    private void FillConvexPolygon(System.Numerics.Vector2[] outline, Color color)
+    {
+        if (outline.Length < 4)
+            return;
+
+        var vertices = new List<VertexPositionColor>();
+        for (var i = 1; i < outline.Length - 2; i++)
+        {
+            foreach (var p in new[] { outline[0], outline[i], outline[i + 1] })
+                vertices.Add(new VertexPositionColor(new Vector3(p.X, p.Y, 0), color));
+        }
+
+        foreach (var pass in _effect.CurrentTechnique.Passes)
+        {
+            pass.Apply();
+            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, vertices.ToArray(), 0, vertices.Count / 3);
+        }
     }
 
     private void FillRectangle(System.Numerics.Vector2 topLeft, System.Numerics.Vector2 size, Color color)

@@ -22,4 +22,15 @@ public sealed class PlayerStats
     public int MaxHitPoints { get; set; } = 1;
 
     public int HitPoints { get; set; } = 1;
+
+    /// <summary>The weapon picked at level 3, which every later volley fires; chosen once per game.</summary>
+    public WeaponPath WeaponPath { get; set; } = WeaponPath.None;
+}
+
+/// <summary>The weapon a game's volleys fire: the starting laser until a path is picked at level 3.</summary>
+public enum WeaponPath
+{
+    None,
+    Ballista,
+    Bola,
 }
