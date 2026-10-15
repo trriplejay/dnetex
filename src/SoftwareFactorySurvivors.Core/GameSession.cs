@@ -36,6 +36,7 @@ public sealed class GameSession
     private readonly FiringTimer _firingTimer = new();
     private readonly List<Projectile> _lasers = [];
     private readonly List<Enemy> _enemies = [];
+    private readonly List<Enemy> _enemySnapshot = [];
     private int _pendingLevelUps;
 
     /// <param name="roster">Enemy types that join the spawner at their arrival times; defaults to EnemyRoster.All.</param>
@@ -145,12 +146,13 @@ public sealed class GameSession
             AddEnemies(Spawner.Update(elapsedSeconds, width, height));
         foreach (var enemy in _enemies)
             enemy.Update(Ship.Position, elapsedSeconds);
-        foreach (var enemy in _enemies.ToArray())
+        // Both passes walk a snapshot, so enemies they add join play without taking part in the same pass.
+        foreach (var enemy in SnapshotEnemies())
             AddEnemies(enemy.UseAbility(Ship.Position, elapsedSeconds, _random));
 
         ResolveLaserHits();
         // A boss can respawn its shield when a hit moves it into a new phase.
-        foreach (var enemy in _enemies.ToArray())
+        foreach (var enemy in SnapshotEnemies())
             _enemies.AddRange(enemy.TakeNewShields());
         _lasers.RemoveAll(laser => laser.IsExpired(width, height));
         ResolveContact();
@@ -158,6 +160,14 @@ public sealed class GameSession
         IsVictory = !IsGameOver && ElapsedSeconds >= SurvivalSeconds;
         if (!IsFinished)
             OfferNextUpgrade();
+    }
+
+    // Copies the current enemies into a buffer reused every pass, instead of a fresh array each time.
+    private List<Enemy> SnapshotEnemies()
+    {
+        _enemySnapshot.Clear();
+        _enemySnapshot.AddRange(_enemies);
+        return _enemySnapshot;
     }
 
     private void AddArrivedEnemyTypes()
@@ -218,9 +228,11 @@ public sealed class GameSession
         _lasers.RemoveAll(laser =>
         {
             var shape = laser.GetShape();
+            var bounds = shape.GetBounds();
             foreach (var enemy in _enemies)
             {
-                if (enemy.IsDead || laser.HasHit(enemy) || !shape.Touches(enemy.GetStrokes()))
+                // The bounds check only skips enemies the shape provably can't reach, before the exact test.
+                if (enemy.IsDead || laser.HasHit(enemy) || !bounds.Reaches(enemy) || !shape.Touches(enemy.GetStrokes()))
                     continue;
 
                 enemy.TakeDamage(Stats.Damage);

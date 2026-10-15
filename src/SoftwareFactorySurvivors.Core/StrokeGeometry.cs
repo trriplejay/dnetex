@@ -14,20 +14,31 @@ public static class StrokeGeometry
         if (stroke.Length < 2)
             return [];
 
+        var strip = new Vector2[stroke.Length * 2];
+        ThickenInto(stroke, width, strip);
+        return strip;
+    }
+
+    /// <summary>
+    /// Same as Thicken, but writes the strip into destination (at least 2 × stroke.Length long) instead of
+    /// allocating one. Does nothing for strokes shorter than 2 points.
+    /// </summary>
+    public static void ThickenInto(ReadOnlySpan<Vector2> stroke, float width, Span<Vector2> destination)
+    {
+        if (stroke.Length < 2)
+            return;
+
         var halfWidth = width / 2f;
         var closed = stroke.Length > 2 && stroke[0] == stroke[^1];
-        var strip = new Vector2[stroke.Length * 2];
 
         for (var i = 0; i < stroke.Length; i++)
         {
             var previous = i > 0 ? stroke[i - 1] : closed ? stroke[^2] : stroke[i];
             var next = i < stroke.Length - 1 ? stroke[i + 1] : closed ? stroke[1] : stroke[i];
             var offset = MiterOffset(previous, stroke[i], next, halfWidth);
-            strip[2 * i] = stroke[i] + offset;
-            strip[2 * i + 1] = stroke[i] - offset;
+            destination[2 * i] = stroke[i] + offset;
+            destination[2 * i + 1] = stroke[i] - offset;
         }
-
-        return strip;
     }
 
     private static Vector2 MiterOffset(Vector2 previous, Vector2 point, Vector2 next, float halfWidth)

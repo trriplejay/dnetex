@@ -9,6 +9,7 @@ namespace SoftwareFactorySurvivors.Core;
 public abstract class Projectile
 {
     private readonly HashSet<Enemy> _hitEnemies = [];
+    protected ProjectileShape? _shape;
 
     /// <param name="scale">Multiplies every dimension of the shape (the projectile size upgrade).</param>
     /// <param name="pierce">How many extra enemies it passes through before it's used up.</param>
@@ -29,10 +30,15 @@ public abstract class Projectile
 
     protected Vector2 Forward => new(MathF.Sin(Heading), -MathF.Cos(Heading));
 
+    /// <summary>Moves and advances the projectile, then refreshes its shape once for the rest of the frame.</summary>
     public void Update(float elapsedSeconds)
     {
         Position += Forward * Speed * elapsedSeconds;
         Advance(elapsedSeconds);
+        if (_shape == null)
+            _shape = BuildShape();
+        else
+            RefreshShape();
     }
 
     /// <summary>Per-frame state beyond straight flight, e.g. spinning; called after the position moves.</summary>
@@ -40,8 +46,28 @@ public abstract class Projectile
     {
     }
 
-    /// <summary>The current shape in screen coordinates, used for drawing, hits and expiry alike.</summary>
-    public abstract ProjectileShape GetShape();
+    /// <summary>Updates the existing shape in place without allocating new geometry where possible.</summary>
+    protected virtual void RefreshShape()
+    {
+        if (this is Laser laser && _shape != null && _shape.Lines is ThickLine[] lines && lines.Length == 1)
+        {
+            lines[0] = new ThickLine(Position, Position + Forward * laser.Length, laser.Width / 2f);
+            _shape.InvalidateBounds();
+            return;
+        }
+
+        _shape = BuildShape();
+    }
+
+    /// <summary>
+    /// The current shape in screen coordinates, used for drawing, hits and expiry alike. It is built once per
+    /// frame (after Update moves and advances the projectile) and the same instance is returned until the next
+    /// Update; before the first Update it is built on first read.
+    /// </summary>
+    public ProjectileShape GetShape() => _shape ??= BuildShape();
+
+    /// <summary>Builds the shape from the current position and state; GetShape caches the result.</summary>
+    protected abstract ProjectileShape BuildShape();
 
     /// <summary>True when the projectile's shape touches the given enemy outline.</summary>
     public bool Touches(IReadOnlyList<Vector2[]> enemyStrokes) => GetShape().Touches(enemyStrokes);
