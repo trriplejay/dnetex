@@ -105,10 +105,36 @@ public sealed class Enemy
         }
     }
 
-    /// <summary>The logo outline in screen coordinates, used for both drawing and contact.</summary>
+    // The outline last returned by GetStrokes and the position, rotation and local outline it was built from.
+    private Vector2[][]? _strokes;
+    private Vector2 _strokesPosition;
+    private float _strokesRotation;
+    private IReadOnlyList<Vector2[]>? _strokesOutline;
+
+    /// <summary>
+    /// The logo outline in screen coordinates, used for both drawing and contact. Several callers read it each
+    /// frame, so it is rebuilt only when the position, rotation or outline has changed since the last call; otherwise
+    /// the same instance comes back without allocating. A rebuild makes new arrays, so an outline a caller already
+    /// holds never changes under it. Callers must not modify the returned arrays.
+    /// </summary>
     public IReadOnlyList<Vector2[]> GetStrokes()
     {
+        var outline = Type.Outline;
+        if (_strokes is not null && _strokesPosition == Position && _strokesRotation.Equals(Rotation) && ReferenceEquals(_strokesOutline, outline))
+            return _strokes;
+
         var transform = Matrix3x2.CreateRotation(Rotation) * Matrix3x2.CreateTranslation(Position);
-        return Type.Outline.Select(stroke => stroke.Select(p => Vector2.Transform(p, transform)).ToArray()).ToArray();
+        var strokes = new Vector2[outline.Count][];
+        for (var i = 0; i < strokes.Length; i++)
+        {
+            var local = outline[i];
+            var stroke = new Vector2[local.Length];
+            for (var j = 0; j < stroke.Length; j++)
+                stroke[j] = Vector2.Transform(local[j], transform);
+            strokes[i] = stroke;
+        }
+
+        (_strokes, _strokesPosition, _strokesRotation, _strokesOutline) = (strokes, Position, Rotation, outline);
+        return strokes;
     }
 }

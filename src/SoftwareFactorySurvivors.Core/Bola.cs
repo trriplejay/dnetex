@@ -14,11 +14,16 @@ public sealed class Bola : Projectile
     /// <summary>Ball radius at 100% projectile size, a little more than the line's half-width.</summary>
     public const float BaseBallRadius = 3f;
 
+    private readonly ThickLine[] _lines = new ThickLine[1];
+    private readonly Circle[] _circles = new Circle[2];
+
     public Bola(Vector2 position, float heading, float scale = 1f, int pierce = 0)
         : base(position, heading, 3 * Ship.Speed, scale, pierce)
     {
         // Line direction (cos, sin) = (cos heading, sin heading) is perpendicular to the flight direction.
         Angle = Normalize(heading);
+        UpdateGeometry();
+        _shape = new ProjectileShape(_lines, [], _circles);
     }
 
     /// <summary>Direction of the line from ball A to ball B, in radians in [0, 2π).</summary>
@@ -36,10 +41,17 @@ public sealed class Bola : Projectile
 
     protected override void Advance(float elapsedSeconds) => Angle = Normalize(Angle + RotationRate * elapsedSeconds);
 
-    public override ProjectileShape GetShape()
+    protected override ProjectileShape BuildShape() => _shape!;
+
+    protected override void RefreshShape() => UpdateGeometry();
+
+    private void UpdateGeometry()
     {
         var (a, b) = (BallA, BallB);
-        return new([new ThickLine(a, b, LineWidth / 2f)], [], [new Circle(a, BallRadius), new Circle(b, BallRadius)]);
+        _lines[0] = new ThickLine(a, b, LineWidth / 2f);
+        _circles[0] = new Circle(a, BallRadius);
+        _circles[1] = new Circle(b, BallRadius);
+        _shape?.InvalidateBounds();
     }
 
     private static float Normalize(float angle)

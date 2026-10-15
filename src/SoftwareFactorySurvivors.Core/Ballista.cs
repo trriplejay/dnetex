@@ -14,9 +14,16 @@ public sealed class Ballista : Projectile
     /// <summary>Arrowhead width (across its base) and length, in shaft widths.</summary>
     public const float HeadSizeInShaftWidths = 3f;
 
+    private readonly ThickLine[] _lines = new ThickLine[1];
+    private readonly Vector2[] _arrowhead = new Vector2[4];
+    private readonly Vector2[][] _polygons;
+
     public Ballista(Vector2 position, float heading, float scale = 1f, int pierce = 0)
         : base(position, heading, 3 * Ship.Speed, scale, pierce)
     {
+        _polygons = [_arrowhead];
+        UpdateGeometry();
+        _shape = new ProjectileShape(_lines, _polygons, []);
     }
 
     public float ShaftLength => ShaftLengthInLasers * Laser.BaseLength * Scale;
@@ -36,9 +43,22 @@ public sealed class Ballista : Projectile
         return [leftWing, headBase + Forward * HeadLength, headBase + side, leftWing];
     }
 
-    public override ProjectileShape GetShape()
+    protected override ProjectileShape BuildShape() => _shape!;
+
+    protected override void RefreshShape() => UpdateGeometry();
+
+    private void UpdateGeometry()
     {
-        var shaft = GetShaft();
-        return new([new ThickLine(shaft[0], shaft[1], ShaftWidth / 2f)], [GetArrowhead()], []);
+        var headBase = Position + Forward * ShaftLength;
+        _lines[0] = new ThickLine(Position, headBase, ShaftWidth / 2f);
+
+        var side = new Vector2(-Forward.Y, Forward.X) * (HeadWidth / 2f);
+        var leftWing = headBase - side;
+        _arrowhead[0] = leftWing;
+        _arrowhead[1] = headBase + Forward * HeadLength;
+        _arrowhead[2] = headBase + side;
+        _arrowhead[3] = leftWing;
+
+        _shape?.InvalidateBounds();
     }
 }

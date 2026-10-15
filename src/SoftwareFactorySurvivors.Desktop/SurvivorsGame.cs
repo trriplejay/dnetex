@@ -25,6 +25,11 @@ public class SurvivorsGame : Game
     private KeyboardState _previousKeyboard;
     private MouseState _previousMouse;
 
+    // Reused every frame so drawing doesn't allocate per stroke or per glyph.
+    private readonly FrameBatch _batch = new();
+    private readonly TextStrokeCache _textStrokes = new();
+    private VertexPositionColor[] _vertexBuffer = new VertexPositionColor[1024];
+
     public SurvivorsGame(StartOptions? start = null)
     {
         _start = start ?? StartOptions.Default;
@@ -134,6 +139,8 @@ public class SurvivorsGame : Game
         GraphicsDevice.Clear(Color.Black);
         // Thick strokes are triangle strips whose winding alternates, so draw both faces.
         GraphicsDevice.RasterizerState = RasterizerState.CullNone;
+        // Everything below is submitted to the frame batch in painter's order and drawn by one FlushBatch at the end.
+        _batch.Reset();
 
         var viewport = GraphicsDevice.Viewport;
         var center = new System.Numerics.Vector2(viewport.Width / 2f, viewport.Height / 2f);
@@ -146,11 +153,14 @@ public class SurvivorsGame : Game
             if (!blinkedOut)
             {
                 foreach (var stroke in _session.Ship.GetStrokes())
-                    DrawThickStroke(stroke, ShipRendering.StrokeWidth, ToColor(ShipRendering.Color));
+                    _batch.AddThickStroke(stroke, ShipRendering.StrokeWidth, ShipRendering.Color);
             }
 
-            foreach (var stroke in _session.Enemies.SelectMany(enemy => enemy.GetStrokes()))
-                DrawThickStroke(stroke, EnemyRendering.StrokeWidth, ToColor(EnemyRendering.Color));
+            foreach (var enemy in _session.Enemies)
+            {
+                foreach (var stroke in enemy.GetStrokes())
+                    _batch.AddThickStroke(stroke, EnemyRendering.StrokeWidth, EnemyRendering.Color);
+            }
 
             foreach (var projectile in _session.Lasers)
                 DrawProjectile(projectile.GetShape(), Color.White);
@@ -183,6 +193,7 @@ public class SurvivorsGame : Game
             DrawHighScores(center);
         }
 
+        FlushBatch();
         base.Draw(gameTime);
     }
 
@@ -203,11 +214,11 @@ public class SurvivorsGame : Game
         DrawTextLeft($"LV {leveling.Level}", new(left, 36f), 24f, 2f, ToColor(ShipRendering.Color));
 
         var barTop = 62f;
-        DrawLineStrip([new(left, barTop), new(left + barWidth, barTop), new(left + barWidth, barTop + 10f),
-            new(left, barTop + 10f), new(left, barTop)], Color.White);
+        _batch.AddLineStrip([new(left, barTop), new(left + barWidth, barTop), new(left + barWidth, barTop + 10f),
+            new(left, barTop + 10f), new(left, barTop)], ToRgb(Color.White));
         var filled = barWidth * leveling.Experience / leveling.ExperienceToNextLevel;
         if (filled > 1f)
-            DrawThickStroke([new(left, barTop + 5f), new(left + filled, barTop + 5f)], 8f, ToColor(ShipRendering.Color));
+            _batch.AddThickStroke([new(left, barTop + 5f), new(left + filled, barTop + 5f)], 8f, ShipRendering.Color);
 
         DrawTextLeft($"HP {stats.HitPoints}/{stats.MaxHitPoints}", new(left, 96f), 16f, 2f, Color.White);
     }
@@ -230,17 +241,17 @@ public class SurvivorsGame : Game
             var left = right - barWidth;
             var name = boss.Type.Name.ToUpperInvariant();
             DrawTextLeft(name, new(right - VectorText.MeasureWidth(name, labelHeight), top - 24f), labelHeight, 2f, Color.White);
-            DrawLineStrip([new(left, top), new(right, top), new(right, bottom), new(left, bottom), new(left, top)], Color.White);
+            _batch.AddLineStrip([new(left, top), new(right, top), new(right, bottom), new(left, bottom), new(left, top)], ToRgb(Color.White));
             var filled = barHeight * boss.HitPoints / boss.Type.HitPoints;
             if (filled > 1f)
                 // Greyed out while its shield makes it immune to damage.
-                DrawThickStroke([new(left + barWidth / 2f, bottom), new(left + barWidth / 2f, bottom - filled)], barWidth - 4f,
-                    boss.IsShielded ? Color.Gray : Color.White);
+                _batch.AddThickStroke([new(left + barWidth / 2f, bottom), new(left + barWidth / 2f, bottom - filled)], barWidth - 4f,
+                    ToRgb(boss.IsShielded ? Color.Gray : Color.White));
             // Notches where the boss changes behaviour.
             foreach (var phase in boss.Type.Phases ?? [])
             {
                 var y = bottom - barHeight * phase.AtHealthFraction;
-                DrawLineStrip([new(left - 8f, y), new(left, y)], Color.White);
+                _batch.AddLineStrip([new(left - 8f, y), new(left, y)], ToRgb(Color.White));
             }
             right -= barWidth + 48f;
         }
@@ -258,9 +269,11 @@ public class SurvivorsGame : Game
             var cardCenter = topLeft + size / 2f;
 
             // A solid black face hides the frozen play field behind the card.
-            FillRectangle(topLeft, size, Color.Black);
-            DrawThickStroke([topLeft, topLeft + new System.Numerics.Vector2(size.X, 0), topLeft + size,
-                topLeft + new System.Numerics.Vector2(0, size.Y), topLeft], 3f, Color.White);
+            // As a closed outline filled as a fan: the same two triangles' area as the old 4-vertex strip.
+            var topRight = topLeft + new System.Numerics.Vector2(size.X, 0);
+            var bottomLeft = topLeft + new System.Numerics.Vector2(0, size.Y);
+            _batch.AddPolygon([topLeft, topRight, topLeft + size, bottomLeft, topLeft], ToRgb(Color.Black));
+            _batch.AddThickStroke([topLeft, topRight, topLeft + size, bottomLeft, topLeft], 3f, ToRgb(Color.White));
 
             DrawText($"{i + 1}", new(cardCenter.X, topLeft.Y + 34f), 28f, 3f, ToColor(ShipRendering.Color));
             DrawText(Upgrades.Title(offer[i]), new(cardCenter.X, cardCenter.Y), 18f, 2f, Color.White);
@@ -278,59 +291,16 @@ public class SurvivorsGame : Game
     };
 
     /// <summary>Draws the same Core shape the projectile is hit-tested with: thick lines, filled polygons and discs.</summary>
+    /// <remarks>Submits to the frame batch (same triangles as the old per-piece fills); Draw flushes it.</remarks>
     private void DrawProjectile(ProjectileShape shape, Color color)
     {
+        var rgb = ToRgb(color);
         foreach (var line in shape.Lines)
-            DrawThickStroke([line.A, line.B], line.HalfWidth * 2f, color);
+            _batch.AddThickStroke([line.A, line.B], line.HalfWidth * 2f, rgb);
         foreach (var polygon in shape.Polygons)
-            FillConvexPolygon(polygon, color);
+            _batch.AddPolygon(polygon, rgb);
         foreach (var circle in shape.Circles)
-            FillCircle(circle.Center, circle.Radius, color);
-    }
-
-    private void FillCircle(System.Numerics.Vector2 center, float radius, Color color)
-    {
-        const int segments = 16;
-        var outline = Enumerable.Range(0, segments + 1)
-            .Select(i => center + radius * new System.Numerics.Vector2(MathF.Cos(i * MathF.Tau / segments), MathF.Sin(i * MathF.Tau / segments)))
-            .ToArray();
-        FillConvexPolygon(outline, color);
-    }
-
-    /// <summary>Fills a closed convex outline (first point equals last) as a triangle fan from its first point.</summary>
-    private void FillConvexPolygon(System.Numerics.Vector2[] outline, Color color)
-    {
-        if (outline.Length < 4)
-            return;
-
-        var vertices = new List<VertexPositionColor>();
-        for (var i = 1; i < outline.Length - 2; i++)
-        {
-            foreach (var p in new[] { outline[0], outline[i], outline[i + 1] })
-                vertices.Add(new VertexPositionColor(new Vector3(p.X, p.Y, 0), color));
-        }
-
-        foreach (var pass in _effect.CurrentTechnique.Passes)
-        {
-            pass.Apply();
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleList, vertices.ToArray(), 0, vertices.Count / 3);
-        }
-    }
-
-    private void FillRectangle(System.Numerics.Vector2 topLeft, System.Numerics.Vector2 size, Color color)
-    {
-        VertexPositionColor[] vertices =
-        [
-            new(new Vector3(topLeft.X, topLeft.Y, 0), color),
-            new(new Vector3(topLeft.X + size.X, topLeft.Y, 0), color),
-            new(new Vector3(topLeft.X, topLeft.Y + size.Y, 0), color),
-            new(new Vector3(topLeft.X + size.X, topLeft.Y + size.Y, 0), color),
-        ];
-        foreach (var pass in _effect.CurrentTechnique.Passes)
-        {
-            pass.Apply();
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleStrip, vertices, 0, 2);
-        }
+            _batch.AddCircle(circle.Center, circle.Radius, rgb);
     }
 
     private void DrawTextLeft(string text, System.Numerics.Vector2 leftCenter, float height, float width, Color color) =>
@@ -354,41 +324,39 @@ public class SurvivorsGame : Game
 
     private void DrawText(string text, System.Numerics.Vector2 center, float height, float width, Color color)
     {
-        foreach (var stroke in VectorText.GetStrokes(text, center, height))
-            DrawThickStroke(stroke, width, color);
+        var rgb = ToRgb(color);
+        foreach (var stroke in _textStrokes.GetStrokes(text, center, height))
+            _batch.AddThickStroke(stroke, width, rgb);
     }
+
+    /// <summary>Draws everything submitted to the batch, one draw call per batch, in submission order, then resets it.</summary>
+    private void FlushBatch()
+    {
+        for (var b = 0; b < _batch.BatchCount; b++)
+        {
+            var batch = _batch.GetBatch(b);
+            var source = _batch.GetVertices(batch);
+            if (_vertexBuffer.Length < source.Length)
+                Array.Resize(ref _vertexBuffer, Math.Max(source.Length, _vertexBuffer.Length * 2));
+            for (var i = 0; i < source.Length; i++)
+            {
+                var v = source[i];
+                _vertexBuffer[i] = new VertexPositionColor(new Vector3(v.Position.X, v.Position.Y, 0), ToColor(v.Color));
+            }
+
+            var (type, primitives) = batch.Kind == BatchKind.Triangles
+                ? (PrimitiveType.TriangleList, source.Length / 3)
+                : (PrimitiveType.LineList, source.Length / 2);
+            foreach (var pass in _effect.CurrentTechnique.Passes)
+            {
+                pass.Apply();
+                GraphicsDevice.DrawUserPrimitives(type, _vertexBuffer, 0, primitives);
+            }
+        }
+        _batch.Reset();
+    }
+
+    private static RgbColor ToRgb(Color color) => new(color.R, color.G, color.B);
 
     private static Color ToColor(RgbColor rgb) => new(rgb.R, rgb.G, rgb.B);
-
-    private void DrawThickStroke(System.Numerics.Vector2[] stroke, float width, Color color)
-    {
-        if (stroke.Length < 2)
-            return;
-
-        var vertices = StrokeGeometry.Thicken(stroke, width)
-            .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), color))
-            .ToArray();
-
-        foreach (var pass in _effect.CurrentTechnique.Passes)
-        {
-            pass.Apply();
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.TriangleStrip, vertices, 0, vertices.Length - 2);
-        }
-    }
-
-    private void DrawLineStrip(System.Numerics.Vector2[] stroke, Color color)
-    {
-        if (stroke.Length < 2)
-            return;
-
-        var vertices = stroke
-            .Select(p => new VertexPositionColor(new Vector3(p.X, p.Y, 0), color))
-            .ToArray();
-
-        foreach (var pass in _effect.CurrentTechnique.Passes)
-        {
-            pass.Apply();
-            GraphicsDevice.DrawUserPrimitives(PrimitiveType.LineStrip, vertices, 0, vertices.Length - 1);
-        }
-    }
 }

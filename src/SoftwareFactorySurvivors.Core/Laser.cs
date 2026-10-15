@@ -23,9 +23,6 @@ public sealed class Laser : Projectile
     public Vector2[] GetLine() => [Position, Position + Forward * Length];
 
     /// <summary>A single thick segment.</summary>
-    public override ProjectileShape GetShape()
-    {
-        var line = GetLine();
-        return new([new ThickLine(line[0], line[1], Width / 2f)], [], []);
-    }
+    protected override ProjectileShape BuildShape() =>
+        new([new ThickLine(Position, Position + Forward * Length, Width / 2f)], [], []);
 }
