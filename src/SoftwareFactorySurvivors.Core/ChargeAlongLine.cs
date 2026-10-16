@@ -19,6 +19,7 @@ public sealed class ChargeAlongLine(
 
     private float _timeInPhase;
     private bool _isCharging;
+    private bool _hasLockedFirstSegment;
 
     public bool IsTelegraphing => !_isCharging;
     public bool IsCharging => _isCharging;
@@ -46,9 +47,10 @@ public sealed class ChargeAlongLine(
 
         if (!_isCharging)
         {
-            // If just starting or AimStart is not initialized, lock the aim segment
-            if (_timeInPhase == 0f && AimStart == Vector2.Zero && AimEnd == Vector2.Zero)
+            // If just starting, lock the initial aim segment
+            if (!_hasLockedFirstSegment)
             {
+                _hasLockedFirstSegment = true;
                 LockSegment(position, playerPosition);
             }
 
@@ -95,14 +97,14 @@ public sealed class ChargeAlongLine(
         if (dist > 0f)
         {
             _chargeDirection = diff / dist;
-            _totalSegmentLength = dist;
-            AimEnd = target;
+            _totalSegmentLength = MathF.Min(ChargeDistance, dist);
+            AimEnd = start + _chargeDirection * _totalSegmentLength;
         }
         else
         {
             _chargeDirection = Vector2.UnitX;
-            _totalSegmentLength = ChargeDistance;
-            AimEnd = start + _chargeDirection * ChargeDistance;
+            _totalSegmentLength = 0f;
+            AimEnd = start;
         }
     }
 }

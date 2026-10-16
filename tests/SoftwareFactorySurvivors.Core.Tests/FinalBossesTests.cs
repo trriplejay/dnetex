@@ -118,6 +118,10 @@ public class FinalBossesTests
 
         while (pattern.IsCharging)
         {
+            // LockedSegment during charge equals the captured segment
+            Assert.Equal(lockedStart, pattern.LockedSegment.Start);
+            Assert.Equal(lockedEnd, pattern.LockedSegment.End);
+
             var nextPos = pattern.Move(pos, new Vector2(999, 999), 0.05f); // player moves elsewhere; charge must ignore it!
             pos = nextPos;
 
@@ -130,9 +134,43 @@ public class FinalBossesTests
             Assert.True(projLength >= -0.01f && projLength <= totalLength + 0.01f);
         }
 
-        // Verify the line remained the telegraphed one during the charge
-        Assert.Equal(lockedStart, pattern.LockedSegment.Start);
-        Assert.Equal(lockedEnd, pattern.LockedSegment.End);
+        // Charge is complete, boss reached the end of the segment
+        Assert.True(Vector2.Distance(pos, lockedEnd) < 0.01f, $"End position {pos} deviated from lockedEnd {lockedEnd}");
+    }
+
+    [Fact]
+    public void ChargeAlongLine_far_player_beyond_charge_distance_clamps_aim_line_and_stops_at_segment_end()
+    {
+        const float chargeDistance = 300f;
+        var pattern = new ChargeAlongLine(telegraphSeconds: 1.0f, chargeSpeed: 600f, chargeDistance: chargeDistance);
+        var startPos = new Vector2(100, 100);
+        var playerPos = new Vector2(1000, 100); // 900px away, well beyond 300px
+
+        // Telegraph phase
+        pattern.Move(startPos, playerPos, 0.5f);
+        var lockedStart = pattern.AimStart;
+        var lockedEnd = pattern.AimEnd;
+
+        Assert.Equal(startPos, lockedStart);
+        var segmentLength = Vector2.Distance(lockedStart, lockedEnd);
+        Assert.True(segmentLength <= chargeDistance + 0.01f);
+        Assert.True(MathF.Abs(segmentLength - chargeDistance) < 0.01f);
+        Assert.Equal(startPos + new Vector2(chargeDistance, 0), lockedEnd);
+
+        // Complete telegraph (1.0s total)
+        var pos = pattern.Move(startPos, playerPos, 0.5f);
+        Assert.Equal(startPos, pos);
+        Assert.True(pattern.IsCharging);
+
+        while (pattern.IsCharging)
+        {
+            Assert.Equal(lockedStart, pattern.LockedSegment.Start);
+            Assert.Equal(lockedEnd, pattern.LockedSegment.End);
+            pos = pattern.Move(pos, new Vector2(999, 999), 0.05f);
+        }
+
+        // Boss position at charge end equals segment end within epsilon
+        Assert.True(Vector2.Distance(pos, lockedEnd) < 0.01f, $"Boss position {pos} did not reach segment end {lockedEnd}");
     }
 
     [Fact]
