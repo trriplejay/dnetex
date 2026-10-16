@@ -156,10 +156,41 @@ public class SurvivorsGame : Game
                     _batch.AddThickStroke(stroke, ShipRendering.StrokeWidth, ShipRendering.Color);
             }
 
+            foreach (var hazard in _session.Hazards)
+            {
+                switch (hazard.Kind)
+                {
+                    case HazardKind.Trail:
+                        DrawProjectile(hazard.Shape, Color.Orange);
+                        break;
+                    case HazardKind.Ring:
+                        var ringColor = hazard.IsArmed ? Color.Red : Color.DimGray;
+                        foreach (var polygon in hazard.Shape.Polygons)
+                            _batch.AddThickStroke(polygon, hazard.IsArmed ? 4f : 2f, ToRgb(ringColor));
+                        foreach (var line in hazard.Shape.Lines)
+                            _batch.AddThickStroke([line.A, line.B], line.HalfWidth * 2f, ToRgb(ringColor));
+                        foreach (var circle in hazard.Shape.Circles)
+                            _batch.AddCircle(circle.Center, circle.Radius, ToRgb(ringColor));
+                        break;
+                    case HazardKind.Bullet:
+                        DrawProjectile(hazard.Shape, Color.Yellow);
+                        break;
+                }
+            }
+
             foreach (var enemy in _session.Enemies)
             {
-                foreach (var stroke in enemy.GetStrokes())
-                    _batch.AddThickStroke(stroke, EnemyRendering.StrokeWidth, EnemyRendering.Color);
+                if (enemy.Movement is ChargeAlongLine charge && charge.IsTelegraphing && charge.AimStart != charge.AimEnd)
+                {
+                    _batch.AddLineStrip([charge.AimStart, charge.AimEnd], ToRgb(Color.DarkRed));
+                }
+
+                var enemyBlinkedOut = enemy.IsFlickering && (int)(enemy.FlickerSecondsLeft * 15f) % 2 == 0;
+                if (!enemyBlinkedOut)
+                {
+                    foreach (var stroke in enemy.GetStrokes())
+                        _batch.AddThickStroke(stroke, EnemyRendering.StrokeWidth, EnemyRendering.Color);
+                }
             }
 
             foreach (var projectile in _session.Lasers)
