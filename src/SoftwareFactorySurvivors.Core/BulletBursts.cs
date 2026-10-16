@@ -111,16 +111,22 @@ public sealed class BulletBursts : IEnemyAbility, IHazardProducer
             var speed = Speed;
             var pos = origin;
 
-            var bullet = Hazard.CreateBullet(
-                pos,
-                radius: _bulletRadius,
+            var circleArray = new Circle[] { new Circle(pos, _bulletRadius) };
+            var shape = new ProjectileShape([], [], circleArray);
+            var bullet = new Hazard(
+                HazardKind.Bullet,
+                shape,
                 lifetimeSeconds: _bulletLifetime,
                 armSeconds: _bulletArmSeconds,
                 onUpdate: (h, dt) =>
                 {
                     pos += direction * speed * dt;
-                    h.Shape = new ProjectileShape([], [], [new Circle(pos, _bulletRadius)]);
-                });
+                    circleArray[0] = new Circle(pos, _bulletRadius);
+                    h.Shape.InvalidateBounds();
+                })
+            {
+                ExpireOnContact = true,
+            };
 
             _pendingHazards.Add(bullet);
         }
