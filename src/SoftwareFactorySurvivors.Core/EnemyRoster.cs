@@ -81,7 +81,7 @@ public static class EnemyRoster
     /// It never spawns on the regular schedule; see Bosses.
     /// </summary>
     public static readonly EnemyType GeminiBoss = new(
-        "Gemini Boss", Radius: 80f, HitPoints: 40f, Speed: GeminiBossSpeed, Experience: 30,
+        "Gemini Boss", Radius: 80f, HitPoints: 40f, Speed: GeminiBossSpeed, Experience: 60,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
         speed => new ChasePlayer(speed), LogoShapes.Gemini(80f),
         CreateAbility: () => ThrowGeminis(flightSpeedMultiplier: 4f),
@@ -98,6 +98,32 @@ public static class EnemyRoster
         ],
         Shield: GeminiShield(count: 5));
 
+    /// <summary>
+    /// Boss arriving at 4:30. Alternates a telegraph and a straight charge along the telegraphed aim line.
+    /// Has no throw, shield, or dash abilities.
+    /// </summary>
+    public static readonly EnemyType Autocomplete = new(
+        "Autocomplete", Radius: 60f, HitPoints: 60f, Speed: 400f, Experience: 120,
+        DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
+        speed => new ChargeAlongLine(telegraphSeconds: 1.2f, chargeSpeed: speed, chargeDistance: 700f),
+        LogoShapes.Cursor(60f));
+
+    /// <summary>
+    /// Boss arriving at 7:00.
+    /// </summary>
+    public static readonly EnemyType Hallucination = new(
+        "Hallucination", Radius: 50f, HitPoints: 80f, Speed: 70f, Experience: 180,
+        DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 1f,
+        speed => new ChasePlayer(speed), LogoShapes.Perplexity(50f));
+
+    /// <summary>
+    /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
+    /// </summary>
+    public static readonly EnemyType ClaudeBoss = new(
+        "Claude Boss", Radius: 70f, HitPoints: 120f, Speed: 80f, Experience: 250,
+        DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
+        speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(70f));
+
     /// <summary>How far the Gemini Boss's shield orbits from its centre, just clear of its outline.</summary>
     private const float GeminiShieldRadius = 115f;
 
@@ -109,7 +135,13 @@ public static class EnemyRoster
             perWave, waves, secondsBetweenWaves);
 
     /// <summary>Bosses and when they appear. While any boss is alive, regular spawning pauses.</summary>
-    public static IReadOnlyList<BossArrival> Bosses { get; } = [new(180f, GeminiBoss)];
+    public static IReadOnlyList<BossArrival> Bosses { get; } =
+    [
+        new(180f, GeminiBoss),
+        new(270f, Autocomplete),
+        new(420f, Hallucination),
+        new(600f, ClaudeBoss),
+    ];
 
     /// <summary>Stretches of the clock when regular spawning stops.</summary>
     public static IReadOnlyList<SpawnPause> SpawnPauses { get; } = [new(80f, 90f)];

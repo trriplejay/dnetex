@@ -21,7 +21,13 @@ public class BossTests
         Assert.Equal(EnemyRoster.Gemini.Outline[0].Length, boss.Outline[0].Length);
         Assert.All(boss.Outline[0].Zip(EnemyRoster.Gemini.Outline[0]), pair =>
             Assert.True(Vector2.Distance(pair.First, pair.Second * 4f) < 0.01f));
-        Assert.Equal([new BossArrival(180f, boss)], EnemyRoster.Bosses);
+        Assert.Equal([
+            new BossArrival(180f, EnemyRoster.GeminiBoss),
+            new BossArrival(270f, EnemyRoster.Autocomplete),
+            new BossArrival(420f, EnemyRoster.Hallucination),
+            new BossArrival(600f, EnemyRoster.ClaudeBoss),
+        ], EnemyRoster.Bosses);
+        Assert.NotSame(EnemyRoster.Claude, EnemyRoster.ClaudeBoss);
         Assert.DoesNotContain(boss, EnemyRoster.All);
     }
 
