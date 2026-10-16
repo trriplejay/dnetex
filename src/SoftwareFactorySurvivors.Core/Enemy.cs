@@ -7,7 +7,8 @@ public sealed class Enemy
 {
     /// <param name="movement">Overrides the type's own movement pattern, e.g. to hold an enemy still in tests.</param>
     /// <param name="experience">Overrides the experience the type is worth, e.g. 0 for minions a boss throws.</param>
-    public Enemy(EnemyType type, Vector2 position, IMovementPattern? movement = null, int? experience = null)
+    /// <param name="isCopy">True if this enemy is a look-alike copy (e.g. spawned by Hallucination split).</param>
+    public Enemy(EnemyType type, Vector2 position, IMovementPattern? movement = null, int? experience = null, bool isCopy = false)
     {
         if (!(type.HitPoints > 0f))
             throw new ArgumentOutOfRangeException(nameof(type), "Enemy types need positive hit points.");
@@ -19,14 +20,24 @@ public sealed class Enemy
         Position = position;
         HitPoints = type.HitPoints;
         Experience = experience ?? type.Experience;
+        IsCopy = isCopy;
         Movement = movement ?? type.CreateMovement(type.Speed);
-        Ability = type.CreateAbility?.Invoke();
+        Ability = isCopy ? null : type.CreateAbility?.Invoke();
         Shields = _newShields = CreateShields(type.Shield);
     }
 
     public EnemyType Type { get; }
     public Vector2 Position { get; private set; }
     public float HitPoints { get; private set; }
+
+    /// <summary>True if this enemy is a copy/decoy that dies in one hit, gives 0 XP, and never flickers.</summary>
+    public bool IsCopy { get; }
+
+    /// <summary>Seconds of game time left on hit-flicker.</summary>
+    public float FlickerSecondsLeft { get; private set; }
+
+    /// <summary>True while this enemy is flickering after taking damage.</summary>
+    public bool IsFlickering => FlickerSecondsLeft > 0f;
 
     /// <summary>Experience the player gains for killing this enemy.</summary>
     public int Experience { get; }
@@ -75,6 +86,8 @@ public sealed class Enemy
         Rotation += Type.SpinSpeed * elapsedSeconds;
         if (IsSlowed)
             SlowSecondsLeft = MathF.Max(0f, SlowSecondsLeft - elapsedSeconds);
+        if (IsFlickering)
+            FlickerSecondsLeft = MathF.Max(0f, FlickerSecondsLeft - elapsedSeconds);
     }
 
     /// <summary>Runs the enemy's special ability, if it has one, and returns any enemies it created.</summary>
@@ -91,6 +104,15 @@ public sealed class Enemy
             return;
         if (slow)
             SlowSecondsLeft = 2f;
+        if (IsCopy)
+        {
+            HitPoints = 0f;
+            return;
+        }
+
+        if (damage > 0f)
+            FlickerSecondsLeft = 0.3f;
+
         HitPoints = MathF.Max(0f, HitPoints - damage);
         EnterReachedPhases();
     }
