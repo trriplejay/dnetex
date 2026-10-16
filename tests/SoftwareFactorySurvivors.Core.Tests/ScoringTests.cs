@@ -23,19 +23,39 @@ public class ScoringTests
     [Fact]
     public void Surviving_ten_minutes_wins_and_stops_the_clock_at_ten()
     {
-        var session = TestEnemies.QuietSession(Center);
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(600f, EnemyRoster.ClaudeBoss)]);
 
-        session.Update(Vector2.Zero, null, 599f, Width, Height);
-        Assert.False(session.IsVictory);
-        Assert.Equal("09:59", GameClock.Format(session.ElapsedSeconds));
+        session.Update(Vector2.Zero, null, 600f, Width, Height);
+        var claudeBoss = Assert.Single(session.Bosses);
+        Assert.Same(EnemyRoster.ClaudeBoss, claudeBoss.Type);
 
-        session.Update(Vector2.Zero, null, 5f, Width, Height);
+        // At 600+ s with ClaudeBoss alive, IsVictory is false and ElapsedSeconds == 600 with GameClock.Format == "10:00" over several Updates
+        for (var i = 0; i < 3; i++)
+        {
+            session.Update(Vector2.Zero, null, 1f, Width, Height);
+            Assert.False(session.IsVictory);
+            Assert.False(session.IsGameOver);
+            Assert.Equal(GameSession.SurvivalSeconds, session.ElapsedSeconds);
+            Assert.Equal("10:00", GameClock.Format(session.ElapsedSeconds));
+        }
+
+        // Killing ClaudeBoss sets IsVictory on that Update with IsGameOver false
+        claudeBoss.TakeDamage(claudeBoss.HitPoints);
+        session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
 
         Assert.True(session.IsVictory);
         Assert.False(session.IsGameOver);
         Assert.Equal(GameSession.SurvivalSeconds, session.ElapsedSeconds);
-        session.Update(new Vector2(0, -1), null, 1f, Width, Height);
-        Assert.Equal(Center, session.Ship.Position);
+
+        // A session where only GeminiBoss dies is not a victory
+        var geminiSession = new GameSession(Center, new Random(2), roster: [], bosses: [new BossArrival(180f, EnemyRoster.GeminiBoss)]);
+        geminiSession.Update(Vector2.Zero, null, 180f, Width, Height);
+        var gemini = Assert.Single(geminiSession.Bosses);
+        foreach (var shield in gemini.Shields)
+            shield.TakeDamage(shield.HitPoints);
+        gemini.TakeDamage(gemini.HitPoints);
+        geminiSession.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
+        Assert.False(geminiSession.IsVictory);
     }
 
     [Fact]
