@@ -114,7 +114,8 @@ public static class EnemyRoster
     public static readonly EnemyType Hallucination = new(
         "Hallucination", Radius: 50f, HitPoints: 80f, Speed: 70f, Experience: 180,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 1f,
-        speed => new ChasePlayer(speed), LogoShapes.Perplexity(50f));
+        speed => new ChasePlayer(speed), LogoShapes.Perplexity(50f),
+        CreateAbility: () => new SplitIntoCopies(secondsBetweenSplits: 5f, copiesPerSplit: 2));
 
     /// <summary>
     /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
@@ -122,7 +123,8 @@ public static class EnemyRoster
     public static readonly EnemyType ClaudeBoss = new(
         "Claude Boss", Radius: 70f, HitPoints: 120f, Speed: 80f, Experience: 250,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
-        speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(70f));
+        speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(70f),
+        CreateAbility: () => new CompositeAbility(new ClosingRing(), new BulletBursts()));
 
     /// <summary>How far the Gemini Boss's shield orbits from its centre, just clear of its outline.</summary>
     private const float GeminiShieldRadius = 115f;

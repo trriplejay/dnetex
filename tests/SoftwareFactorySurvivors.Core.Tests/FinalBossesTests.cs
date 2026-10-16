@@ -268,4 +268,100 @@ public class FinalBossesTests
         Assert.NotEmpty(session.Hazards);
         Assert.All(session.Hazards, h => Assert.Equal(HazardKind.Trail, h.Kind));
     }
+
+    [Fact]
+    public void Only_ClaudeBoss_produces_bullet_hazards_across_all_roster_and_boss_enemy_types()
+    {
+        var allTypes = EnemyRoster.All
+            .Concat([EnemyRoster.GeminiBoss, EnemyRoster.Autocomplete, EnemyRoster.Hallucination, EnemyRoster.ClaudeBoss])
+            .Distinct();
+
+        foreach (var type in allTypes)
+        {
+            var ability = type.CreateAbility?.Invoke();
+            if (type == EnemyRoster.ClaudeBoss)
+            {
+                Assert.NotNull(ability);
+                Assert.IsType<CompositeAbility>(ability);
+                var comp = (CompositeAbility)ability;
+                Assert.Contains(comp.Abilities, a => a is BulletBursts);
+            }
+            else if (ability is IHazardProducer producer)
+            {
+                var dummyOwner = new Enemy(type, Center);
+                producer.TakeHazards(); // flush any initial
+                ability.Update(dummyOwner, Center, 10f, new Random(1));
+                var hazards = producer.TakeHazards();
+                Assert.DoesNotContain(hazards, h => h.Kind == HazardKind.Bullet);
+            }
+            else if (ability is CompositeAbility composite)
+            {
+                Assert.DoesNotContain(composite.Abilities, a => a is BulletBursts);
+            }
+        }
+    }
+
+    [Fact]
+    public void ClaudeBoss_in_GameSession_yields_ring_and_bullet_hazards_unarmed_in_first_one_second()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        var claudeBoss = new Enemy(EnemyRoster.ClaudeBoss, new Vector2(200, 200));
+        session.AddEnemy(claudeBoss);
+
+        // Advance 0.5 seconds
+        session.Update(Vector2.Zero, null, 0.5f, Width, Height);
+
+        // ClosingRing spawns a ring hazard on its first tick; BulletBursts emits bullets.
+        // Wait up to 3.5 seconds in small steps so BulletBursts triggers its first burst (default cooldown 3.0s).
+        while (!session.Hazards.Any(h => h.Kind == HazardKind.Bullet) && session.ElapsedSeconds < 4.0f)
+        {
+            session.Update(Vector2.Zero, null, 0.1f, Width, Height);
+        }
+
+        Assert.Contains(session.Hazards, h => h.Kind == HazardKind.Ring);
+        Assert.Contains(session.Hazards, h => h.Kind == HazardKind.Bullet);
+
+        // Every hazard present within its first 1.0 second of age must be unarmed
+        foreach (var hazard in session.Hazards)
+        {
+            if (hazard.AgeSeconds < 1.0f)
+            {
+                Assert.False(hazard.IsArmed, $"Hazard of kind {hazard.Kind} with age {hazard.AgeSeconds} was unexpectedly armed.");
+            }
+        }
+    }
+
+    [Fact]
+    public void Hallucination_boss_in_GameSession_produces_copies_after_split_interval()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        var hallucination = new Enemy(EnemyRoster.Hallucination, new Vector2(300, 300));
+        session.AddEnemy(hallucination);
+
+        Assert.Single(session.Enemies);
+        Assert.Empty(session.Enemies.Where(e => e.IsCopy));
+
+        // Advance less than split interval (e.g. 2.0s < 5.0s)
+        for (var i = 0; i < 20; i++)
+        {
+            session.Update(Vector2.Zero, null, 0.1f, Width, Height);
+        }
+        Assert.Empty(session.Enemies.Where(e => e.IsCopy));
+
+        // Advance past 5.0s split interval (another 3.5s = 5.5s total)
+        for (var i = 0; i < 35; i++)
+        {
+            session.Update(Vector2.Zero, null, 0.1f, Width, Height);
+        }
+
+        var copies = session.Enemies.Where(e => e.IsCopy).ToList();
+        Assert.NotEmpty(copies);
+        Assert.Equal(2, copies.Count);
+        Assert.All(copies, c =>
+        {
+            Assert.True(c.IsCopy);
+            Assert.Same(EnemyRoster.Hallucination, c.Type);
+            Assert.Equal(0, c.Experience);
+        });
+    }
 }
