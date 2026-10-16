@@ -53,18 +53,32 @@ public class HitReferenceTests
     }
 
     [Theory]
-    [InlineData(2.9f, true)]
-    [InlineData(3.1f, false)]
+    [InlineData(5.8f, true)]
+    [InlineData(6.2f, false)]
     public void Bola_ball_graze_within_its_radius_hits(float below, bool hit)
     {
-        // A fresh bola fired straight up lies across the flight path: ball B (radius 3) sits 6.5 right of the nose.
+        // A fresh bola fired straight up lies across the flight path: ball B (radius 6) sits 26 right of the nose.
         // `below` pixels under its centre is beyond the line's 2-pixel half-width.
-        var ballB = Nose + new Vector2(6.5f, 0);
+        var ballB = Nose + new Vector2(26f, 0);
         var speck = TestEnemies.Stationary(Speck(0.2f), ballB + new Vector2(0, below));
 
         FireOnce(WeaponPath.Bola, speck);
 
         Assert.Equal(hit ? 2f : 3f, speck.HitPoints);
+    }
+
+    [Fact]
+    public void Bola_ball_radius_and_span_match_scale()
+    {
+        var small = new Bola(Nose, 0f, scale: 1f);
+        var large = new Bola(Nose, 0f, scale: 2f);
+
+        Assert.Equal(6f, small.BallRadius);
+        Assert.Equal(12f, large.BallRadius);
+        Assert.Equal(52f, small.Span);
+        Assert.Equal(104f, large.Span);
+        Assert.Equal(52f, Vector2.Distance(small.BallA, small.BallB), precision: 3);
+        Assert.Equal(104f, Vector2.Distance(large.BallA, large.BallB), precision: 3);
     }
 
     // ---- Who takes part in the pass ----

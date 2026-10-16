@@ -216,7 +216,8 @@ public sealed class GameSession
             var offset = (i - (count - 1) / 2f) * VolleySpreadRadians;
             yield return Stats.WeaponPath switch
             {
-                WeaponPath.Ballista => new Ballista(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
+                // A ballista bolt passes through two more enemies than the player's piercing alone allows.
+                WeaponPath.Ballista => new Ballista(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce + 2),
                 WeaponPath.Bola => new Bola(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
                 _ => new Laser(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
             };
@@ -235,7 +236,8 @@ public sealed class GameSession
                 if (enemy.IsDead || laser.HasHit(enemy) || !bounds.Reaches(enemy) || !shape.Touches(enemy.GetStrokes()))
                     continue;
 
-                enemy.TakeDamage(Stats.Damage);
+                // A bola hit also slows what it hits, unless a shield blocks the hit.
+                enemy.TakeDamage(Stats.Damage, slow: laser is Bola);
                 if (enemy.IsDead)
                 {
                     Score += PointsPerKill;

@@ -11,15 +11,18 @@ public sealed class SpiralIn(float speed, float offsetDegrees) : IMovementPatter
 {
     private readonly float _offset = offsetDegrees * MathF.PI / 180f;
 
-    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds)
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
+        Move(position, playerPosition, elapsedSeconds, 1f);
+
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds, float speedFactor)
     {
         var toPlayer = playerPosition - position;
         var distance = toPlayer.Length();
         var step = speed * elapsedSeconds;
         if (distance <= step)
-            return playerPosition;
+            return Displacement.Scale(position, playerPosition, speedFactor);
 
         var heading = Vector2.Transform(toPlayer / distance, Matrix3x2.CreateRotation(_offset));
-        return position + heading * step;
+        return Displacement.Scale(position, position + heading * step, speedFactor);
     }
 }

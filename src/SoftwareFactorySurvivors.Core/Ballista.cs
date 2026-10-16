@@ -11,8 +11,11 @@ public sealed class Ballista : Projectile
     /// <summary>Shaft length at 100% projectile size, in lasers.</summary>
     public const float ShaftLengthInLasers = 4f;
 
-    /// <summary>Arrowhead width (across its base) and length, in shaft widths.</summary>
-    public const float HeadSizeInShaftWidths = 3f;
+    /// <summary>Arrowhead width across its base, in shaft widths.</summary>
+    public const float HeadWidthInShaftWidths = 6f;
+
+    /// <summary>Arrowhead length along the flight line, in shaft widths.</summary>
+    public const float HeadLengthInShaftWidths = 3f;
 
     private readonly ThickLine[] _lines = new ThickLine[1];
     private readonly Vector2[] _arrowhead = new Vector2[4];
@@ -28,8 +31,8 @@ public sealed class Ballista : Projectile
 
     public float ShaftLength => ShaftLengthInLasers * Laser.BaseLength * Scale;
     public float ShaftWidth => Laser.BaseWidth * Scale;
-    public float HeadWidth => HeadSizeInShaftWidths * ShaftWidth;
-    public float HeadLength => HeadSizeInShaftWidths * ShaftWidth;
+    public float HeadWidth => HeadWidthInShaftWidths * ShaftWidth;
+    public float HeadLength => HeadLengthInShaftWidths * ShaftWidth;
 
     /// <summary>The shaft's centre segment, from the tail at Position to the arrowhead's base.</summary>
     public Vector2[] GetShaft() => [Position, Position + Forward * ShaftLength];

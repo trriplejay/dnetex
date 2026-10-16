@@ -12,7 +12,10 @@ public sealed class Dash(float creepSpeed, float dashSpeed, float creepSeconds, 
     private bool _dashing;
     private Vector2 _dashDirection;
 
-    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds)
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
+        Move(position, playerPosition, elapsedSeconds, 1f);
+
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds, float speedFactor)
     {
         _phaseTime += elapsedSeconds;
         if (!_dashing && _phaseTime >= creepSeconds)
@@ -29,8 +32,8 @@ public sealed class Dash(float creepSpeed, float dashSpeed, float creepSeconds, 
         }
 
         if (_dashing)
-            return position + _dashDirection * dashSpeed * elapsedSeconds;
+            return position + _dashDirection * dashSpeed * elapsedSeconds * speedFactor;
 
-        return new ChasePlayer(creepSpeed).Move(position, playerPosition, elapsedSeconds);
+        return new ChasePlayer(creepSpeed).Move(position, playerPosition, elapsedSeconds, speedFactor);
     }
 }

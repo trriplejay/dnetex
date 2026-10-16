@@ -11,18 +11,30 @@ public sealed class Thrown(Vector2 landingSpot, float flightSpeed, IMovementPatt
     public Vector2 LandingSpot { get; } = landingSpot;
     public bool HasLanded { get; private set; }
 
-    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds)
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
+        Move(position, playerPosition, elapsedSeconds, 1f);
+
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds, float speedFactor)
     {
         if (HasLanded)
-            return afterLanding.Move(position, playerPosition, elapsedSeconds);
+            return afterLanding.Move(position, playerPosition, elapsedSeconds, speedFactor);
 
         var toSpot = LandingSpot - position;
         var distance = toSpot.Length();
         var step = flightSpeed * elapsedSeconds;
-        if (distance > step)
-            return position + toSpot / distance * step;
+        var slowedStep = step * speedFactor;
+        if (distance <= slowedStep)
+        {
+            HasLanded = true;
+            return LandingSpot;
+        }
 
-        HasLanded = true;
-        return LandingSpot;
+        if (distance > step)
+            return Displacement.Scale(position, position + toSpot / distance * step, speedFactor);
+
+        // A slowed flight covers only part of the last stretch; land when on the spot or within the step.
+        var next = Displacement.Scale(position, LandingSpot, speedFactor);
+        HasLanded = next == LandingSpot;
+        return next;
     }
 }

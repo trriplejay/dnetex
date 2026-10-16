@@ -33,7 +33,7 @@ public class WeaponPathTests
 
         var (smallHeadWidth, smallHeadLength) = HeadExtent(small);
         var (largeHeadWidth, largeHeadLength) = HeadExtent(large);
-        Assert.Equal(12f, smallHeadWidth, precision: 3);
+        Assert.Equal(24f, smallHeadWidth, precision: 3);
         Assert.Equal(12f, smallHeadLength, precision: 3);
         Assert.Equal(2f * smallHeadWidth, largeHeadWidth, precision: 3);
         Assert.Equal(2f * smallHeadLength, largeHeadLength, precision: 3);
@@ -96,14 +96,14 @@ public class WeaponPathTests
     [Fact]
     public void Ballista_is_kept_while_its_head_overlaps_the_screen_and_expires_once_the_head_leaves()
     {
-        // Flying right just above the top edge: the shaft's line is off screen, but the 12-pixel-wide
+        // Flying right just above the top edge: the shaft's line is off screen, but the 24-pixel-wide
         // head reaches down past y = 0.
         var overlapping = new Ballista(new Vector2(20, -4), MathF.PI / 2f);
         var shaft = overlapping.GetShaft();
         Assert.True(shaft.All(p => p.Y < 0f));
         Assert.False(overlapping.IsExpired(100, 100));
 
-        var gone = new Ballista(new Vector2(20, -7), MathF.PI / 2f);
+        var gone = new Ballista(new Vector2(20, -13), MathF.PI / 2f);
         Assert.True(gone.IsExpired(100, 100));
     }
 
@@ -137,7 +137,9 @@ public class WeaponPathTests
         Assert.Equal(2, largeShape.Circles.Count);
         var smallSpan = Vector2.Distance(smallShape.Circles[0].Center, smallShape.Circles[1].Center);
         var largeSpan = Vector2.Distance(largeShape.Circles[0].Center, largeShape.Circles[1].Center);
-        Assert.Equal(13f, smallSpan, precision: 3);
+        Assert.Equal(6f, small.BallRadius);
+        Assert.Equal(12f, large.BallRadius);
+        Assert.Equal(52f, smallSpan, precision: 3);
         Assert.Equal(2f * smallSpan, largeSpan, precision: 3);
         Assert.Equal(2f * smallShape.Circles[0].Radius, largeShape.Circles[0].Radius, precision: 3);
         Assert.True(smallShape.Circles[0].Radius > smallLine.HalfWidth);
@@ -190,12 +192,12 @@ public class WeaponPathTests
     [Fact]
     public void Enemy_touching_only_one_ball_or_only_the_line_is_hit()
     {
-        // Heading 0 starts the line across the flight path: ball A on the left, ball B on the right, 6.5 out.
+        // Heading 0 starts the line across the flight path: ball A on the left, ball B on the right, 26 out.
         var bola = new Bola(Start, 0f);
-        AssertPointNear(Start - new Vector2(6.5f, 0), bola.BallA);
-        AssertPointNear(Start + new Vector2(6.5f, 0), bola.BallB);
+        AssertPointNear(Start - new Vector2(26f, 0), bola.BallA);
+        AssertPointNear(Start + new Vector2(26f, 0), bola.BallB);
 
-        // 2.5 below each ball centre: beyond the line's 2-pixel half-width but inside the 3-pixel ball.
+        // 2.5 below each ball centre: beyond the line's 2-pixel half-width but inside the 6-pixel ball.
         Vector2[][] underA = [[bola.BallA + new Vector2(-0.2f, 2.5f), bola.BallA + new Vector2(0.2f, 2.5f)]];
         Vector2[][] underB = [[bola.BallB + new Vector2(-0.2f, 2.5f), bola.BallB + new Vector2(0.2f, 2.5f)]];
         Vector2[][] middle = [[Start + new Vector2(-0.2f, 1f), Start + new Vector2(0.2f, 1f)]];
@@ -251,12 +253,12 @@ public class WeaponPathTests
     [Fact]
     public void Bola_is_kept_while_one_ball_overlaps_the_screen_edge()
     {
-        // Line along x: ball B at x = -1.5 reaches 1.5 pixels onto the screen; the line ends at its centre.
-        var overlapping = new Bola(new Vector2(-8, 50), 0f);
+        // Line along x: ball B at x = -1 reaches 1 pixel onto the screen (at x = 0) with radius 6 (reaches up to x = 5); the line ends at its centre x = -1.
+        var overlapping = new Bola(new Vector2(-27, 50), 0f);
         Assert.True(overlapping.BallB.X < 0f);
         Assert.False(overlapping.IsExpired(100, 100));
 
-        var gone = new Bola(new Vector2(-10, 50), 0f);
+        var gone = new Bola(new Vector2(-33, 50), 0f);
         Assert.True(gone.IsExpired(100, 100));
     }
 
