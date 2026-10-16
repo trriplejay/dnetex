@@ -227,7 +227,8 @@ public class GameSessionTests
         {
             Assert.IsType(kind, projectile);
             Assert.Equal(2f, projectile.Scale);
-            Assert.Equal(2, projectile.PierceRemaining);
+            // A ballista bolt carries two more pierce than the player's; a bola carries exactly the player's.
+            Assert.Equal(kind == typeof(Ballista) ? 4 : 2, projectile.PierceRemaining);
         });
         var headings = session.Lasers.Select(p => p.Heading).OrderBy(h => h).ToArray();
         Assert.Equal(-GameSession.VolleySpreadRadians, headings[0], precision: 5);
@@ -236,9 +237,9 @@ public class GameSessionTests
     }
 
     [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    public void Path_projectile_deals_stat_damage_and_is_used_up_after_one_plus_pierce_enemies(int pick)
+    [InlineData(0, 3)]
+    [InlineData(1, 1)]
+    public void Path_projectile_deals_stat_damage_and_is_used_up_after_its_pierce_enemies(int pick, int pathPierceBonus)
     {
         var session = ChoosePath(pick);
         session.Stats.Pierce = 2;
@@ -246,8 +247,9 @@ public class GameSessionTests
         session.Stats.Damage = 3f;
         var tough = EnemyRoster.Gemini with { HitPoints = 10f };
         var nose = session.Ship.Nose;
-        var column = Enumerable.Range(0, 4)
-            .Select(i => TestEnemies.Stationary(tough, nose - new Vector2(0, 100 + 80 * i)))
+        // A ballista bolt hits 3 + pierce enemies and a bola 1 + pierce; one more waits beyond either.
+        var column = Enumerable.Range(0, 6)
+            .Select(i => TestEnemies.Stationary(tough, nose - new Vector2(0, 100 + 50 * i)))
             .ToArray();
         foreach (var enemy in column)
             session.AddEnemy(enemy);
@@ -256,7 +258,8 @@ public class GameSessionTests
         for (var i = 0; i < 110; i++)
             session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
 
-        Assert.Equal([7f, 7f, 7f, 10f], column.Select(enemy => enemy.HitPoints));
+        var hits = pathPierceBonus + session.Stats.Pierce;
+        Assert.Equal(column.Select((_, i) => i < hits ? 7f : 10f), column.Select(enemy => enemy.HitPoints));
         Assert.Empty(session.Lasers);
     }
 

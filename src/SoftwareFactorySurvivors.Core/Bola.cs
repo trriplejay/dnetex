@@ -12,7 +12,7 @@ public sealed class Bola : Projectile
     public const float RotationRate = 4f * MathF.PI;
 
     /// <summary>Ball radius at 100% projectile size, a little more than the line's half-width.</summary>
-    public const float BaseBallRadius = 3f;
+    public const float BaseBallRadius = 6f;
 
     private readonly ThickLine[] _lines = new ThickLine[1];
     private readonly Circle[] _circles = new Circle[2];
@@ -30,7 +30,7 @@ public sealed class Bola : Projectile
     public float Angle { get; private set; }
 
     /// <summary>Distance between the two ball centres.</summary>
-    public float Span => Laser.BaseLength * Scale;
+    public float Span => 4f * Laser.BaseLength * Scale;
     public float LineWidth => Laser.BaseWidth * Scale;
     public float BallRadius => BaseBallRadius * Scale;
 

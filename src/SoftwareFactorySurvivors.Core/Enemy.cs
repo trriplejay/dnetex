@@ -58,20 +58,39 @@ public sealed class Enemy
 
     public bool IsDead => HitPoints <= 0f;
 
+    /// <summary>
+    /// Seconds of game time left on a Bola slow. It lives on the enemy rather than its movement pattern, so it
+    /// carries over when a phase replaces the movement.
+    /// </summary>
+    public float SlowSecondsLeft { get; private set; }
+
+    /// <summary>True while a Bola slow holds the enemy to a quarter of its normal movement.</summary>
+    public bool IsSlowed => SlowSecondsLeft > 0f;
+
     public void Update(Vector2 playerPosition, float elapsedSeconds)
     {
-        Position = Movement.Move(Position, playerPosition, elapsedSeconds);
+        // A slowed enemy covers a quarter of its normal distance; its pattern's own timers and ramps still see the
+        // real elapsed time, so it moves exactly as normal once the slow ends.
+        Position = Movement.Move(Position, playerPosition, elapsedSeconds, IsSlowed ? 0.25f : 1f);
         Rotation += Type.SpinSpeed * elapsedSeconds;
+        if (IsSlowed)
+            SlowSecondsLeft = MathF.Max(0f, SlowSecondsLeft - elapsedSeconds);
     }
 
     /// <summary>Runs the enemy's special ability, if it has one, and returns any enemies it created.</summary>
     public IReadOnlyList<Enemy> UseAbility(Vector2 playerPosition, float elapsedSeconds, Random random) =>
         Ability?.Update(this, playerPosition, elapsedSeconds, random) ?? [];
 
-    public void TakeDamage(float damage)
+    /// <param name="slow">
+    /// True for a Bola hit: it also slows the enemy for 2 seconds, restarting (not stacking) any slow already on it.
+    /// A hit the shield blocks neither damages nor slows.
+    /// </param>
+    public void TakeDamage(float damage, bool slow = false)
     {
         if (IsShielded)
             return;
+        if (slow)
+            SlowSecondsLeft = 2f;
         HitPoints = MathF.Max(0f, HitPoints - damage);
         EnterReachedPhases();
     }

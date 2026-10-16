@@ -15,9 +15,12 @@ public sealed class Orbit(Enemy center, float radius, float speed, float startAn
     /// <summary>Where on the circle the orbiter currently sits.</summary>
     public Vector2 CurrentPosition => Center.Position + new Vector2(MathF.Cos(Angle), MathF.Sin(Angle)) * Radius;
 
-    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds)
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
+        Move(position, playerPosition, elapsedSeconds, 1f);
+
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds, float speedFactor)
     {
-        Angle += speed / Radius * elapsedSeconds;
+        Angle += speed / Radius * elapsedSeconds * speedFactor;
         return CurrentPosition;
     }
 }

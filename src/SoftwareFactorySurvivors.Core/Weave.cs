@@ -9,7 +9,10 @@ public sealed class Weave(float speed, float amplitude, float cyclesPerSecond) :
 {
     private float _time;
 
-    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds)
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
+        Move(position, playerPosition, elapsedSeconds, 1f);
+
+    public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds, float speedFactor)
     {
         _time += elapsedSeconds;
         var toPlayer = playerPosition - position;
@@ -22,6 +25,6 @@ public sealed class Weave(float speed, float amplitude, float cyclesPerSecond) :
         var angularFrequency = MathF.Tau * cyclesPerSecond;
         var sway = side * amplitude * angularFrequency * MathF.Cos(angularFrequency * _time);
         var step = MathF.Min(speed * elapsedSeconds, distance);
-        return position + forward * step + sway * elapsedSeconds;
+        return Displacement.Scale(position, position + forward * step + sway * elapsedSeconds, speedFactor);
     }
 }
