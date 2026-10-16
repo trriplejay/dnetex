@@ -132,6 +132,38 @@ public class BossTests
     }
 
     [Fact]
+    public void Autocomplete_arrives_on_schedule_at_270s_while_gemini_boss_lives_and_regular_spawning_remains_paused()
+    {
+        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f));
+        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+
+        RunUntil(session, () => session.ElapsedSeconds >= 179.9f);
+        Assert.False(session.IsBossActive);
+
+        RunUntil(session, () => session.IsBossActive);
+        Assert.InRange(session.ElapsedSeconds, 180f, 180.1f);
+        var gemini = Assert.Single(session.Bosses);
+        Assert.Same(EnemyRoster.GeminiBoss, gemini.Type);
+
+        var regularCountAtGemini = session.Enemies.Count(e => e.Type == EnemyRoster.ChatGpt);
+
+        // Keep Gemini boss alive (do not hit it) and advance past 270s
+        RunUntil(session, () => session.ElapsedSeconds >= 270.1f);
+
+        // Autocomplete arrived on time, both bosses live, each appears exactly once
+        Assert.Equal(2, session.Bosses.Count);
+        Assert.Single(session.Bosses.Where(b => b.Type == EnemyRoster.GeminiBoss));
+        var autocomplete = Assert.Single(session.Bosses.Where(b => b.Type == EnemyRoster.Autocomplete));
+        Assert.True(gemini.HitPoints > 0f);
+        Assert.True(autocomplete.HitPoints > 0f);
+        Assert.Equal(2, session.Bosses.Select(b => b.Type).Distinct().Count());
+
+        // Regular-type enemies did not grow while IsBossActive
+        var regularCountAt270 = session.Enemies.Count(e => e.Type == EnemyRoster.ChatGpt);
+        Assert.Equal(regularCountAtGemini, regularCountAt270);
+    }
+
+    [Fact]
     public void Boss_survives_touching_the_ship_when_the_ship_survives()
     {
         var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(0f, EnemyRoster.GeminiBoss)]);

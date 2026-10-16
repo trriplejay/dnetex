@@ -134,4 +134,138 @@ public class FinalBossesTests
         Assert.Equal(lockedStart, pattern.LockedSegment.Start);
         Assert.Equal(lockedEnd, pattern.LockedSegment.End);
     }
+
+    [Fact]
+    public void Ship_on_fresh_trail_segment_after_arming_costs_hit_point_and_ends_game_when_exhausted()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        session.Stats.MaxHitPoints = session.Stats.HitPoints = 2;
+
+        var trail = Hazard.CreateTrail(Center - new Vector2(50, 0), Center + new Vector2(50, 0), halfWidth: 25f, lifetimeSeconds: 4f, armSeconds: 1f);
+        session.AddHazard(trail);
+
+        // Before arming (e.g. at 0.5s), no damage
+        session.Update(Vector2.Zero, null, 0.5f, Width, Height);
+        Assert.Equal(2, session.Stats.HitPoints);
+        Assert.False(session.IsGameOver);
+
+        // Advance to 1.05s (now armed): takes 1 damage, invulnerability granted
+        session.Update(Vector2.Zero, null, 0.55f, Width, Height);
+        Assert.Equal(1, session.Stats.HitPoints);
+        Assert.False(session.IsGameOver);
+        Assert.True(session.InvulnerableSecondsLeft > 0f);
+
+        // Advance while invulnerable: no further damage
+        session.Update(Vector2.Zero, null, 0.5f, Width, Height);
+        Assert.Equal(1, session.Stats.HitPoints);
+
+        // Wait until invulnerability expires (at total time 1.05 + 0.5 + 0.6 = 2.15s < 4.0s lifetime)
+        session.Update(Vector2.Zero, null, 0.6f, Width, Height);
+        // Ship takes second hit, reducing HitPoints to 0 and triggering GameOver
+        Assert.Equal(0, session.Stats.HitPoints);
+        Assert.True(session.IsGameOver);
+    }
+
+    [Fact]
+    public void Ship_off_trail_segment_takes_no_damage()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
+
+        var trail = Hazard.CreateTrail(new Vector2(100, 100), new Vector2(200, 100), halfWidth: 25f, lifetimeSeconds: 4f, armSeconds: 1f);
+        session.AddHazard(trail);
+
+        // Advance past arming time
+        session.Update(Vector2.Zero, null, 2.0f, Width, Height);
+
+        Assert.Equal(3, session.Stats.HitPoints);
+        Assert.False(session.IsGameOver);
+    }
+
+    [Fact]
+    public void Trail_segment_expires_after_lifetime_and_no_longer_damages()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        session.Stats.MaxHitPoints = session.Stats.HitPoints = 5;
+
+        var trail = Hazard.CreateTrail(Center - new Vector2(50, 0), Center + new Vector2(50, 0), halfWidth: 25f, lifetimeSeconds: 2.0f, armSeconds: 1.0f);
+        session.AddHazard(trail);
+
+        // Advance 1.1s: armed, ship takes 1 damage
+        session.Update(Vector2.Zero, null, 1.1f, Width, Height);
+        Assert.Equal(4, session.Stats.HitPoints);
+        Assert.Contains(trail, session.Hazards);
+
+        // Advance past lifetime (another 1.0s, total 2.1s > 2.0s):
+        session.Update(Vector2.Zero, null, 1.0f, Width, Height);
+        Assert.DoesNotContain(trail, session.Hazards);
+        Assert.Empty(session.Hazards);
+
+        // Advance further at the same position, invulnerability now gone: no further damage taken
+        session.Update(Vector2.Zero, null, 1.5f, Width, Height);
+        Assert.Equal(4, session.Stats.HitPoints);
+    }
+
+    [Fact]
+    public void Hazard_arm_time_guard_enforces_at_least_one_second_for_all_hazard_kinds_and_zero_warmup_fixture()
+    {
+        // Guard discriminates: requested with zero warmup is still clamped to >= 1.0s
+        var zeroWarmupFixture = new Hazard(
+            HazardKind.Trail,
+            new ProjectileShape([new ThickLine(Center, Center + new Vector2(10, 0), 20f)], [], []),
+            lifetimeSeconds: 5f,
+            armSeconds: 0f);
+        Assert.Equal(1.0f, zeroWarmupFixture.ArmSeconds);
+        Assert.False(zeroWarmupFixture.IsArmed);
+
+        // Enumerate every hazard kind: Trail, Ring, Bullet
+        var kinds = new[] { HazardKind.Trail, HazardKind.Ring, HazardKind.Bullet };
+        foreach (var kind in kinds)
+        {
+            var session = TestEnemies.QuietSession(Center);
+            session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
+
+            Hazard hazard = kind switch
+            {
+                HazardKind.Trail => Hazard.CreateTrail(Center - new Vector2(10, 0), Center + new Vector2(10, 0), halfWidth: 25f, armSeconds: 0f),
+                HazardKind.Ring => Hazard.CreateRing(Center, radius: 50f, armSeconds: 0f),
+                HazardKind.Bullet => Hazard.CreateBullet(Center, radius: 10f, armSeconds: 0f),
+                _ => throw new InvalidOperationException()
+            };
+
+            Assert.True(hazard.ArmSeconds >= 1.0f);
+            session.AddHazard(hazard);
+
+            // Placed on ship at creation, asserts no hit before 1.0s
+            session.Update(Vector2.Zero, null, 0.4f, Width, Height);
+            Assert.False(hazard.IsArmed);
+            Assert.Equal(3, session.Stats.HitPoints);
+
+            session.Update(Vector2.Zero, null, 0.5f, Width, Height); // total 0.9s < 1.0s
+            Assert.False(hazard.IsArmed);
+            Assert.Equal(3, session.Stats.HitPoints);
+
+            // Advance past 1.0s (total 1.05s) -> now armed and hits
+            session.Update(Vector2.Zero, null, 0.15f, Width, Height);
+            Assert.True(hazard.IsArmed);
+            Assert.Equal(2, session.Stats.HitPoints);
+        }
+    }
+
+    [Fact]
+    public void Autocomplete_charge_leaves_trail_hazard_segments_covering_charge_path()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        var boss = new Enemy(EnemyRoster.Autocomplete, new Vector2(100, 400));
+        session.AddEnemy(boss);
+
+        // Autocomplete telegraphs for 1.2s: no hazard yet
+        session.Update(Vector2.Zero, null, 1.1f, Width, Height);
+        Assert.Empty(session.Hazards);
+
+        // Enters charge phase (at 1.2s+) and moves:
+        session.Update(Vector2.Zero, null, 0.2f, Width, Height);
+        Assert.NotEmpty(session.Hazards);
+        Assert.All(session.Hazards, h => Assert.Equal(HazardKind.Trail, h.Kind));
+    }
 }

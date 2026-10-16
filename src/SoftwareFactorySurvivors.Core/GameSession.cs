@@ -36,6 +36,7 @@ public sealed class GameSession
     private readonly FiringTimer _firingTimer = new();
     private readonly List<Projectile> _lasers = [];
     private readonly List<Enemy> _enemies = [];
+    private readonly List<Hazard> _hazards = [];
     private readonly List<Enemy> _enemySnapshot = [];
     private int _pendingLevelUps;
 
@@ -82,6 +83,9 @@ public sealed class GameSession
     /// <summary>Bosses currently alive. While there are any, the regular spawner is paused.</summary>
     public IReadOnlyList<Enemy> Bosses => _bosses;
 
+    /// <summary>Hazards currently in play (trails, rings, bullets).</summary>
+    public IReadOnlyList<Hazard> Hazards => _hazards;
+
     public bool IsBossActive => _bosses.Count > 0;
 
     /// <summary>True during a scheduled lull, when regular spawning stops.</summary>
@@ -105,6 +109,12 @@ public sealed class GameSession
 
     /// <summary>Adds an enemy (and any shield orbiting it) directly, for spawns that don't come from the edge spawner.</summary>
     public void AddEnemy(Enemy enemy) => AddEnemies([enemy]);
+
+    /// <summary>Adds a hazard directly to the session.</summary>
+    public void AddHazard(Hazard hazard) => _hazards.Add(hazard);
+
+    /// <summary>Adds multiple hazards directly to the session.</summary>
+    public void AddHazards(IEnumerable<Hazard> hazards) => _hazards.AddRange(hazards);
 
     /// <summary>Applies the chosen card, then offers the next level-up's cards or resumes play.</summary>
     public void ChooseUpgrade(int index)
@@ -145,10 +155,29 @@ public sealed class GameSession
         if (!IsBossActive && !IsSpawningPaused)
             AddEnemies(Spawner.Update(elapsedSeconds, width, height));
         foreach (var enemy in _enemies)
+        {
+            var prevChargeSeg = (enemy.Movement as ChargeAlongLine)?.LastChargeSegment;
             enemy.Update(Ship.Position, elapsedSeconds);
+            if (enemy.Movement is ChargeAlongLine charge)
+            {
+                var seg = charge.LastChargeSegment;
+                if (seg != prevChargeSeg && Vector2.DistanceSquared(seg.Start, seg.End) > 0.01f)
+                    AddHazard(Hazard.CreateTrail(seg.Start, seg.End));
+            }
+            if (enemy.Movement is IHazardProducer moveProds)
+                AddHazards(moveProds.TakeHazards());
+        }
         // Both passes walk a snapshot, so enemies they add join play without taking part in the same pass.
         foreach (var enemy in SnapshotEnemies())
+        {
             AddEnemies(enemy.UseAbility(Ship.Position, elapsedSeconds, _random));
+            if (enemy.Ability is IHazardProducer abilityProds)
+                AddHazards(abilityProds.TakeHazards());
+        }
+
+        foreach (var hazard in _hazards)
+            hazard.Update(elapsedSeconds);
+        _hazards.RemoveAll(hazard => hazard.IsExpired);
 
         ResolveLaserHits();
         // A boss can respawn its shield when a hit moves it into a new phase.
@@ -157,7 +186,10 @@ public sealed class GameSession
         _lasers.RemoveAll(laser => laser.IsExpired(width, height));
         ResolveContact();
 
-        IsVictory = !IsGameOver && ElapsedSeconds >= SurvivalSeconds;
+        var claudeBossKilled = _bosses.RemoveAll(boss => boss.IsDead && boss.Type == EnemyRoster.ClaudeBoss) > 0;
+        _bosses.RemoveAll(boss => boss.IsDead);
+        if (claudeBossKilled && !IsGameOver)
+            IsVictory = true;
         if (!IsFinished)
             OfferNextUpgrade();
     }
@@ -249,7 +281,6 @@ public sealed class GameSession
             return false;
         });
         _enemies.RemoveAll(enemy => enemy.IsDead);
-        _bosses.RemoveAll(boss => boss.IsDead);
     }
 
     private void ResolveContact()
@@ -259,7 +290,8 @@ public sealed class GameSession
 
         var shipStrokes = Ship.GetStrokes();
         var touching = _enemies.Where(enemy => Collision.StrokesTouch(shipStrokes, enemy.GetStrokes())).ToList();
-        if (touching.Count == 0)
+        var touchingHazards = _hazards.Where(hazard => hazard.IsArmed && hazard.Touches(shipStrokes)).ToList();
+        if (touching.Count == 0 && touchingHazards.Count == 0)
             return;
 
         Stats.HitPoints = Math.Max(0, Stats.HitPoints - 1);
@@ -274,6 +306,8 @@ public sealed class GameSession
         // Bosses survive the collision; they can only be beaten with lasers.
         foreach (var enemy in touching.Where(enemy => !_bosses.Contains(enemy)))
             _enemies.Remove(enemy);
+        foreach (var hazard in touchingHazards.Where(h => h.ExpireOnContact))
+            _hazards.Remove(hazard);
         InvulnerableSecondsLeft = InvulnerableSeconds;
     }
 
