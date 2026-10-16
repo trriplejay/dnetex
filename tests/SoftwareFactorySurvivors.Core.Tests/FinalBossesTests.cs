@@ -398,8 +398,29 @@ public class FinalBossesTests
         Assert.All(copies, c =>
         {
             Assert.True(c.IsCopy);
+            Assert.Null(c.Ability);
             Assert.Same(EnemyRoster.Hallucination, c.Type);
             Assert.Equal(0, c.Experience);
         });
+    }
+
+    [Fact]
+    public void Hallucination_copies_have_no_ability_and_do_not_split_further_over_multiple_periods()
+    {
+        var session = TestEnemies.QuietSession(new Vector2(900, 700));
+        var boss = new Enemy(EnemyRoster.Hallucination, new Vector2(300, 300));
+        session.AddEnemy(boss);
+
+        // Advance 3 split periods (15 seconds total)
+        for (var i = 0; i < 160; i++)
+        {
+            session.Update(Vector2.Zero, null, 0.1f, Width, Height);
+        }
+
+        var copies = session.Enemies.Where(e => e.IsCopy).ToList();
+        // The real boss splits 3 times producing 2 copies each = 6 copies total.
+        // Copies themselves never split because their Ability is null.
+        Assert.Equal(6, copies.Count);
+        Assert.All(copies, c => Assert.Null(c.Ability));
     }
 }

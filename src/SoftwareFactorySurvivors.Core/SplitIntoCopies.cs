@@ -23,6 +23,9 @@ public sealed class SplitIntoCopies(
 
     public IReadOnlyList<Enemy> Update(Enemy owner, Vector2 playerPosition, float elapsedSeconds, Random random)
     {
+        if (owner.IsCopy)
+            return [];
+
         _sinceSplit += elapsedSeconds;
         if (_sinceSplit < secondsBetweenSplits)
             return [];

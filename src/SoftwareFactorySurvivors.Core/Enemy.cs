@@ -22,7 +22,7 @@ public sealed class Enemy
         Experience = experience ?? type.Experience;
         IsCopy = isCopy;
         Movement = movement ?? type.CreateMovement(type.Speed);
-        Ability = type.CreateAbility?.Invoke();
+        Ability = isCopy ? null : type.CreateAbility?.Invoke();
         Shields = _newShields = CreateShields(type.Shield);
     }
 

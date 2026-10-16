@@ -31,6 +31,7 @@ public class HallucinationBossTests
         foreach (var copy in copies)
         {
             Assert.True(copy.IsCopy);
+            Assert.Null(copy.Ability);
             Assert.Same(boss.Type, copy.Type);
             Assert.Equal(boss.Type.Radius, copy.Type.Radius);
             Assert.Equal(0, copy.Experience);
@@ -53,7 +54,7 @@ public class HallucinationBossTests
 
         var copy = new Enemy(
             EnemyRoster.Hallucination,
-            new Vector2(Center.X, Center.Y - 50f),
+            new Vector2(Center.X, Center.Y - 150f),
             movement: new StationaryPattern(),
             experience: 0,
             isCopy: true);
@@ -75,6 +76,8 @@ public class HallucinationBossTests
         // Boss should NOT have taken damage
         Assert.Equal(80f, boss.HitPoints);
         Assert.False(copy.IsFlickering);
+        // Ship should NOT have taken contact damage because copy was out of contact range
+        Assert.Equal(session.Stats.MaxHitPoints, session.Stats.HitPoints);
 
         // Verify copy dying directly via TakeDamage as well
         var directCopy = new Enemy(EnemyRoster.Hallucination, Vector2.Zero, isCopy: true);
@@ -173,6 +176,41 @@ public class HallucinationBossTests
         copy.TakeDamage(10f);
         Assert.Equal(0f, copy.HitPoints); // killed outright
         Assert.True(copy.IsDead);
+    }
+
+    [Fact]
+    public void Copies_have_no_ability_and_do_not_spawn_copies_over_multiple_split_periods()
+    {
+        var session = TestEnemies.QuietSession(new Vector2(900, 700));
+        var boss = new Enemy(
+            EnemyRoster.Hallucination,
+            new Vector2(300, 300),
+            movement: new StationaryPattern());
+        session.AddEnemy(boss);
+
+        Assert.Null(new Enemy(EnemyRoster.Hallucination, Vector2.Zero, isCopy: true).Ability);
+        Assert.NotNull(boss.Ability);
+
+        // Advance across 3 split periods (Hallucination splits every 5s with 2 copies each).
+        // 3 split periods = 15s. At each split, the boss spawns 2 copies.
+        // If copies could split, the count would grow exponentially (2 -> 2 + 2*2 + ...).
+        // Because copies have no ability, after 16 seconds there should be exactly
+        // 1 boss + 3 * 2 = 6 copies (total 7 enemies, exactly 6 copies).
+        const float dt = 0.5f;
+        for (var t = 0f; t < 16f; t += dt)
+        {
+            session.Update(Vector2.Zero, null, dt, Width, Height);
+        }
+
+        var copies = session.Enemies.Where(e => e.IsCopy).ToList();
+        Assert.Equal(6, copies.Count);
+        Assert.All(copies, c => Assert.Null(c.Ability));
+
+        // Direct ability check on a copy also returns empty
+        var ability = new SplitIntoCopies(secondsBetweenSplits: 1f, copiesPerSplit: 2);
+        var copy = new Enemy(EnemyRoster.Hallucination, Vector2.Zero, isCopy: true);
+        var spawnedFromCopy = ability.Update(copy, Center, 2f, new Random(42));
+        Assert.Empty(spawnedFromCopy);
     }
 
     private sealed class StationaryPattern : IMovementPattern
