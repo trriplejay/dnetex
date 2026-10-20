@@ -8,6 +8,7 @@ namespace SoftwareFactorySurvivors.Core;
 /// </summary>
 public sealed class Dash(float creepSpeed, float dashSpeed, float creepSeconds, float dashSeconds) : IMovementPattern
 {
+    private readonly float _creepSeconds = MathF.Max(1.0f, creepSeconds);
     private float _phaseTime;
     private bool _dashing;
     private Vector2 _dashDirection;
@@ -15,7 +16,7 @@ public sealed class Dash(float creepSpeed, float dashSpeed, float creepSeconds, 
     private float _lungeSpeed;
 
     /// <summary>Seconds of creep before each lunge; a fresh Dash starts in creep.</summary>
-    public float CreepSeconds => creepSeconds;
+    public float CreepSeconds => _creepSeconds;
 
     /// <summary>
     /// Changes this Dash's lunge speed in place, without restarting its creep/lunge cycle. Only lunges that start
@@ -29,7 +30,7 @@ public sealed class Dash(float creepSpeed, float dashSpeed, float creepSeconds, 
     public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds, float speedFactor)
     {
         _phaseTime += elapsedSeconds;
-        if (!_dashing && _phaseTime >= creepSeconds)
+        if (!_dashing && _phaseTime >= _creepSeconds)
         {
             _dashing = true;
             _phaseTime = 0f;
