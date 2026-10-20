@@ -2,6 +2,13 @@ using System.Numerics;
 
 namespace SoftwareFactorySurvivors.Core;
 
+/// <summary>Closing-ring timing that applies from a boss phase on.</summary>
+/// <param name="AtHealthFraction">The owner's Phases entry (by AtHealthFraction) this step is keyed to.</param>
+/// <param name="CooldownSeconds">Seconds between ring spawns.</param>
+/// <param name="ContractionSpeed">Pixels per second each ring spawned under this step contracts.</param>
+/// <param name="LifetimeSeconds">Lifetime of each ring spawned under this step.</param>
+public sealed record RingStep(float AtHealthFraction, float CooldownSeconds, float ContractionSpeed, float LifetimeSeconds);
+
 /// <summary>
 /// A Claude-boss ability that periodically creates a closing ring hazard centred near the ship.
 /// The ring gives at least 1.0s of warning (warm-up) before it becomes armed, contracts at a finite
@@ -36,16 +43,29 @@ public sealed class ClosingRing : IEnemyAbility, IHazardProducer
     private readonly float _lifetimeSeconds;
     private readonly float _cooldownSeconds;
 
+    private readonly IReadOnlyList<RingStep> _phaseSchedule;
+
+    // Cooldown clock: carries over phase changes and is never reset by one.
     private float _timer;
+    // Seconds since the last ring spawned, accumulated exactly as that ring's own AgeSeconds is.
+    private float _sinceLastSpawn;
+    private float _lastLifetime;
+    private bool _hasSpawned;
     private readonly List<Hazard> _pendingHazards = [];
 
+    /// <param name="phaseSchedule">
+    /// Optional per-phase overrides. Each step applies once the owner has entered the Phases entry whose
+    /// AtHealthFraction matches the step's; the step of the lowest such fraction reached wins. Null or empty keeps
+    /// the base cooldown, contraction speed and lifetime throughout.
+    /// </param>
     public ClosingRing(
         float initialRadius = DefaultInitialRadius,
         float minRadius = DefaultMinRadius,
         float contractionSpeed = DefaultContractionSpeed,
         float warmupSeconds = DefaultWarmupSeconds,
         float lifetimeSeconds = DefaultLifetimeSeconds,
-        float cooldownSeconds = DefaultCooldownSeconds)
+        float cooldownSeconds = DefaultCooldownSeconds,
+        IReadOnlyList<RingStep>? phaseSchedule = null)
     {
         _initialRadius = initialRadius;
         _minRadius = MathF.Max(DefaultMinRadius, minRadius);
@@ -53,7 +73,11 @@ public sealed class ClosingRing : IEnemyAbility, IHazardProducer
         _warmupSeconds = MathF.Max(1.0f, warmupSeconds);
         _lifetimeSeconds = lifetimeSeconds;
         _cooldownSeconds = cooldownSeconds;
+        _phaseSchedule = phaseSchedule ?? [];
     }
+
+    /// <summary>Per-phase overrides of cooldown, contraction speed and lifetime.</summary>
+    public IReadOnlyList<RingStep> PhaseSchedule => _phaseSchedule;
 
     public float InitialRadius => _initialRadius;
     public float MinRadius => _minRadius;
@@ -62,19 +86,64 @@ public sealed class ClosingRing : IEnemyAbility, IHazardProducer
     public float LifetimeSeconds => _lifetimeSeconds;
     public float CooldownSeconds => _cooldownSeconds;
 
+    /// <summary>
+    /// The cooldown, contraction speed and lifetime in force for this owner: the schedule step keyed to the lowest
+    /// Phases entry (by AtHealthFraction) the owner has entered, or the base values if none applies.
+    /// </summary>
+    public RingStep StepFor(Enemy owner)
+    {
+        var current = new RingStep(1f, _cooldownSeconds, _contractionSpeed, _lifetimeSeconds);
+        var phases = owner.Type.Phases;
+        if (phases is null || _phaseSchedule.Count == 0)
+            return current;
+
+        var currentFraction = float.PositiveInfinity;
+        foreach (var step in _phaseSchedule)
+        {
+            for (var i = 0; i < phases.Count; i++)
+            {
+                if (MathF.Abs(phases[i].AtHealthFraction - step.AtHealthFraction) < 0.001f
+                    && owner.PhasesReached > i
+                    && step.AtHealthFraction < currentFraction)
+                {
+                    current = step;
+                    currentFraction = step.AtHealthFraction;
+                }
+            }
+        }
+
+        return current;
+    }
+
     public IReadOnlyList<Enemy> Update(Enemy owner, Vector2 playerPosition, float elapsedSeconds, Random random)
     {
         _timer += elapsedSeconds;
-        if (_timer >= _cooldownSeconds || _pendingHazards.Count == 0 && _timer == elapsedSeconds)
-        {
-            if (_timer >= _cooldownSeconds)
-                _timer -= _cooldownSeconds;
+        _sinceLastSpawn += elapsedSeconds;
+        var step = StepFor(owner);
 
-            var hazard = SpawnRingHazard(playerPosition);
-            _pendingHazards.Add(hazard);
+        if (!_hasSpawned)
+        {
+            _hasSpawned = true;
+            Spawn(playerPosition, step);
+        }
+        // A ring spawns once its cooldown has run AND the previous ring has expired, so at most one is ever out.
+        else if (_timer >= step.CooldownSeconds && _sinceLastSpawn >= _lastLifetime)
+        {
+            var overdue = _timer - step.CooldownSeconds;
+            // Keep a sub-frame remainder so the rhythm doesn't drift; a spawn held back longer counts from now.
+            _timer = overdue < elapsedSeconds ? overdue : 0f;
+            Spawn(playerPosition, step);
         }
 
         return [];
+    }
+
+    private void Spawn(Vector2 playerPosition, RingStep step)
+    {
+        _sinceLastSpawn = 0f;
+        _lastLifetime = step.LifetimeSeconds;
+        _pendingHazards.Add(CreateRingHazard(
+            playerPosition, _initialRadius, _minRadius, step.ContractionSpeed, _warmupSeconds, step.LifetimeSeconds));
     }
 
     public IReadOnlyList<Hazard> TakeHazards()
@@ -125,9 +194,6 @@ public sealed class ClosingRing : IEnemyAbility, IHazardProducer
             ExpireOnContact = false,
         };
     }
-
-    private Hazard SpawnRingHazard(Vector2 center) =>
-        CreateRingHazard(center, _initialRadius, _minRadius, _contractionSpeed, _warmupSeconds, _lifetimeSeconds);
 
     private static ThickLine[] BuildCircleLines(Vector2 center, float radius)
     {

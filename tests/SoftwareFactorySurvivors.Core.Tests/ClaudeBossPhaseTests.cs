@@ -220,10 +220,11 @@ public class ClaudeBossPhaseTests
         }
 
         Assert.NotEmpty(ringTimes);
-        Assert.InRange(ringTimes[0], 10.0f - Step, 10.0f + Step);
+        var expectedNextRingTime = expectedPhasesReached >= 2 ? 8.0f : 10.0f;
+        Assert.InRange(ringTimes[0], expectedNextRingTime - Step, expectedNextRingTime + Step);
 
-        var ringsFollowing10s = ringTimes.Where(t => t > 10.0f + Step).ToList();
-        Assert.NotEmpty(ringsFollowing10s);
+        var ringsFollowing = ringTimes.Where(t => t > expectedNextRingTime + Step).ToList();
+        Assert.NotEmpty(ringsFollowing);
         Assert.True(bulletCount > 0, "Bullet hazards should continue to be produced over the following 30 seconds.");
     }
 

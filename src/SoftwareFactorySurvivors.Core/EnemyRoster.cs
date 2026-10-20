@@ -141,6 +141,8 @@ public static class EnemyRoster
     /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
     /// Its health bar is notched at 75%, 50% and 25%.
     /// At 75% bullet rings come more often (every 3 s → 2 s) with more bullets (12 → 16), still with an escape gap;
+    /// at 50% its closing ring returns sooner (every 10 s → 6 s), shrinks faster (40 → 60 px/s) and lasts 6 s instead
+    /// of 8 s, never with two rings out at once, and its lunges get faster (420 → 560 px/s) without restarting its creep;
     /// at 25% it also throws pairs of regular Claudes.
     /// </summary>
     public static readonly EnemyType ClaudeBoss = new(
@@ -148,13 +150,13 @@ public static class EnemyRoster
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
         speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(70f),
         CreateAbility: () => new CompositeAbility(
-            new ClosingRing(),
+            new ClosingRing(phaseSchedule: [new RingStep(0.50f, CooldownSeconds: 6f, ContractionSpeed: 60f, LifetimeSeconds: 6f)]),
             new BulletBursts(phaseSchedule: [new BurstStep(2f, 16)]),
             ThrowClaudes()),
         Phases:
         [
             new(0.75f),
-            new(0.50f),
+            new(0.50f, RetuneMovement: m => { if (m is Dash dash) dash.Retune(dashSpeed: 560f); }),
             new(0.25f),
         ]);
 
