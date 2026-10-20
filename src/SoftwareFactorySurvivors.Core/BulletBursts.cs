@@ -3,6 +3,13 @@ using System.Numerics;
 namespace SoftwareFactorySurvivors.Core;
 
 /// <summary>
+/// Interval between bullet bursts and number of bullets per burst.
+/// </summary>
+/// <param name="SecondsBetweenBursts">Interval between bursts in seconds.</param>
+/// <param name="BulletsPerBurst">Number of bullets per burst.</param>
+public sealed record BurstStep(float SecondsBetweenBursts, int BulletsPerBurst);
+
+/// <summary>
 /// Boss ability that periodically emits bullet hazards in radial bursts.
 /// Bullets travel outwards at a speed strictly slower than the ship's top speed.
 /// Each burst leaves at least one generous angular gap wider than shipDiameter / maxRange
@@ -31,6 +38,8 @@ public sealed class BulletBursts : IEnemyAbility, IHazardProducer
     private readonly float _bulletLifetime;
     private readonly float _bulletArmSeconds;
     private readonly Random? _injectedRandom;
+    private readonly IReadOnlyList<BurstStep>? _phaseSchedule;
+    private readonly BurstStep _baseStep;
     private readonly List<Hazard> _pendingHazards = [];
     private float _sinceBurst;
 
@@ -44,6 +53,10 @@ public sealed class BulletBursts : IEnemyAbility, IHazardProducer
     /// <param name="bulletLifetime">Lifetime of each bullet hazard in seconds.</param>
     /// <param name="bulletArmSeconds">Arming warning time in seconds (Hazard clamps >= 1.0s).</param>
     /// <param name="random">Optional seeded Random for burst rotation and gaps.</param>
+    /// <param name="phaseSchedule">
+    /// Entry i applies once the owner has reached i + 1 phases; past the last entry the last one holds.
+    /// Null or empty keeps the base interval and bullet count throughout.
+    /// </param>
     public BulletBursts(
         float secondsBetweenBursts = 3.0f,
         int bulletsPerBurst = 12,
@@ -51,7 +64,8 @@ public sealed class BulletBursts : IEnemyAbility, IHazardProducer
         float bulletRadius = 8f,
         float bulletLifetime = 6.0f,
         float bulletArmSeconds = 1.0f,
-        Random? random = null)
+        Random? random = null,
+        IReadOnlyList<BurstStep>? phaseSchedule = null)
     {
         if (bulletSpeed >= ShipSpeed)
             throw new ArgumentOutOfRangeException(nameof(bulletSpeed), "Bullet speed must be strictly slower than ship top speed.");
@@ -63,20 +77,35 @@ public sealed class BulletBursts : IEnemyAbility, IHazardProducer
         _bulletLifetime = bulletLifetime;
         _bulletArmSeconds = bulletArmSeconds;
         _injectedRandom = random;
+        _phaseSchedule = phaseSchedule;
+        _baseStep = new BurstStep(secondsBetweenBursts, bulletsPerBurst);
     }
 
     /// <summary>Current bullet speed.</summary>
     public float Speed { get; }
+
+    /// <summary>Per-phase schedule of burst steps.</summary>
+    public IReadOnlyList<BurstStep> PhaseSchedule => _phaseSchedule ?? [];
+
+    /// <summary>The interval and bullet count in force for an owner that has reached this many phases.</summary>
+    public BurstStep StepFor(int phasesReached)
+    {
+        if (phasesReached <= 0 || _phaseSchedule is null or { Count: 0 })
+            return _baseStep;
+
+        return _phaseSchedule[Math.Min(phasesReached, _phaseSchedule.Count) - 1];
+    }
 
     public IReadOnlyList<Enemy> Update(Enemy owner, Vector2 playerPosition, float elapsedSeconds, Random random)
     {
         var rng = _injectedRandom ?? random;
         _sinceBurst += elapsedSeconds;
 
-        while (_sinceBurst >= _secondsBetweenBursts)
+        var step = StepFor(owner.PhasesReached);
+        while (_sinceBurst >= step.SecondsBetweenBursts)
         {
-            _sinceBurst -= _secondsBetweenBursts;
-            EmitBurst(owner.Position, rng);
+            _sinceBurst -= step.SecondsBetweenBursts;
+            EmitBurst(owner.Position, rng, step.BulletsPerBurst);
         }
 
         return [];
@@ -92,7 +121,7 @@ public sealed class BulletBursts : IEnemyAbility, IHazardProducer
         return hazards;
     }
 
-    private void EmitBurst(Vector2 origin, Random rng)
+    private void EmitBurst(Vector2 origin, Random rng, int bulletsPerBurst)
     {
         // Angular arrangement: evenly distribute with a reserved contiguous gap arc.
         // The reserved gap arc is generous (e.g. at least 60 degrees = ~1.05 rad),
@@ -101,7 +130,7 @@ public sealed class BulletBursts : IEnemyAbility, IHazardProducer
         var availableArc = MathF.Tau - gapArc;
         var baseAngle = rng.NextSingle() * MathF.Tau;
 
-        var count = Math.Max(1, _bulletsPerBurst);
+        var count = Math.Max(1, bulletsPerBurst);
         var step = availableArc / count;
 
         for (var i = 0; i < count; i++)

@@ -129,12 +129,19 @@ public static class EnemyRoster
 
     /// <summary>
     /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
+    /// At 75% bullet rings come more often (every 3 s → 2 s) with more bullets (12 → 16), still with an escape gap.
     /// </summary>
     public static readonly EnemyType ClaudeBoss = new(
         "Claude Boss", Radius: 70f, HitPoints: 120f, Speed: 80f, Experience: 250,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
         speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(70f),
-        CreateAbility: () => new CompositeAbility(new ClosingRing(), new BulletBursts()));
+        CreateAbility: () => new CompositeAbility(
+            new ClosingRing(),
+            new BulletBursts(phaseSchedule: [new BurstStep(2f, 16)])),
+        Phases:
+        [
+            new(0.75f),
+        ]);
 
     /// <summary>How far the Gemini Boss's shield orbits from its centre, just clear of its outline.</summary>
     private const float GeminiShieldRadius = 115f;
