@@ -129,7 +129,9 @@ public static class EnemyRoster
 
     /// <summary>
     /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
-    /// At 75% bullet rings come more often (every 3 s → 2 s) with more bullets (12 → 16), still with an escape gap.
+    /// Its health bar is notched at 75%, 50% and 25%.
+    /// At 75% bullet rings come more often (every 3 s → 2 s) with more bullets (12 → 16), still with an escape gap;
+    /// at 25% it also throws pairs of regular Claudes.
     /// </summary>
     public static readonly EnemyType ClaudeBoss = new(
         "Claude Boss", Radius: 70f, HitPoints: 120f, Speed: 80f, Experience: 250,
@@ -142,6 +144,7 @@ public static class EnemyRoster
         Phases:
         [
             new(0.75f),
+            new(0.50f),
             new(0.25f),
         ]);
 

@@ -25,7 +25,7 @@ public class ClaudeBossThrowTests
         // Damage boss down to 30% health (120 * 0.30 = 36 hit points; takes 84 damage)
         boss.TakeDamage(120f - 36f);
         Assert.Equal(36f, boss.HitPoints);
-        Assert.Equal(1, boss.PhasesReached);
+        Assert.Equal(2, boss.PhasesReached);
 
         // At 30% health, returns no EnemyRoster.Claude for 20 s
         for (var i = 0; i < 200; i++)
@@ -43,12 +43,12 @@ public class ClaudeBossThrowTests
 
         // First damage to 50% (crosses 75% threshold)
         boss.TakeDamage(60f);
-        Assert.Equal(1, boss.PhasesReached);
+        Assert.Equal(2, boss.PhasesReached);
 
         // Take damage to 25% (crosses 25% threshold)
         boss.TakeDamage(30f);
         Assert.Equal(30f, boss.HitPoints);
-        Assert.Equal(2, boss.PhasesReached);
+        Assert.Equal(3, boss.PhasesReached);
 
         // (b) No Claude arrives before 2.0 s
         for (var i = 0; i < 19; i++)
@@ -96,7 +96,7 @@ public class ClaudeBossThrowTests
         // (c) One TakeDamage from full health to 20% (120 -> 24 hit points; takes 96 damage)
         boss.TakeDamage(96f);
         Assert.Equal(24f, boss.HitPoints);
-        Assert.Equal(2, boss.PhasesReached);
+        Assert.Equal(3, boss.PhasesReached);
 
         // No Claude arrives before 2.0 s
         for (var i = 0; i < 19; i++)
@@ -174,7 +174,7 @@ public class ClaudeBossThrowTests
 
         // Cross 25% threshold (120 * 0.80 = 96 damage -> 24 HP remaining)
         boss.TakeDamage(96f);
-        Assert.Equal(2, boss.PhasesReached);
+        Assert.Equal(3, boss.PhasesReached);
 
         // The composite and internal ability instances are preserved
         var compositeAfter = Assert.IsType<CompositeAbility>(boss.Ability);
