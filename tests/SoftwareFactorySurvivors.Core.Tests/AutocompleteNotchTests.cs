@@ -36,9 +36,8 @@ public class AutocompleteNotchTests
                      && p.RetuneMovement is null)
             .ToList();
 
-        // Must have bare entries (specifically 50% and 25% on Autocomplete)
-        Assert.NotEmpty(barePhases);
-
+        // Autocomplete's 50% and 25% entries now carry behaviour (bullet rings, charge retune),
+        // so none is bare; whatever bare entries remain are held to the no-change rule below.
         // 1. Staged crossings across all bare phases
         TestStagedCrossing(barePhases);
 
@@ -81,9 +80,11 @@ public class AutocompleteNotchTests
 
             Assert.Equal(expectedPhasesReached, boss.PhasesReached);
 
+            // No Autocomplete phase swaps its movement instance.
+            Assert.Same(movementBefore, boss.Movement);
+
             if (isBare)
             {
-                Assert.Same(movementBefore, boss.Movement);
                 Assert.Same(abilityBefore, boss.Ability);
                 Assert.Equal(speedBefore, chargeBefore.ChargeSpeed);
                 Assert.Equal(distBefore, chargeBefore.ChargeDistance);
@@ -96,7 +97,7 @@ public class AutocompleteNotchTests
     {
         var boss = new Enemy(EnemyRoster.Autocomplete, new Vector2(100f, 200f));
         var initialMovement = boss.Movement;
-        var initialAbility = boss.Ability;
+        Assert.Null(boss.Ability);
         var charge = Assert.IsType<ChargeAlongLine>(boss.Movement);
         var initialTelegraph = charge.TelegraphSeconds;
 
@@ -109,7 +110,7 @@ public class AutocompleteNotchTests
 
         // Movement instance remains ReferenceEquals
         Assert.Same(initialMovement, boss.Movement);
-        Assert.Same(initialAbility, boss.Ability);
+        Assert.IsType<BulletBursts>(boss.Ability);
         Assert.Equal(initialTelegraph, charge.TelegraphSeconds);
     }
 }

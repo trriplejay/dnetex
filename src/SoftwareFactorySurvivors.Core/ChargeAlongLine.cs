@@ -13,7 +13,7 @@ public sealed class ChargeAlongLine(
     float chargeSpeed = 450f,
     float chargeDistance = 600f) : IMovementPattern
 {
-    public float TelegraphSeconds { get; } = MathF.Max(1.0f, telegraphSeconds);
+    public float TelegraphSeconds { get; private set; } = MathF.Max(1.0f, telegraphSeconds);
     public float ChargeSpeed { get; private set; } = chargeSpeed;
     public float ChargeDistance { get; private set; } = chargeDistance;
 
@@ -41,15 +41,20 @@ public sealed class ChargeAlongLine(
     private bool _hasPendingTuning;
     private float _pendingChargeSpeed;
     private float _pendingChargeDistance;
+    private float? _pendingTelegraphSeconds;
 
     /// <summary>
-    /// Stores pending charge speed and distance to be applied when the next segment is locked.
-    /// A segment already locked (whether telegraphing or charging) finishes with the speed and length it was locked with.
+    /// Stores pending charge speed, distance and (optionally) telegraph duration to be applied when the next segment is locked.
+    /// A segment already locked (whether telegraphing or charging) finishes with the speed and length it was locked with,
+    /// and a telegraph in progress keeps its duration. Omitting telegraphSeconds leaves TelegraphSeconds unchanged;
+    /// a given value is clamped to at least 1.0 second.
     /// </summary>
-    public void Retune(float chargeSpeed, float chargeDistance)
+    public void Retune(float chargeSpeed, float chargeDistance, float? telegraphSeconds = null)
     {
         _pendingChargeSpeed = chargeSpeed;
         _pendingChargeDistance = chargeDistance;
+        if (telegraphSeconds is not null)
+            _pendingTelegraphSeconds = telegraphSeconds;
         _hasPendingTuning = true;
     }
 
@@ -111,6 +116,9 @@ public sealed class ChargeAlongLine(
         {
             ChargeSpeed = _pendingChargeSpeed;
             ChargeDistance = _pendingChargeDistance;
+            if (_pendingTelegraphSeconds is { } telegraph)
+                TelegraphSeconds = MathF.Max(1.0f, telegraph);
+            _pendingTelegraphSeconds = null;
             _hasPendingTuning = false;
         }
 

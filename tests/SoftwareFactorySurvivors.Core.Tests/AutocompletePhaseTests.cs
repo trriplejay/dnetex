@@ -387,8 +387,8 @@ public class AutocompletePhaseTests
         // Lock first segment during telegraph
         session.Update(Vector2.Zero, null, 1.2f, width, height);
 
-        // The 75% retune applied: speed 550, distance 900
-        Assert.Equal(550f, charge.ChargeSpeed);
+        // The 75% retune (550/900) then the 25% retune (700/900) applied in order: speed 700, distance 900
+        Assert.Equal(700f, charge.ChargeSpeed);
         Assert.Equal(900f, charge.ChargeDistance);
         Assert.Equal(900f, Vector2.Distance(charge.AimStart, charge.AimEnd), 3);
     }
@@ -405,5 +405,34 @@ public class AutocompletePhaseTests
         Assert.Equal(0, boss.PhasesReached);
         Assert.Equal(400f, charge.ChargeSpeed);
         Assert.Equal(700f, charge.ChargeDistance);
+    }
+
+    [Fact]
+    public void Autocomplete_before_50_percent_has_no_ability_and_preserves_telegraph_length_when_retuned_without_telegraph()
+    {
+        // CLM-5: Before 0.50 Autocomplete has no ability and produces no bullets.
+        // It telegraphs 1.2 s and charges at 400 px/s up to 700 px; after 0.75 it charges at 550 px/s up to 900 px,
+        // still with a 1.2 s telegraph. A ChargeAlongLine retuned without a telegraph value keeps its telegraph length.
+        var boss = new Enemy(EnemyRoster.Autocomplete, Vector2.Zero);
+        var charge = Assert.IsType<ChargeAlongLine>(boss.Movement);
+
+        Assert.Null(boss.Ability);
+        Assert.Equal(1.2f, charge.TelegraphSeconds);
+        Assert.Equal(400f, charge.ChargeSpeed);
+        Assert.Equal(700f, charge.ChargeDistance);
+
+        // Retune without telegraph value preserves telegraph length
+        charge.Retune(550f, 900f);
+        Assert.Equal(1.2f, charge.TelegraphSeconds);
+
+        // Damage to <= 75% health (45 HP)
+        boss.TakeDamage(15f);
+        Assert.Equal(45f, boss.HitPoints);
+        Assert.Null(boss.Ability);
+
+        // Verify roster stability: GeminiBoss, Hallucination, ClaudeBoss
+        Assert.NotNull(EnemyRoster.GeminiBoss);
+        Assert.NotNull(EnemyRoster.Hallucination);
+        Assert.NotNull(EnemyRoster.ClaudeBoss);
     }
 }

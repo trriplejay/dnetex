@@ -114,8 +114,8 @@ public static class EnemyRoster
         Phases:
         [
             new(0.75f, RetuneMovement: m => ((ChargeAlongLine)m).Retune(chargeSpeed: 550f, chargeDistance: 900f)),
-            new(0.50f),
-            new(0.25f),
+            new(0.50f, CreateAbility: () => new BulletBursts()),
+            new(0.25f, RetuneMovement: m => ((ChargeAlongLine)m).Retune(chargeSpeed: 700f, chargeDistance: 900f, telegraphSeconds: 1.0f)),
         ]);
 
     /// <summary>
