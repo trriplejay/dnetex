@@ -9,8 +9,10 @@ namespace SoftwareFactorySurvivors.Core;
 /// <param name="CreateAbility">The ability from this phase on; null keeps the current one.</param>
 /// <param name="CreateMovement">The movement pattern from this phase on; null keeps the current one.</param>
 /// <param name="Shield">A fresh shield that spawns when this phase starts, replacing the old one; null spawns none.</param>
+/// <param name="RetuneMovement">An optional in-place adjustment applied to the current movement pattern; null leaves it as is.</param>
 public sealed record BossPhase(
     float AtHealthFraction,
     Func<IEnemyAbility>? CreateAbility = null,
     Func<IMovementPattern>? CreateMovement = null,
-    EnemyShield? Shield = null);
+    EnemyShield? Shield = null,
+    Action<IMovementPattern>? RetuneMovement = null);

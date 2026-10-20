@@ -22,6 +22,7 @@ public sealed class Enemy
         Experience = experience ?? type.Experience;
         IsCopy = isCopy;
         Movement = movement ?? type.CreateMovement(type.Speed);
+        CreateCurrentMovement = () => type.CreateMovement(type.Speed);
         Ability = isCopy ? null : type.CreateAbility?.Invoke();
         Shields = _newShields = CreateShields(type.Shield);
     }
@@ -42,6 +43,14 @@ public sealed class Enemy
     /// <summary>Experience the player gains for killing this enemy.</summary>
     public int Experience { get; }
     public IMovementPattern Movement { get; private set; }
+
+    /// <summary>
+    /// Builds a fresh instance of the movement this enemy uses now: the type's CreateMovement at its Speed, until a
+    /// reached phase sets its own CreateMovement. Lets an ability (e.g. SplitIntoCopies) give each copy its own
+    /// pattern of the current kind, never sharing this enemy's instance.
+    /// </summary>
+    public Func<IMovementPattern> CreateCurrentMovement { get; private set; }
+
     public IEnemyAbility? Ability { get; private set; }
 
     /// <summary>The enemies orbiting this one as its current shield (a phase can replace it with a fresh one).</summary>
@@ -139,10 +148,15 @@ public sealed class Enemy
             if (phase.CreateAbility is not null)
                 Ability = phase.CreateAbility();
             if (phase.CreateMovement is not null)
+            {
                 Movement = phase.CreateMovement();
+                CreateCurrentMovement = phase.CreateMovement;
+            }
             // If one hit crosses several phases, only the last phase's shield appears.
             if (phase.Shield is not null)
                 Shields = _newShields = CreateShields(phase.Shield);
+            if (phase.RetuneMovement is not null)
+                phase.RetuneMovement(Movement);
         }
     }
 

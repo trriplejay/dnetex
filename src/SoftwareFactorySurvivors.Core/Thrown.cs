@@ -6,10 +6,11 @@ namespace SoftwareFactorySurvivors.Core;
 /// Flies straight to a landing spot at a fixed speed, ignoring the player, then hands over to the enemy's
 /// normal movement pattern for the rest of its life.
 /// </summary>
-public sealed class Thrown(Vector2 landingSpot, float flightSpeed, IMovementPattern afterLanding) : IMovementPattern
+public sealed class Thrown(Vector2 landingSpot, float flightSpeed, IMovementPattern afterLanding, bool harmlessUntilLanded = false) : IMovementPattern
 {
     public Vector2 LandingSpot { get; } = landingSpot;
     public bool HasLanded { get; private set; }
+    public bool IsHarmlessInFlight => harmlessUntilLanded && !HasLanded;
 
     public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
         Move(position, playerPosition, elapsedSeconds, 1f);

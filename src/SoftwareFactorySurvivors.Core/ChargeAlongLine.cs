@@ -13,9 +13,9 @@ public sealed class ChargeAlongLine(
     float chargeSpeed = 450f,
     float chargeDistance = 600f) : IMovementPattern
 {
-    public float TelegraphSeconds { get; } = MathF.Max(1.0f, telegraphSeconds);
-    public float ChargeSpeed { get; } = chargeSpeed;
-    public float ChargeDistance { get; } = chargeDistance;
+    public float TelegraphSeconds { get; private set; } = MathF.Max(1.0f, telegraphSeconds);
+    public float ChargeSpeed { get; private set; } = chargeSpeed;
+    public float ChargeDistance { get; private set; } = chargeDistance;
 
     private float _timeInPhase;
     private bool _isCharging;
@@ -36,6 +36,27 @@ public sealed class ChargeAlongLine(
     private float _chargedDistance;
     private Vector2 _chargeDirection;
     private float _totalSegmentLength;
+    private float _currentSegmentChargeSpeed = chargeSpeed;
+
+    private bool _hasPendingTuning;
+    private float _pendingChargeSpeed;
+    private float _pendingChargeDistance;
+    private float? _pendingTelegraphSeconds;
+
+    /// <summary>
+    /// Stores pending charge speed, distance and (optionally) telegraph duration to be applied when the next segment is locked.
+    /// A segment already locked (whether telegraphing or charging) finishes with the speed and length it was locked with,
+    /// and a telegraph in progress keeps its duration. Omitting telegraphSeconds leaves TelegraphSeconds unchanged;
+    /// a given value is clamped to at least 1.0 second.
+    /// </summary>
+    public void Retune(float chargeSpeed, float chargeDistance, float? telegraphSeconds = null)
+    {
+        _pendingChargeSpeed = chargeSpeed;
+        _pendingChargeDistance = chargeDistance;
+        if (telegraphSeconds is not null)
+            _pendingTelegraphSeconds = telegraphSeconds;
+        _hasPendingTuning = true;
+    }
 
     public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
         Move(position, playerPosition, elapsedSeconds, 1f);
@@ -70,7 +91,7 @@ public sealed class ChargeAlongLine(
         var maxDistance = MathF.Min(ChargeDistance, _totalSegmentLength);
         var remainingDistance = MathF.Max(0f, maxDistance - _chargedDistance);
 
-        var moveStep = ChargeSpeed * elapsedSeconds * speedFactor;
+        var moveStep = _currentSegmentChargeSpeed * elapsedSeconds * speedFactor;
         var actualStep = MathF.Min(moveStep, remainingDistance);
 
         var nextPosition = position + _chargeDirection * actualStep;
@@ -91,6 +112,18 @@ public sealed class ChargeAlongLine(
 
     private void LockSegment(Vector2 start, Vector2 target)
     {
+        if (_hasPendingTuning)
+        {
+            ChargeSpeed = _pendingChargeSpeed;
+            ChargeDistance = _pendingChargeDistance;
+            if (_pendingTelegraphSeconds is { } telegraph)
+                TelegraphSeconds = MathF.Max(1.0f, telegraph);
+            _pendingTelegraphSeconds = null;
+            _hasPendingTuning = false;
+        }
+
+        _currentSegmentChargeSpeed = ChargeSpeed;
+
         AimStart = start;
         var diff = target - start;
         var dist = diff.Length();

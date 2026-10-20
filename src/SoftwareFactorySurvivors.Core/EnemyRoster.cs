@@ -99,32 +99,84 @@ public static class EnemyRoster
         Shield: GeminiShield(count: 5));
 
     /// <summary>
-    /// Boss arriving at 4:30. Alternates a telegraph and a straight charge along the telegraphed aim line.
-    /// Has no throw, shield, or dash abilities.
+    /// Boss arriving at 4:30. Base behaviour alternates a 1.2 s telegraph and a straight charge
+    /// at 400 px/s reaching up to 700 px and stopping where the ship was at lock.
+    /// At 75% health it charges faster and farther (550 px/s, up to 900 px); at 50% it also fires
+    /// rings of slow bullets with an escape gap; at 25% it charges at 700 px/s with a 1.0 s wind-up,
+    /// never less, with bullet rings continuing. A charge under way finishes as it started.
+    /// Its health bar is notched at 75%, 50% and 25%.
     /// </summary>
     public static readonly EnemyType Autocomplete = new(
         "Autocomplete", Radius: 60f, HitPoints: 60f, Speed: 400f, Experience: 120,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
         speed => new ChargeAlongLine(telegraphSeconds: 1.2f, chargeSpeed: speed, chargeDistance: 700f),
-        LogoShapes.Cursor(60f));
+        LogoShapes.Cursor(60f),
+        Phases:
+        [
+            new(0.75f, RetuneMovement: m => ((ChargeAlongLine)m).Retune(chargeSpeed: 550f, chargeDistance: 900f)),
+            new(0.50f, CreateAbility: () => new BulletBursts()),
+            new(0.25f, RetuneMovement: m => ((ChargeAlongLine)m).Retune(chargeSpeed: 700f, chargeDistance: 900f, telegraphSeconds: 1.0f)),
+        ]);
 
     /// <summary>
-    /// Boss arriving at 7:00.
+    /// Boss arriving at 7:00. Chases at 70 px/s and splits into 2 look-alike copies every 5 s.
+    /// At 75% it splits every 3.5 s; at 50% it makes 3 copies per split and chases at 100 px/s; at 25% it
+    /// splits every 2.5 s and moves like Claude Boss, creeping for 1.2 s before each lunge. The split timer
+    /// carries over each phase change, so a phase never delays or doubles a split.
     /// </summary>
     public static readonly EnemyType Hallucination = new(
         "Hallucination", Radius: 50f, HitPoints: 80f, Speed: 70f, Experience: 180,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 1f,
         speed => new ChasePlayer(speed), LogoShapes.Perplexity(50f),
-        CreateAbility: () => new SplitIntoCopies(secondsBetweenSplits: 5f, copiesPerSplit: 2));
+        CreateAbility: () => new SplitIntoCopies(secondsBetweenSplits: 5f, copiesPerSplit: 2,
+            phaseSchedule: [new(3.5f, 2), new(3.5f, 3), new(2.5f, 3)]),
+        Phases:
+        [
+            new(0.75f),
+            new(0.50f, CreateMovement: () => new ChasePlayer(100f)),
+            new(0.25f, CreateMovement: () => new Dash(100f, dashSpeed: 420f, creepSeconds: 1.2f, dashSeconds: 0.45f)),
+        ]);
 
     /// <summary>
     /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
+    /// Its health bar is notched at 75%, 50% and 25%.
+    /// At 75% bullet rings come more often (every 3 s → 2 s) with more bullets (12 → 16), still with an escape gap;
+    /// at 50% its closing ring returns sooner (every 10 s → 6 s), shrinks faster (40 → 60 px/s) and lasts 6 s instead
+    /// of 8 s, never with two rings out at once, and its lunges get faster (420 → 560 px/s) without restarting its creep;
+    /// at 25% it also throws pairs of regular Claudes.
     /// </summary>
     public static readonly EnemyType ClaudeBoss = new(
         "Claude Boss", Radius: 70f, HitPoints: 120f, Speed: 80f, Experience: 250,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
         speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(70f),
-        CreateAbility: () => new CompositeAbility(new ClosingRing(), new BulletBursts()));
+        CreateAbility: () => new CompositeAbility(
+            new ClosingRing(phaseSchedule: [new RingStep(0.50f, CooldownSeconds: 6f, ContractionSpeed: 60f, LifetimeSeconds: 6f)]),
+            new BulletBursts(phaseSchedule: [new BurstStep(2f, 16)]),
+            ThrowClaudes()),
+        Phases:
+        [
+            new(0.75f),
+            new(0.50f, RetuneMovement: m => { if (m is Dash dash) dash.Retune(dashSpeed: 560f); }),
+            new(0.25f),
+        ]);
+
+    private static ThrowMinions ThrowClaudes() =>
+        new(Claude, secondsBetweenThrows: 4f, speedMultiplier: 4f, minLandingDistance: 150f, maxLandingDistance: 250f,
+            minionsPerWave: 2, firstThrowAfterSeconds: 2f, harmlessInFlight: true,
+            gate: owner =>
+            {
+                if (owner.IsDead)
+                    return false;
+                var phases = owner.Type.Phases;
+                if (phases is null)
+                    return false;
+                for (var i = 0; i < phases.Count; i++)
+                {
+                    if (MathF.Abs(phases[i].AtHealthFraction - 0.25f) < 0.001f)
+                        return owner.PhasesReached > i;
+                }
+                return false;
+            });
 
     /// <summary>How far the Gemini Boss's shield orbits from its centre, just clear of its outline.</summary>
     private const float GeminiShieldRadius = 115f;

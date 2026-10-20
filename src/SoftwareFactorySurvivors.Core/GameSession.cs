@@ -178,7 +178,10 @@ public sealed class GameSession
         // Both passes walk a snapshot, so enemies they add join play without taking part in the same pass.
         foreach (var enemy in SnapshotEnemies())
         {
-            AddEnemies(enemy.UseAbility(Ship.Position, elapsedSeconds, _random));
+            // A split is told how many copies of its type are alive, from every phase, so it never passes its cap.
+            AddEnemies(enemy.Ability is SplitIntoCopies split
+                ? split.Update(enemy, Ship.Position, elapsedSeconds, _random, LiveCopiesOf(enemy.Type))
+                : enemy.UseAbility(Ship.Position, elapsedSeconds, _random));
             if (enemy.Ability is IHazardProducer abilityProds)
                 AddHazards(abilityProds.TakeHazards());
         }
@@ -208,6 +211,8 @@ public sealed class GameSession
         _enemySnapshot.AddRange(_enemies);
         return _enemySnapshot;
     }
+
+    private int LiveCopiesOf(EnemyType type) => _enemies.Count(enemy => enemy.IsCopy && !enemy.IsDead && enemy.Type == type);
 
     private void AddArrivedEnemyTypes()
     {
@@ -296,7 +301,10 @@ public sealed class GameSession
             return;
 
         var shipStrokes = Ship.GetStrokes();
-        var touching = _enemies.Where(enemy => Collision.StrokesTouch(shipStrokes, enemy.GetStrokes())).ToList();
+        var touching = _enemies
+            .Where(enemy => !(enemy.Movement is Thrown thrown && thrown.IsHarmlessInFlight))
+            .Where(enemy => Collision.StrokesTouch(shipStrokes, enemy.GetStrokes()))
+            .ToList();
         var touchingHazards = _hazards.Where(hazard => hazard.IsArmed && hazard.Touches(shipStrokes)).ToList();
         if (touching.Count == 0 && touchingHazards.Count == 0)
             return;
