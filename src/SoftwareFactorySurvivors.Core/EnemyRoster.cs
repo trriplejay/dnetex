@@ -99,8 +99,12 @@ public static class EnemyRoster
         Shield: GeminiShield(count: 5));
 
     /// <summary>
-    /// Boss arriving at 4:30. Alternates a telegraph and a straight charge along the telegraphed aim line.
-    /// Has no throw, shield, or dash abilities.
+    /// Boss arriving at 4:30. Base behaviour alternates a 1.2 s telegraph and a straight charge
+    /// at 400 px/s reaching up to 700 px and stopping where the ship was at lock.
+    /// At 75% health it charges faster and farther (550 px/s, up to 900 px); at 50% it also fires
+    /// rings of slow bullets with an escape gap; at 25% it charges at 700 px/s with a 1.0 s wind-up,
+    /// never less, with bullet rings continuing. A charge under way finishes as it started.
+    /// Its health bar is notched at 75%, 50% and 25%.
     /// </summary>
     public static readonly EnemyType Autocomplete = new(
         "Autocomplete", Radius: 60f, HitPoints: 60f, Speed: 400f, Experience: 120,
@@ -110,6 +114,8 @@ public static class EnemyRoster
         Phases:
         [
             new(0.75f, RetuneMovement: m => ((ChargeAlongLine)m).Retune(chargeSpeed: 550f, chargeDistance: 900f)),
+            new(0.50f),
+            new(0.25f),
         ]);
 
     /// <summary>
