@@ -301,7 +301,10 @@ public sealed class GameSession
             return;
 
         var shipStrokes = Ship.GetStrokes();
-        var touching = _enemies.Where(enemy => Collision.StrokesTouch(shipStrokes, enemy.GetStrokes())).ToList();
+        var touching = _enemies
+            .Where(enemy => !(enemy.Movement is Thrown thrown && thrown.IsHarmlessInFlight))
+            .Where(enemy => Collision.StrokesTouch(shipStrokes, enemy.GetStrokes()))
+            .ToList();
         var touchingHazards = _hazards.Where(hazard => hazard.IsArmed && hazard.Touches(shipStrokes)).ToList();
         if (touching.Count == 0 && touchingHazards.Count == 0)
             return;

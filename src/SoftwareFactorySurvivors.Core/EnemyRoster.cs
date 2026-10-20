@@ -137,11 +137,31 @@ public static class EnemyRoster
         speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(70f),
         CreateAbility: () => new CompositeAbility(
             new ClosingRing(),
-            new BulletBursts(phaseSchedule: [new BurstStep(2f, 16)])),
+            new BulletBursts(phaseSchedule: [new BurstStep(2f, 16)]),
+            ThrowClaudes()),
         Phases:
         [
             new(0.75f),
+            new(0.25f),
         ]);
+
+    private static ThrowMinions ThrowClaudes() =>
+        new(Claude, secondsBetweenThrows: 4f, speedMultiplier: 4f, minLandingDistance: 150f, maxLandingDistance: 250f,
+            minionsPerWave: 2, firstThrowAfterSeconds: 2f, harmlessInFlight: true,
+            gate: owner =>
+            {
+                if (owner.IsDead)
+                    return false;
+                var phases = owner.Type.Phases;
+                if (phases is null)
+                    return false;
+                for (var i = 0; i < phases.Count; i++)
+                {
+                    if (MathF.Abs(phases[i].AtHealthFraction - 0.25f) < 0.001f)
+                        return owner.PhasesReached > i;
+                }
+                return false;
+            });
 
     /// <summary>How far the Gemini Boss's shield orbits from its centre, just clear of its outline.</summary>
     private const float GeminiShieldRadius = 115f;

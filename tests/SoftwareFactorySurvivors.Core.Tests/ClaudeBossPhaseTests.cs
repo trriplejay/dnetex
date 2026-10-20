@@ -13,7 +13,7 @@ public class ClaudeBossPhaseTests
     {
         var phases = EnemyRoster.ClaudeBoss.Phases;
         Assert.NotNull(phases);
-        var phase75 = Assert.Single(phases);
+        var phase75 = Assert.Single(phases, p => MathF.Abs(p.AtHealthFraction - 0.75f) < 0.001f);
 
         Assert.Equal(0.75f, phase75.AtHealthFraction);
         Assert.Null(phase75.CreateAbility);
