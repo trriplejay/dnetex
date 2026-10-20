@@ -12,6 +12,9 @@ public sealed class Dash(float creepSpeed, float dashSpeed, float creepSeconds, 
     private bool _dashing;
     private Vector2 _dashDirection;
 
+    /// <summary>Seconds of creep before each lunge; a fresh Dash starts in creep.</summary>
+    public float CreepSeconds => creepSeconds;
+
     public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
         Move(position, playerPosition, elapsedSeconds, 1f);
 

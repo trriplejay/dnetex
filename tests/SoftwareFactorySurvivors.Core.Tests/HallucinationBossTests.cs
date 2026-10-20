@@ -217,6 +217,319 @@ public class HallucinationBossTests
         Assert.Empty(spawnedFromCopy);
     }
 
+    // ---- Phases at 75%, 50% and 25% health ----
+
+    // A step that is exact in binary floating point, so split times land on whole steps.
+    private const float Step = 1f / 64f;
+    private static readonly Vector2 FarShip = new(100_000f, 0f);
+
+    // Hallucination has 80 HP: 75% = 60, 50% = 40, 25% = 20.
+    private static Enemy StagedHallucination(int phases)
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+        for (var i = 0; i < phases; i++)
+            boss.TakeDamage(20f);
+        Assert.Equal(phases, boss.PhasesReached);
+        return boss;
+    }
+
+    // Runs the boss's ability step by step and returns (time of split, copies made) for each split, with time
+    // measured from the start of this call.
+    private static List<(float Time, int Copies)> Splits(Enemy boss, float seconds, Random? random = null)
+    {
+        random ??= new Random(7);
+        var splits = new List<(float, int)>();
+        var steps = (int)MathF.Round(seconds / Step);
+        for (var i = 1; i <= steps; i++)
+        {
+            var copies = boss.UseAbility(FarShip, Step, random);
+            if (copies.Count > 0)
+                splits.Add((i * Step, copies.Count));
+        }
+        return splits;
+    }
+
+    private static void Advance(Enemy boss, float seconds)
+    {
+        var splits = Splits(boss, seconds);
+        Assert.Empty(splits);
+    }
+
+    [Fact]
+    public void Hallucination_phases_are_at_75_50_and_25_percent()
+    {
+        var phases = EnemyRoster.Hallucination.Phases;
+        Assert.NotNull(phases);
+        Assert.Equal([0.75f, 0.50f, 0.25f], phases.Select(p => p.AtHealthFraction));
+        // No phase replaces the ability: the one split ability keeps its timer across every phase.
+        Assert.All(phases, p => Assert.Null(p.CreateAbility));
+    }
+
+    [Theory]
+    [InlineData(0, 5.0f, 2)]
+    [InlineData(1, 3.5f, 2)]
+    [InlineData(2, 3.5f, 3)]
+    [InlineData(3, 2.5f, 3)]
+    public void Hallucination_split_interval_and_copies_follow_phases_reached(int phases, float interval, int copies)
+    {
+        var boss = StagedHallucination(phases);
+
+        var splits = Splits(boss, 3 * interval + Step / 2);
+
+        Assert.Equal(3, splits.Count);
+        for (var i = 0; i < splits.Count; i++)
+        {
+            Assert.Equal((i + 1) * interval, splits[i].Time);
+            Assert.Equal(copies, splits[i].Copies);
+        }
+    }
+
+    [Fact]
+    public void Hallucination_moves_at_70_then_100_from_half_health_then_dashes_from_a_quarter()
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+        var dt = 1f / 60f;
+
+        float StepDistance()
+        {
+            var before = boss.Position;
+            boss.Update(FarShip, dt);
+            return Vector2.Distance(before, boss.Position);
+        }
+
+        Assert.Equal(70f * dt, StepDistance(), 3);
+
+        var original = boss.Movement;
+        boss.TakeDamage(20f); // 75%
+        Assert.Equal(1, boss.PhasesReached);
+        Assert.Same(original, boss.Movement);
+        Assert.Equal(70f * dt, StepDistance(), 3);
+
+        boss.TakeDamage(20f); // 50%
+        Assert.Equal(2, boss.PhasesReached);
+        Assert.Equal(100f * dt, StepDistance(), 3);
+
+        boss.TakeDamage(20f); // 25%
+        Assert.Equal(3, boss.PhasesReached);
+        Assert.IsType<Dash>(boss.Movement);
+
+        // It creeps, then lunges straight at where the ship is.
+        var lunge = Enumerable.Range(0, 120).Select(_ => (Before: boss.Position, Distance: StepDistance()))
+            .First(s => s.Distance > 300f * dt);
+        Assert.Equal(420f * dt, lunge.Distance, 3);
+    }
+
+    [Fact]
+    public void One_hit_from_full_health_to_20_percent_reaches_all_three_phases()
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+        var ability = boss.Ability;
+
+        boss.TakeDamage(64f); // 80 -> 16 HP = 20%
+
+        Assert.False(boss.IsDead);
+        Assert.Equal(3, boss.PhasesReached);
+        Assert.Same(ability, boss.Ability);
+        Assert.IsType<Dash>(boss.Movement);
+        var splits = Splits(boss, 3 * 2.5f + Step / 2);
+        Assert.Equal([2.5f, 5.0f, 7.5f], splits.Select(s => s.Time));
+        Assert.All(splits, s => Assert.Equal(3, s.Copies));
+    }
+
+    [Fact]
+    public void A_killing_blow_enters_no_phase()
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+        var movement = boss.Movement;
+
+        boss.TakeDamage(500f);
+
+        Assert.True(boss.IsDead);
+        Assert.Equal(0, boss.PhasesReached);
+        Assert.Same(movement, boss.Movement);
+    }
+
+    [Fact]
+    public void Split_wait_carries_over_75_percent_so_3s_in_the_next_split_lands_at_3_5s()
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+        Advance(boss, 3.0f);
+
+        boss.TakeDamage(20f); // 75%: interval 5 -> 3.5
+
+        var splits = Splits(boss, 1.0f);
+        Assert.Single(splits);
+        Assert.Equal(3.5f, 3.0f + splits[0].Time);
+    }
+
+    [Fact]
+    public void Overdue_split_fires_once_on_the_next_update_after_crossing_75_percent()
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+        Advance(boss, 4.0f);
+
+        boss.TakeDamage(20f);
+
+        var first = boss.UseAbility(FarShip, Step, new Random(7));
+        Assert.Equal(2, first.Count);
+        // Exactly one: the remainder (0.5 s + one step) counts toward the next 3.5 s, so the next split comes
+        // 3 s - one step after the overdue one, and none before it.
+        var next = Splits(boss, 3.2f);
+        Assert.Single(next);
+        Assert.Equal(3.0f - Step, next[0].Time);
+    }
+
+    [Fact]
+    public void Overdue_split_after_one_hit_to_a_quarter_fires_once_then_every_2_5s_less_the_remainder()
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+        Advance(boss, 4.0f);
+
+        boss.TakeDamage(64f); // one hit: 75%, 50% and 25% at once
+        Assert.Equal(3, boss.PhasesReached);
+
+        var first = boss.UseAbility(FarShip, Step, new Random(7));
+        Assert.Equal(3, first.Count);
+        // Banked after the split: 4 s + step - 2.5 s = 1.5 s + step, so the next is due 1 s - step later.
+        var splits = Splits(boss, 2.0f);
+        Assert.Equal(1.0f - Step, splits[0].Time, 3);
+        Assert.Equal(3, splits[0].Copies);
+    }
+
+    [Fact]
+    public void First_split_after_crossing_a_threshold_is_never_later_than_the_old_interval_would_have_made_it()
+    {
+        for (var offset = 0f; offset < 5f; offset += 0.25f)
+        {
+            foreach (var hit in new[] { 20f, 64f })
+            {
+                var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+                Advance(boss, offset);
+                boss.TakeDamage(hit);
+                var newInterval = hit == 20f ? 3.5f : 2.5f;
+
+                var splits = Splits(boss, 5f);
+
+                Assert.NotEmpty(splits);
+                var firstAt = offset + splits[0].Time;
+                Assert.True(firstAt <= 5.0f, $"offset {offset}, hit {hit}: first split at {firstAt}s, old due 5s");
+                // And it is exactly when the kept wait reaches the new interval (or next update if already overdue).
+                Assert.Equal(MathF.Max(newInterval, offset + Step), firstAt, 3);
+            }
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void At_a_quarter_every_lunge_follows_at_least_one_second_of_creep(bool oneHit)
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+        if (oneHit)
+        {
+            boss.TakeDamage(64f);
+        }
+        else
+        {
+            boss.TakeDamage(20f);
+            boss.Update(FarShip, Frame);
+            boss.TakeDamage(20f);
+            boss.Update(FarShip, Frame);
+            boss.TakeDamage(20f);
+        }
+        Assert.Equal(3, boss.PhasesReached);
+        var dash = Assert.IsType<Dash>(boss.Movement);
+        Assert.True(dash.CreepSeconds >= 1.0f);
+
+        // Frame by frame for 10 s: count creep frames before each lunge.
+        var creepRuns = new List<int>();
+        var creep = 0;
+        var dashing = false;
+        var lunges = 0;
+        for (var i = 0; i < 600; i++)
+        {
+            var before = boss.Position;
+            boss.Update(FarShip, Frame);
+            var lunging = Vector2.Distance(before, boss.Position) > 300f * Frame;
+            if (lunging && !dashing)
+            {
+                creepRuns.Add(creep);
+                lunges++;
+            }
+            if (!lunging)
+                creep++;
+            else
+                creep = 0;
+            dashing = lunging;
+        }
+
+        Assert.True(lunges >= 3, $"only {lunges} lunges in 10 s");
+        // The first entry is the creep since the threshold; the rest are the gaps between lunges.
+        Assert.All(creepRuns, frames => Assert.True(frames * Frame >= 1.0f, $"lunge after only {frames * Frame}s of creep"));
+    }
+
+    [Fact]
+    public void Hallucination_through_all_phases_in_a_session_never_lays_a_trail()
+    {
+        var (session, boss) = FarSession(EnemyRoster.Hallucination);
+        boss.TakeDamage(64f);
+        Assert.Equal(3, boss.PhasesReached);
+
+        var lunges = 0;
+        for (var i = 0; i < 660; i++) // 11 s
+        {
+            var before = boss.Position;
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
+            if (Vector2.Distance(before, boss.Position) > 300f * Frame)
+                lunges++;
+            Assert.DoesNotContain(session.Hazards, h => h.Kind == HazardKind.Trail);
+            Assert.All(session.Enemies, e => Assert.IsNotType<ChargeAlongLine>(e.Movement));
+        }
+
+        Assert.False(boss.IsDead);
+        Assert.True(lunges > 0);
+        Assert.True(session.Enemies.Count(e => e.IsCopy) >= 6, "several splits should have happened");
+    }
+
+    [Fact]
+    public void Autocomplete_in_the_same_session_harness_does_lay_a_trail()
+    {
+        var (session, _) = FarSession(EnemyRoster.Autocomplete);
+
+        var sawTrail = false;
+        for (var i = 0; i < 660 && !sawTrail; i++)
+        {
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
+            sawTrail = session.Hazards.Any(h => h.Kind == HazardKind.Trail);
+        }
+
+        Assert.True(sawTrail);
+    }
+
+    // The ship sits far from the boss, so neither reaches the other and the ship's shots never hit it.
+    private static (GameSession Session, Enemy Boss) FarSession(EnemyType type)
+    {
+        var session = TestEnemies.QuietSession(new Vector2(6000, 6000));
+        session.Stats.MaxHitPoints = session.Stats.HitPoints = 50;
+        var boss = new Enemy(type, new Vector2(200, 200));
+        session.AddEnemy(boss);
+        return (session, boss);
+    }
+
+    [Fact]
+    public void Copies_still_die_in_one_hit_and_never_enter_a_phase()
+    {
+        var copy = new Enemy(EnemyRoster.Hallucination, Vector2.Zero, isCopy: true);
+        var movement = copy.Movement;
+
+        copy.TakeDamage(1f);
+
+        Assert.True(copy.IsDead);
+        Assert.Equal(0, copy.PhasesReached);
+        Assert.Same(movement, copy.Movement);
+        Assert.Null(copy.Ability);
+    }
+
     private sealed class StationaryPattern : IMovementPattern
     {
         public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>

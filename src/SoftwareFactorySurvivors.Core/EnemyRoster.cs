@@ -109,13 +109,23 @@ public static class EnemyRoster
         LogoShapes.Cursor(60f));
 
     /// <summary>
-    /// Boss arriving at 7:00.
+    /// Boss arriving at 7:00. Chases at 70 px/s and splits into 2 look-alike copies every 5 s.
+    /// At 75% it splits every 3.5 s; at 50% it makes 3 copies per split and chases at 100 px/s; at 25% it
+    /// splits every 2.5 s and moves like Claude Boss, creeping for 1.2 s before each lunge. The split timer
+    /// carries over each phase change, so a phase never delays or doubles a split.
     /// </summary>
     public static readonly EnemyType Hallucination = new(
         "Hallucination", Radius: 50f, HitPoints: 80f, Speed: 70f, Experience: 180,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 1f,
         speed => new ChasePlayer(speed), LogoShapes.Perplexity(50f),
-        CreateAbility: () => new SplitIntoCopies(secondsBetweenSplits: 5f, copiesPerSplit: 2));
+        CreateAbility: () => new SplitIntoCopies(secondsBetweenSplits: 5f, copiesPerSplit: 2,
+            phaseSchedule: [new(3.5f, 2), new(3.5f, 3), new(2.5f, 3)]),
+        Phases:
+        [
+            new(0.75f),
+            new(0.50f, CreateMovement: () => new ChasePlayer(100f)),
+            new(0.25f, CreateMovement: () => new Dash(100f, dashSpeed: 420f, creepSeconds: 1.2f, dashSeconds: 0.45f)),
+        ]);
 
     /// <summary>
     /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
