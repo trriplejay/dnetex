@@ -228,4 +228,80 @@ public class AutocompleteBulletRingTests
                 $"Max gap {maxGap} must be > {BulletBursts.MinRequiredGapRadians}");
         }
     }
+
+    [Fact]
+    public void Autocomplete_bullets_remain_after_boss_death_until_lifetime_expires()
+    {
+        // CLM-1: In a GameSession with an Autocomplete boss past its 0.50 Phases entry,
+        // HazardKind.Bullet hazards are not removed when the boss dies: every one still present
+        // on the Update the boss is killed stays in session.Hazards until its AgeSeconds reaches
+        // its LifetimeSeconds (4.0 s for Hazard.CreateBullet), and only then is it removed.
+        var shipPos = new Vector2(2900f, 500f);
+        var session = new GameSession(shipPos, new Random(1), roster: [],
+            bosses: [new BossArrival(0f, EnemyRoster.Autocomplete)], rings: []);
+
+        // Initial update spawns the boss
+        session.Update(Vector2.Zero, null, Dt, Width, Height);
+        var boss = Assert.Single(session.Bosses);
+        Assert.Contains(boss, session.Enemies);
+
+        // Bring Autocomplete past 50% threshold (e.g. 26 HP remaining)
+        boss.TakeDamage(34f);
+        Assert.Equal(2, boss.PhasesReached);
+        Assert.NotNull(boss.Ability);
+
+        // Advance updates until Bullet hazards appear
+        for (var i = 0; i < 40; i++)
+        {
+            session.Update(Vector2.Zero, null, Dt, Width, Height);
+            if (session.Hazards.Any(h => h.Kind == HazardKind.Bullet))
+                break;
+        }
+
+        var snapshottedBullets = session.Hazards.Where(h => h.Kind == HazardKind.Bullet).ToList();
+        Assert.NotEmpty(snapshottedBullets);
+        Assert.Equal(12, snapshottedBullets.Count);
+        Assert.All(snapshottedBullets, b => Assert.True(b.AgeSeconds < b.LifetimeSeconds));
+
+        // Kill the boss
+        boss.TakeDamage(boss.HitPoints);
+        Assert.True(boss.IsDead);
+
+        // On the next Update, boss is removed, but bullets stay
+        session.Update(Vector2.Zero, null, Dt, Width, Height);
+        Assert.DoesNotContain(boss, session.Enemies);
+        Assert.DoesNotContain(boss, session.Bosses);
+
+        foreach (var bullet in snapshottedBullets)
+        {
+            Assert.Contains(session.Hazards, h => ReferenceEquals(h, bullet));
+        }
+
+        // Keep stepping: assert each snapshotted bullet is present while AgeSeconds < LifetimeSeconds
+        // and gone once its lifetime has passed.
+        // Step in increments until all snapshotted bullets expire
+        while (snapshottedBullets.Any(b => b.AgeSeconds < b.LifetimeSeconds))
+        {
+            foreach (var bullet in snapshottedBullets)
+            {
+                if (bullet.AgeSeconds < bullet.LifetimeSeconds)
+                {
+                    Assert.Contains(session.Hazards, h => ReferenceEquals(h, bullet));
+                }
+                else
+                {
+                    Assert.DoesNotContain(session.Hazards, h => ReferenceEquals(h, bullet));
+                }
+            }
+
+            session.Update(Vector2.Zero, null, Dt, Width, Height);
+        }
+
+        // After all snapshotted bullets have passed lifetime and been updated:
+        foreach (var bullet in snapshottedBullets)
+        {
+            Assert.True(bullet.AgeSeconds >= bullet.LifetimeSeconds);
+            Assert.DoesNotContain(session.Hazards, h => ReferenceEquals(h, bullet));
+        }
+    }
 }
