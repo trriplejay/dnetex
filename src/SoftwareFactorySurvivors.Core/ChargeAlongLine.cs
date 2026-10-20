@@ -14,8 +14,8 @@ public sealed class ChargeAlongLine(
     float chargeDistance = 600f) : IMovementPattern
 {
     public float TelegraphSeconds { get; } = MathF.Max(1.0f, telegraphSeconds);
-    public float ChargeSpeed { get; } = chargeSpeed;
-    public float ChargeDistance { get; } = chargeDistance;
+    public float ChargeSpeed { get; private set; } = chargeSpeed;
+    public float ChargeDistance { get; private set; } = chargeDistance;
 
     private float _timeInPhase;
     private bool _isCharging;
@@ -36,6 +36,22 @@ public sealed class ChargeAlongLine(
     private float _chargedDistance;
     private Vector2 _chargeDirection;
     private float _totalSegmentLength;
+    private float _currentSegmentChargeSpeed = chargeSpeed;
+
+    private bool _hasPendingTuning;
+    private float _pendingChargeSpeed;
+    private float _pendingChargeDistance;
+
+    /// <summary>
+    /// Stores pending charge speed and distance to be applied when the next segment is locked.
+    /// A segment already locked (whether telegraphing or charging) finishes with the speed and length it was locked with.
+    /// </summary>
+    public void Retune(float chargeSpeed, float chargeDistance)
+    {
+        _pendingChargeSpeed = chargeSpeed;
+        _pendingChargeDistance = chargeDistance;
+        _hasPendingTuning = true;
+    }
 
     public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
         Move(position, playerPosition, elapsedSeconds, 1f);
@@ -70,7 +86,7 @@ public sealed class ChargeAlongLine(
         var maxDistance = MathF.Min(ChargeDistance, _totalSegmentLength);
         var remainingDistance = MathF.Max(0f, maxDistance - _chargedDistance);
 
-        var moveStep = ChargeSpeed * elapsedSeconds * speedFactor;
+        var moveStep = _currentSegmentChargeSpeed * elapsedSeconds * speedFactor;
         var actualStep = MathF.Min(moveStep, remainingDistance);
 
         var nextPosition = position + _chargeDirection * actualStep;
@@ -91,6 +107,15 @@ public sealed class ChargeAlongLine(
 
     private void LockSegment(Vector2 start, Vector2 target)
     {
+        if (_hasPendingTuning)
+        {
+            ChargeSpeed = _pendingChargeSpeed;
+            ChargeDistance = _pendingChargeDistance;
+            _hasPendingTuning = false;
+        }
+
+        _currentSegmentChargeSpeed = ChargeSpeed;
+
         AimStart = start;
         var diff = target - start;
         var dist = diff.Length();

@@ -106,7 +106,11 @@ public static class EnemyRoster
         "Autocomplete", Radius: 60f, HitPoints: 60f, Speed: 400f, Experience: 120,
         DefaultSpawnsPerMinute: 0f, ArrivesAtSeconds: float.PositiveInfinity, SpinSpeed: 0f,
         speed => new ChargeAlongLine(telegraphSeconds: 1.2f, chargeSpeed: speed, chargeDistance: 700f),
-        LogoShapes.Cursor(60f));
+        LogoShapes.Cursor(60f),
+        Phases:
+        [
+            new(0.75f, RetuneMovement: m => ((ChargeAlongLine)m).Retune(chargeSpeed: 550f, chargeDistance: 900f)),
+        ]);
 
     /// <summary>
     /// Boss arriving at 7:00. Chases at 70 px/s and splits into 2 look-alike copies every 5 s.

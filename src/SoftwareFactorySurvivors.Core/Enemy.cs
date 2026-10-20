@@ -155,6 +155,8 @@ public sealed class Enemy
             // If one hit crosses several phases, only the last phase's shield appears.
             if (phase.Shield is not null)
                 Shields = _newShields = CreateShields(phase.Shield);
+            if (phase.RetuneMovement is not null)
+                phase.RetuneMovement(Movement);
         }
     }
 
