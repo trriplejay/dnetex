@@ -530,6 +530,232 @@ public class HallucinationBossTests
         Assert.Null(copy.Ability);
     }
 
+    // ---- Copies move like the boss, are capped at 8 and never spawn on top of you ----
+
+    // Runs the split until it makes copies and returns them (the ship far away so no relocation happens).
+    private static IReadOnlyList<Enemy> NextSplit(Enemy boss)
+    {
+        var random = new Random(3);
+        for (var i = 0; i < 64 * 10; i++)
+        {
+            var copies = boss.UseAbility(FarShip, Step, random);
+            if (copies.Count > 0)
+                return copies;
+        }
+        throw new InvalidOperationException("no split in 10 s");
+    }
+
+    [Fact]
+    public void Copies_split_after_a_phase_move_with_that_phases_pattern_each_with_its_own_instance()
+    {
+        var boss = new Enemy(EnemyRoster.Hallucination, Vector2.Zero);
+
+        // Before any phase: the type's base movement, ChasePlayer at 70.
+        var before = NextSplit(boss);
+        Assert.All(before, c => Assert.Equal(70f, Assert.IsType<ChasePlayer>(c.Movement).Speed));
+
+        // 75% sets no movement: still the base.
+        boss.TakeDamage(20f);
+        Assert.All(NextSplit(boss), c => Assert.Equal(70f, Assert.IsType<ChasePlayer>(c.Movement).Speed));
+
+        // 50%: ChasePlayer at 100, like the boss.
+        boss.TakeDamage(20f);
+        var half = NextSplit(boss);
+        Assert.Equal(3, half.Count);
+        Assert.All(half, c => Assert.Equal(100f, Assert.IsType<ChasePlayer>(c.Movement).Speed));
+
+        // 25%: Dash, like the boss.
+        boss.TakeDamage(20f);
+        var quarter = NextSplit(boss);
+        Assert.Equal(3, quarter.Count);
+        Assert.All(quarter, c => Assert.IsType<Dash>(c.Movement));
+        Assert.IsType<Dash>(boss.Movement);
+
+        // Every copy has its own instance, never the boss's or another copy's.
+        var all = before.Concat(half).Concat(quarter).ToList();
+        Assert.All(all, c => Assert.NotSame(boss.Movement, c.Movement));
+        Assert.Equal(all.Count, all.Select(c => c.Movement).Distinct(ReferenceEqualityComparer.Instance).Count());
+
+        // Advancing one dashing copy into its lunge leaves the other copy and the boss still creeping.
+        var (a, b) = (quarter[0], quarter[1]);
+        var ship = new Vector2(5000f, 0f);
+        for (var i = 0; i < 80; i++) // 1.33 s: past a's 1.2 s creep
+            a.Update(ship, Frame);
+        float StepOf(Enemy e)
+        {
+            var p = e.Position;
+            e.Update(ship, Frame);
+            return Vector2.Distance(p, e.Position);
+        }
+        Assert.Equal(420f * Frame, StepOf(a), 3);
+        Assert.Equal(100f * Frame, StepOf(b), 3);
+        Assert.Equal(100f * Frame, StepOf(boss), 3);
+    }
+
+    // A session with a Hallucination boss at 50% (3 copies every 3.5 s) and the given number of live copies,
+    // all far from the ship and out of its line of fire.
+    private static (GameSession Session, Enemy Boss) CappedSession(int liveCopies)
+    {
+        var (session, boss) = FarSession(EnemyRoster.Hallucination);
+        boss.TakeDamage(40f);
+        Assert.Equal(2, boss.PhasesReached);
+        for (var i = 0; i < liveCopies; i++)
+            session.AddEnemy(new Enemy(EnemyRoster.Hallucination, new Vector2(100f + 20f * i, 100f),
+                movement: new StationaryPattern(), experience: 0, isCopy: true));
+        return (session, boss);
+    }
+
+    private static int CopiesIn(GameSession session) =>
+        session.Enemies.Count(e => e.IsCopy && e.Type == EnemyRoster.Hallucination);
+
+    // Steps the session, checking the cap every frame.
+    private static void RunCapped(GameSession session, float seconds)
+    {
+        var steps = (int)MathF.Round(seconds / Step);
+        for (var i = 0; i < steps; i++)
+        {
+            session.Update(Vector2.Zero, null, Step, Width, Height);
+            Assert.True(CopiesIn(session) <= 8, $"{CopiesIn(session)} live copies");
+        }
+    }
+
+    [Theory]
+    [InlineData(0, 3)]
+    [InlineData(6, 2)]
+    [InlineData(7, 1)]
+    [InlineData(8, 0)]
+    public void A_3_copy_split_adds_only_what_fits_under_8_live_copies(int alive, int added)
+    {
+        var (session, _) = CappedSession(alive);
+
+        RunCapped(session, 3.5f);
+
+        Assert.Equal(alive + added, CopiesIn(session));
+    }
+
+    [Fact]
+    public void At_8_copies_splits_make_none_but_still_use_up_their_interval_and_resume_after_a_copy_is_gone()
+    {
+        var (session, _) = CappedSession(8);
+
+        // Three splits come due (3.5, 7, 10.5 s) and make nothing.
+        RunCapped(session, 10.5f + 2 * Step);
+        Assert.Equal(8, CopiesIn(session));
+
+        // Shoot one copy just after the third split was due at the cap.
+        var victim = session.Enemies.First(e => e.IsCopy);
+        victim.TakeDamage(1f);
+        RunCapped(session, Step);
+        Assert.Equal(7, CopiesIn(session));
+
+        // That split used up its interval: nothing comes until the next one is due at 14 s.
+        RunCapped(session, 14f - 10.5f - 4 * Step);
+        Assert.Equal(7, CopiesIn(session));
+
+        // The next due split refills to the cap: exactly 1 copy.
+        RunCapped(session, 2 * Step);
+        Assert.Equal(8, CopiesIn(session));
+    }
+
+    [Fact]
+    public void Live_copies_never_exceed_8_across_every_phase()
+    {
+        var (session, boss) = FarSession(EnemyRoster.Hallucination);
+        var max = 0;
+        foreach (var phaseHit in new[] { 0f, 20f, 20f, 20f })
+        {
+            boss.TakeDamage(phaseHit);
+            var steps = (int)MathF.Round(8f / Step);
+            for (var i = 0; i < steps; i++)
+            {
+                session.Update(Vector2.Zero, null, Step, Width, Height);
+                max = Math.Max(max, CopiesIn(session));
+                Assert.True(CopiesIn(session) <= 8, $"{CopiesIn(session)} live copies at phase {boss.PhasesReached}");
+            }
+        }
+        Assert.Equal(3, boss.PhasesReached);
+        Assert.Equal(8, max);
+    }
+
+    [Theory]
+    [InlineData(0f)]
+    [InlineData(30f)]
+    [InlineData(80f)]
+    [InlineData(150f)]
+    public void Copies_spawn_at_least_100px_from_the_ship_relocated_to_the_far_side_of_the_boss(float shipDistance)
+    {
+        var bossAt = new Vector2(400f, 300f);
+        var ship = bossAt + new Vector2(0.6f, -0.8f) * shipDistance;
+        var shipToBoss = shipDistance > 0f ? Vector2.Normalize(bossAt - ship) : Vector2.Zero;
+        var relocated = 0;
+
+        for (var seed = 0; seed < 200; seed++)
+        {
+            var boss = new Enemy(EnemyRoster.Hallucination, bossAt, movement: new StationaryPattern());
+            var near = new SplitIntoCopies(secondsBetweenSplits: 1f, copiesPerSplit: 3);
+            var far = new SplitIntoCopies(secondsBetweenSplits: 1f, copiesPerSplit: 3);
+
+            // Same timing and count as a split with the ship far away (no relocation).
+            for (var i = 1; i <= 64 * 3; i++)
+            {
+                var nearCopies = near.Update(boss, ship, Step, new Random(seed));
+                var farCopies = far.Update(boss, FarShip, Step, new Random(seed));
+                Assert.Equal(farCopies.Count, nearCopies.Count);
+                if (nearCopies.Count == 0)
+                    continue;
+
+                // Replay the random angles to know where each copy would have gone unrelocated.
+                var replay = new Random(seed);
+                foreach (var copy in nearCopies)
+                {
+                    var angle = replay.NextSingle() * MathF.Tau;
+                    var spot = bossAt + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * 60f;
+                    Assert.True(Vector2.Distance(copy.Position, ship) >= 100f,
+                        $"seed {seed}: copy {Vector2.Distance(copy.Position, ship)} px from the ship");
+                    if (Vector2.Distance(spot, ship) >= 100f)
+                    {
+                        Assert.Equal(spot, copy.Position);
+                        continue;
+                    }
+                    relocated++;
+                    Assert.True(Vector2.Dot(copy.Position - bossAt, shipToBoss) >= -1e-3f,
+                        $"seed {seed}: relocated copy is on the ship's side of the boss");
+                }
+            }
+        }
+
+        // From 30 px in, some random spot is always too close; at 150 px only some angles are (60 px reaches 90 px).
+        if (shipDistance < 100f)
+            Assert.True(relocated > 0);
+    }
+
+    [Fact]
+    public void Copies_of_any_phase_die_in_one_hit_never_enter_a_phase_and_outlive_the_bosss_next_threshold()
+    {
+        var (session, boss) = FarSession(EnemyRoster.Hallucination);
+
+        // A copy split before any phase change.
+        RunCapped(session, 5f);
+        var early = session.Enemies.First(e => e.IsCopy);
+
+        // The boss crosses 75% and 50%: the early copy is still in play.
+        boss.TakeDamage(20f);
+        RunCapped(session, Step);
+        boss.TakeDamage(20f);
+        RunCapped(session, Step);
+        Assert.Equal(2, boss.PhasesReached);
+        Assert.Contains(early, session.Enemies);
+
+        // A copy split under the 50% recipe dies in one hit and keeps PhasesReached 0.
+        var phaseCopy = NextSplit(boss)[0];
+        Assert.IsType<ChasePlayer>(phaseCopy.Movement);
+        phaseCopy.TakeDamage(1f);
+        Assert.True(phaseCopy.IsDead);
+        Assert.Equal(0, phaseCopy.PhasesReached);
+        Assert.Equal(0, phaseCopy.Experience);
+        Assert.Equal(40f, boss.HitPoints);
+    }
+
     private sealed class StationaryPattern : IMovementPattern
     {
         public Vector2 Move(Vector2 position, Vector2 playerPosition, float elapsedSeconds) =>
