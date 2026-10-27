@@ -118,6 +118,8 @@ dotnet test                                                  # run the unit test
 dotnet run --project src/SoftwareFactorySurvivors.Desktop    # play the game
 ```
 
+Dependencies are pinned by the committed `packages.lock.json` in each project. Restore always runs in locked mode (set in `Directory.Build.props`), so changing or adding a `PackageReference` without updating the lock file fails with `NU1004`, and so does a package whose hash doesn't match the lock file. To refresh the pins, run `dotnet restore --force-evaluate -p:RestoreLockedMode=false` and commit the updated `packages.lock.json` files.
+
 For debugging, arguments after `--` choose where the game starts:
 
 ```sh
