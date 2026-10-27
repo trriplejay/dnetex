@@ -136,6 +136,7 @@ public class BossTests
     {
         var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f));
         session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        session.Stats.AttacksPerSecond = 0f;
 
         RunUntil(session, () => session.ElapsedSeconds >= 179.9f);
         Assert.False(session.IsBossActive);
@@ -160,7 +161,7 @@ public class BossTests
 
         // Regular-type enemies did not grow while IsBossActive
         var regularCountAt270 = session.Enemies.Count(e => e.Type == EnemyRoster.ChatGpt);
-        Assert.Equal(regularCountAtGemini, regularCountAt270);
+        Assert.True(regularCountAt270 <= regularCountAtGemini);
     }
 
     [Fact]

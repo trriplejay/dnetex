@@ -110,6 +110,8 @@ Check the install on any platform with `dotnet --list-sdks`.
 
 ## Build, test, run
 
+GitHub Actions (`.github/workflows/ci.yml`) builds the solution and runs the Core tests on every push and pull request to `main`.
+
 From the repository root:
 
 ```sh

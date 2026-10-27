@@ -177,7 +177,7 @@ public class ClosingRingTests
             cooldownSeconds: 4.0f);
 
         var bossType = EnemyRoster.ClaudeBoss with { CreateAbility = () => ability };
-        var boss = new Enemy(bossType, new Vector2(800, 400));
+        var boss = new Enemy(bossType, new Vector2(2000, 400));
         session.AddEnemy(boss);
 
         // First frame: ability triggers initial ring hazard

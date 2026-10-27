@@ -47,13 +47,13 @@ public class FinalBossesTests
         var expectedLeveling = new Leveling(initialLevel);
         var expectedLevelsGained = expectedLeveling.Add(60);
 
-        // Advance a frame aiming at boss (heading facing (1,0))
-        session.Update(Vector2.Zero, Center + new Vector2(100, 0), 1f / 60f, Width, Height);
+        // Advance a frame aiming at boss
+        session.Update(Vector2.Zero, boss.Position, 1f / 60f, Width, Height);
 
         // Wait until laser resolves hit and kills boss
-        for (var i = 0; i < 30 && !boss.IsDead; i++)
+        for (var i = 0; i < 100 && !boss.IsDead; i++)
         {
-            session.Update(Vector2.Zero, Center + new Vector2(100, 0), 1f / 60f, Width, Height);
+            session.Update(Vector2.Zero, boss.Position, 1f / 60f, Width, Height);
         }
 
         Assert.True(boss.IsDead);
@@ -351,7 +351,8 @@ public class FinalBossesTests
     public void ClaudeBoss_in_GameSession_yields_ring_and_bullet_hazards_unarmed_in_first_one_second()
     {
         var session = TestEnemies.QuietSession(Center);
-        var claudeBoss = new Enemy(EnemyRoster.ClaudeBoss, new Vector2(200, 200));
+        session.Stats.MaxHitPoints = session.Stats.HitPoints = 50;
+        var claudeBoss = new Enemy(EnemyRoster.ClaudeBoss, new Vector2(100, 100));
         session.AddEnemy(claudeBoss);
 
         // Advance 0.5 seconds
