@@ -47,13 +47,15 @@ public class FinalBossesTests
         var expectedLeveling = new Leveling(initialLevel);
         var expectedLevelsGained = expectedLeveling.Add(60);
 
-        // Advance a frame aiming at boss (heading facing (1,0))
-        session.Update(Vector2.Zero, Center + new Vector2(100, 0), 1f / 60f, Width, Height);
+        // Advance a frame aiming at boss
+        session.Stats.AttacksPerSecond = 60f;
+        session.Update(Vector2.Zero, boss.Position, 1f / 60f, Width, Height);
 
-        // Wait until laser resolves hit and kills boss
-        for (var i = 0; i < 30 && !boss.IsDead; i++)
+        // Wait until laser resolves hit and kills boss. The boss arrives off the top edge ~540 px away and
+        // lasers fly at 600 px/s, so allow up to 2 s of frames for the shot to land.
+        for (var i = 0; i < 120 && !boss.IsDead; i++)
         {
-            session.Update(Vector2.Zero, Center + new Vector2(100, 0), 1f / 60f, Width, Height);
+            session.Update(Vector2.Zero, boss.Position, 1f / 60f, Width, Height);
         }
 
         Assert.True(boss.IsDead);
@@ -351,7 +353,11 @@ public class FinalBossesTests
     public void ClaudeBoss_in_GameSession_yields_ring_and_bullet_hazards_unarmed_in_first_one_second()
     {
         var session = TestEnemies.QuietSession(Center);
-        var claudeBoss = new Enemy(EnemyRoster.ClaudeBoss, new Vector2(200, 200));
+        // A finished session stops advancing ElapsedSeconds; keep the ship alive so the wait loop below terminates.
+        // Hold the boss still: an added (non-arrival) boss rammed by its Dash is destroyed on contact before
+        // BulletBursts' first burst at 3 s, which is not what this hazard test is about.
+        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        var claudeBoss = TestEnemies.Stationary(EnemyRoster.ClaudeBoss, new Vector2(200, 200));
         session.AddEnemy(claudeBoss);
 
         // Advance 0.5 seconds
@@ -616,8 +622,9 @@ public class FinalBossesTests
         Assert.Same(EnemyRoster.Hallucination, boss.Type);
         Assert.Equal(180, boss.Experience);
 
-        // Turn off attacks while waiting for the split
-        session.Stats.AttacksPerSecond = 0f;
+        // Hold fire while waiting for the split. FiringTimer rejects a rate of 0 and any hit kills a copy,
+        // so use a positive rate too slow to fire a single shot within the wait.
+        session.Stats.AttacksPerSecond = 1e-6f;
 
         // Advance past split interval (5.0s, e.g. 5.5s) to allow it to spawn copies
         for (var i = 0; i < 55; i++)

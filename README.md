@@ -110,6 +110,8 @@ The brew, apt, dnf and winget packages above must provide a 10.0.4xx SDK. Check 
 
 ## Build, test, run
 
+GitHub Actions (`.github/workflows/ci.yml`) builds the solution and runs the Core tests on every push and pull request to `main`.
+
 From the repository root:
 
 ```sh

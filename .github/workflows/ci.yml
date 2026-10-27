@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build solution
+        run: dotnet build --no-restore -c Release
+
+      - name: Run tests
+        run: dotnet test --no-build -c Release --logger "console;verbosity=normal" --logger trx --results-directory TestResults
+
+      - name: Guard test discovery and execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -c '
+          import glob
+          import sys
+          import xml.etree.ElementTree as ET
+
+          trx_files = glob.glob("TestResults/*.trx")
+          if not trx_files:
+              print("Guard failed: No TRX test result files found in TestResults/", file=sys.stderr)
+              sys.exit(1)
+
+          total_tests = 0
+          for trx_path in trx_files:
+              try:
+                  tree = ET.parse(trx_path)
+                  root = tree.getroot()
+              except Exception as e:
+                  print(f"Guard failed: Unable to parse TRX file {trx_path}: {e}", file=sys.stderr)
+                  sys.exit(1)
+
+              # Match Counters element with or without XML namespace
+              counters = root.findall(".//{*}Counters")
+              if not counters:
+                  counters = root.findall(".//Counters")
+
+              if not counters:
+                  print(f"Guard failed: No Counters element found in TRX file {trx_path}", file=sys.stderr)
+                  sys.exit(1)
+
+              for c in counters:
+                  total_attr = c.attrib.get("total")
+                  if total_attr is None:
+                      print(f"Guard failed: Counters element missing total attribute in {trx_path}", file=sys.stderr)
+                      sys.exit(1)
+                  try:
+                      total_tests += int(total_attr)
+                  except ValueError:
+                      print(f"Guard failed: Invalid total count {total_attr} in {trx_path}", file=sys.stderr)
+                      sys.exit(1)
+
+          if total_tests <= 0:
+              print(f"Guard failed: Total test count is {total_tests} (expected > 0)", file=sys.stderr)
+              sys.exit(1)
+
+          print(f"Guard passed: Discovered and executed {total_tests} tests across {len(trx_files)} TRX file(s).")
+          '
