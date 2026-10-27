@@ -68,8 +68,9 @@ public class HallucinationBossTests
         var initialExperience = session.Leveling.Experience;
 
         // Fire laser straight up at the copy
-        // In quiet session, ship fires 1 attack per second up from nose
-        for (var i = 0; i < 60 && !copy.IsDead; i++)
+        // In quiet session, ship fires 1 attack per second up from nose: the first shot leaves on the 60th frame
+        // and still has ~100 px to fly to the copy, so allow 2 s for it to land.
+        for (var i = 0; i < 120 && !copy.IsDead; i++)
             session.Update(Vector2.Zero, null, Frame, Width, Height);
 
         Assert.True(copy.IsDead);
@@ -185,7 +186,9 @@ public class HallucinationBossTests
     [Fact]
     public void Copies_have_no_ability_and_do_not_spawn_copies_over_multiple_split_periods()
     {
-        var session = TestEnemies.QuietSession(new Vector2(900, 700));
+        // Copies chase the ship at 70 px/s, so the ship sits far enough away (as in FarSession) that no copy
+        // reaches it or crosses its line of fire within 16 s; every copy made stays alive to be counted.
+        var session = TestEnemies.QuietSession(new Vector2(6000, 6000));
         var boss = new Enemy(
             EnemyRoster.Hallucination,
             new Vector2(300, 300),

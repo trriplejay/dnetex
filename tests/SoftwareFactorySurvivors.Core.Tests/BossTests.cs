@@ -147,8 +147,14 @@ public class BossTests
 
         var regularCountAtGemini = session.Enemies.Count(e => e.Type == EnemyRoster.ChatGpt);
 
-        // Keep Gemini boss alive (do not hit it) and advance past 270s
-        RunUntil(session, () => session.ElapsedSeconds >= 270.1f);
+        // Keep Gemini boss alive (do not hit it) and advance past 270s, evading the regular enemy so contact does not destroy it
+        RunUntil(session, () => session.ElapsedSeconds >= 270.1f, () =>
+        {
+            var chatGpt = session.Enemies.FirstOrDefault(e => e.Type == EnemyRoster.ChatGpt);
+            return chatGpt is not null && Vector2.Distance(session.Ship.Position, chatGpt.Position) < 200f
+                ? Vector2.Normalize(session.Ship.Position - chatGpt.Position)
+                : Vector2.Zero;
+        });
 
         // Autocomplete arrived on time, both bosses live, each appears exactly once
         Assert.Equal(2, session.Bosses.Count);
@@ -463,18 +469,23 @@ public class BossTests
             shield.TakeDamage(shield.HitPoints);
     }
 
-    private static void Step(GameSession session, Enemy? toward = null)
+    private static void Step(GameSession session, Vector2 direction)
     {
-        var direction = toward is null ? Vector2.Zero : Vector2.Normalize(toward.Position - session.Ship.Position);
         session.Update(direction, null, Frame, Width, Height);
         while (session.IsChoosingUpgrade)
             session.ChooseUpgrade(0);
     }
 
-    private static void RunUntil(GameSession session, Func<bool> done, Enemy? toward = null)
+    private static void Step(GameSession session, Enemy? toward = null) =>
+        Step(session, toward is null ? Vector2.Zero : Vector2.Normalize(toward.Position - session.Ship.Position));
+
+    private static void RunUntil(GameSession session, Func<bool> done, Enemy? toward = null) =>
+        RunUntil(session, done, toward is null ? null : () => Vector2.Normalize(toward.Position - session.Ship.Position));
+
+    private static void RunUntil(GameSession session, Func<bool> done, Func<Vector2>? move)
     {
         for (var i = 0; i < 60 * 300 && !done(); i++)
-            Step(session, toward);
+            Step(session, move?.Invoke() ?? Vector2.Zero);
         Assert.True(done(), "Condition not reached");
     }
 }
