@@ -146,11 +146,8 @@ public sealed class GameSession
 
         foreach (var laser in _lasers)
             laser.Update(elapsedSeconds);
-        if (Stats.AttacksPerSecond > 0f)
-        {
-            foreach (var shot in _firingTimer.Update(elapsedSeconds, Ship.Nose, Ship.Heading, Stats.AttacksPerSecond))
-                _lasers.AddRange(Volley(shot.Position, shot.Heading));
-        }
+        foreach (var shot in _firingTimer.Update(elapsedSeconds, Ship.Nose, Ship.Heading, Stats.AttacksPerSecond))
+            _lasers.AddRange(Volley(shot.Position, shot.Heading));
 
         AddArrivedBosses(width, height);
         AddArrivedRings();
