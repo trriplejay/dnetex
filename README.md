@@ -53,7 +53,7 @@ A clock at the top of the screen counts up in minutes and seconds; your level, e
 
 ```
 SoftwareFactorySurvivors.slnx
-global.json                                 # pins the .NET SDK (10.0.x)
+global.json                                 # pins the .NET SDK (10.0.4xx feature band, latest patch)
 src/SoftwareFactorySurvivors.Core/          # game logic: plain C#, no MonoGame dependency
 src/SoftwareFactorySurvivors.Desktop/       # MonoGame host: window, input, rendering
 tests/SoftwareFactorySurvivors.Core.Tests/  # xUnit tests for the game logic
@@ -63,7 +63,7 @@ Game rules go in `SoftwareFactorySurvivors.Core`, where they can be unit tested 
 
 ## Prerequisites
 
-You need the **.NET 10 SDK**. MonoGame is pulled from NuGet automatically, and its native dependencies (SDL2, OpenAL) are bundled in the package, so there's nothing else to install.
+You need a **.NET 10 SDK in the 10.0.4xx band** (`global.json` pins `10.0.400` with `latestPatch`, so a newer 10.0.4xx patch is fine but a different feature band is not). MonoGame is pulled from NuGet automatically, and its native dependencies (SDL2, OpenAL) are bundled in the package, so there's nothing else to install.
 
 ### macOS
 
@@ -94,7 +94,7 @@ sudo dnf install dotnet-sdk-10.0
 Any other distro: use Microsoft's install script:
 
 ```sh
-curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0
+curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0.4xx
 export PATH="$HOME/.dotnet:$PATH"
 ```
 
@@ -106,7 +106,7 @@ Running the game requires a desktop session (X11, or Wayland via XWayland) and w
 winget install Microsoft.DotNet.SDK.10
 ```
 
-Check the install on any platform with `dotnet --list-sdks`.
+The brew, apt, dnf and winget packages above must provide a 10.0.4xx SDK. Check the install on any platform with `dotnet --list-sdks`.
 
 ## Build, test, run
 
@@ -117,6 +117,8 @@ dotnet build                                                 # build everything
 dotnet test                                                  # run the unit tests
 dotnet run --project src/SoftwareFactorySurvivors.Desktop    # play the game
 ```
+
+Dependencies are pinned by the committed `packages.lock.json` in each project. Restore always runs in locked mode (set in `Directory.Build.props`), so changing or adding a `PackageReference` without updating the lock file fails with `NU1004`, and so does a package whose hash doesn't match the lock file. To refresh the pins, run `dotnet restore --force-evaluate -p:RestoreLockedMode=false` and commit the updated `packages.lock.json` files.
 
 For debugging, arguments after `--` choose where the game starts:
 
