@@ -177,7 +177,9 @@ public class ClosingRingTests
             cooldownSeconds: 4.0f);
 
         var bossType = EnemyRoster.ClaudeBoss with { CreateAbility = () => ability };
-        var boss = new Enemy(bossType, new Vector2(2000, 400));
+        // Hold the boss still: its Dash lunges (420 px/s) would otherwise reach the ship within these
+        // seconds and cost a contact hit, which is not what this ring test is about.
+        var boss = TestEnemies.Stationary(bossType, new Vector2(800, 400));
         session.AddEnemy(boss);
 
         // First frame: ability triggers initial ring hazard

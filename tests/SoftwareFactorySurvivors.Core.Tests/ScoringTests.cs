@@ -23,7 +23,7 @@ public class ScoringTests
     [Fact]
     public void Surviving_ten_minutes_wins_and_stops_the_clock_at_ten()
     {
-        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(600f, EnemyRoster.ClaudeBoss)]);
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(600f, EnemyRoster.ClaudeBoss)], rings: []);
 
         session.Update(Vector2.Zero, null, 600f, Width, Height);
         var claudeBoss = Assert.Single(session.Bosses);
@@ -48,7 +48,7 @@ public class ScoringTests
         Assert.Equal(GameSession.SurvivalSeconds, session.ElapsedSeconds);
 
         // A session where only GeminiBoss dies is not a victory
-        var geminiSession = new GameSession(Center, new Random(2), roster: [], bosses: [new BossArrival(180f, EnemyRoster.GeminiBoss)]);
+        var geminiSession = new GameSession(Center, new Random(2), roster: [], bosses: [new BossArrival(180f, EnemyRoster.GeminiBoss)], rings: []);
         geminiSession.Update(Vector2.Zero, null, 180f, Width, Height);
         var gemini = Assert.Single(geminiSession.Bosses);
         foreach (var shield in gemini.Shields)
