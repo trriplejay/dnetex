@@ -90,7 +90,8 @@ public class BossTests
     public void Boss_enters_at_three_minutes_and_pauses_regular_spawning_until_defeated()
     {
         var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.Gemini]).WithLaser();
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
         var seen = new HashSet<Enemy>();
 
         RunUntil(session, () => session.ElapsedSeconds >= 179.9f);
@@ -135,7 +136,8 @@ public class BossTests
     public void Autocomplete_arrives_on_schedule_at_270s_while_gemini_boss_lives_and_regular_spawning_remains_paused()
     {
         var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f)).WithLaser();
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
 
         RunUntil(session, () => session.ElapsedSeconds >= 179.9f);
         Assert.False(session.IsBossActive);
@@ -173,13 +175,11 @@ public class BossTests
     public void Boss_survives_touching_the_ship_when_the_ship_survives()
     {
         var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(0f, EnemyRoster.GeminiBoss)]).WithLaser();
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
-
         Step(session);
         var boss = Assert.Single(session.Bosses);
 
-        // Drive the ship into the boss.
-        RunUntil(session, () => session.Stats.HitPoints < 3, toward: boss);
+        // Drive the ship into the boss (or its shield) until the first contact damage lands.
+        RunUntil(session, () => session.Stats.HitPoints < 100f, toward: boss);
 
         Assert.False(session.IsGameOver);
         Assert.Contains(boss, session.Enemies);
@@ -370,7 +370,8 @@ public class BossTests
     public void Boss_enters_with_its_shield_and_lasers_only_hurt_it_once_the_shield_is_gone()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
         session.Stats.Laser().AttacksPerSecond = 6f;
         session.Stats.Laser().Damage = 3f;
         var boss = TestEnemies.Stationary(EnemyRoster.GeminiBoss, Center + new Vector2(0, -300));

@@ -11,61 +11,85 @@ public static class EnemyRoster
     public static readonly EnemyType HuggingFace = new(
         "Hugging Face", Radius: 14f, HitPoints: 1f, Speed: 160f, Experience: 1,
         DefaultSpawnsPerMinute: 24f, ArrivesAtSeconds: 30f, SpinSpeed: 0f,
-        speed => new ChasePlayer(speed), LogoShapes.HuggingFace(14f));
+        speed => new ChasePlayer(speed), LogoShapes.HuggingFace(14f),
+        ContactDamage: 5f);
 
     /// <summary>The steady baseline chaser.</summary>
     public static readonly EnemyType Gemini = new(
         "Gemini", Radius: 20f, HitPoints: 3f, Speed: 90f, Experience: 2,
         DefaultSpawnsPerMinute: 30f, ArrivesAtSeconds: 0f, SpinSpeed: 0f,
-        speed => new ChasePlayer(speed), LogoShapes.Gemini(20f));
+        speed => new ChasePlayer(speed), LogoShapes.Gemini(20f),
+        ContactDamage: 5f);
 
     /// <summary>Snakes toward the player, harder to line up a shot on.</summary>
     public static readonly EnemyType ChatGpt = new(
         "ChatGPT", Radius: 22f, HitPoints: 4f, Speed: 85f, Experience: 3,
         DefaultSpawnsPerMinute: 14f, ArrivesAtSeconds: 60f, SpinSpeed: 1f,
-        speed => new Weave(speed, amplitude: 60f, cyclesPerSecond: 0.8f), LogoShapes.ChatGpt(22f));
+        speed => new Weave(speed, amplitude: 60f, cyclesPerSecond: 0.8f), LogoShapes.ChatGpt(22f),
+        ContactDamage: 6f);
 
     /// <summary>Creeps, then lunges in a straight line; sidestep the lunge.</summary>
     public static readonly EnemyType Claude = new(
         "Claude", Radius: 20f, HitPoints: 3f, Speed: 60f, Experience: 3,
         DefaultSpawnsPerMinute: 10f, ArrivesAtSeconds: 90f, SpinSpeed: 1.5f,
-        speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(20f));
+        speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(20f),
+        ContactDamage: 6f);
 
     /// <summary>Fast, circling inward in a tight spiral.</summary>
     public static readonly EnemyType Grok = new(
         "Grok", Radius: 20f, HitPoints: 4f, Speed: 130f, Experience: 4,
         DefaultSpawnsPerMinute: 10f, ArrivesAtSeconds: 120f, SpinSpeed: 0f,
-        speed => new SpiralIn(speed, offsetDegrees: 60f), LogoShapes.Grok(20f));
+        speed => new SpiralIn(speed, offsetDegrees: 60f), LogoShapes.Grok(20f),
+        ContactDamage: 6f);
 
     /// <summary>A sturdier weaver with a quick, narrow sway.</summary>
     public static readonly EnemyType Copilot = new(
         "Copilot", Radius: 22f, HitPoints: 6f, Speed: 80f, Experience: 5,
         DefaultSpawnsPerMinute: 8f, ArrivesAtSeconds: 180f, SpinSpeed: 0f,
-        speed => new Weave(speed, amplitude: 25f, cyclesPerSecond: 2f), LogoShapes.Copilot(22f));
+        speed => new Weave(speed, amplitude: 25f, cyclesPerSecond: 2f), LogoShapes.Copilot(22f),
+        ContactDamage: 7f);
 
     /// <summary>Starts slow but keeps accelerating; kill it early.</summary>
     public static readonly EnemyType Cursor = new(
         "Cursor", Radius: 22f, HitPoints: 8f, Speed: 40f, Experience: 7,
         DefaultSpawnsPerMinute: 6f, ArrivesAtSeconds: 240f, SpinSpeed: 0.6f,
-        speed => new Accelerate(speed, acceleration: 18f, maxSpeed: 190f), LogoShapes.Cursor(22f));
+        speed => new Accelerate(speed, acceleration: 18f, maxSpeed: 190f), LogoShapes.Cursor(22f),
+        ContactDamage: 7f);
 
     /// <summary>Creeps, then teleports a chunk closer every couple of seconds.</summary>
     public static readonly EnemyType Perplexity = new(
         "Perplexity", Radius: 22f, HitPoints: 7f, Speed: 40f, Experience: 6,
         DefaultSpawnsPerMinute: 6f, ArrivesAtSeconds: 300f, SpinSpeed: 0f,
-        speed => new Blink(speed, jumpDistance: 90f, secondsBetweenJumps: 1.75f), LogoShapes.Perplexity(22f));
+        speed => new Blink(speed, jumpDistance: 90f, secondsBetweenJumps: 1.75f), LogoShapes.Perplexity(22f),
+        ContactDamage: 7f);
 
     /// <summary>Tough and spinning, closing in on a wide spiral.</summary>
     public static readonly EnemyType AppleIntelligence = new(
         "Apple Intelligence", Radius: 26f, HitPoints: 10f, Speed: 75f, Experience: 9,
         DefaultSpawnsPerMinute: 4f, ArrivesAtSeconds: 360f, SpinSpeed: 0.8f,
-        speed => new SpiralIn(speed, offsetDegrees: 40f), LogoShapes.AppleIntelligence(26f));
+        speed => new SpiralIn(speed, offsetDegrees: 40f), LogoShapes.AppleIntelligence(26f),
+        ContactDamage: 8f);
 
     /// <summary>A slow, huge tank that soaks up damage.</summary>
     public static readonly EnemyType Meta = new(
         "Meta", Radius: 32f, HitPoints: 20f, Speed: 50f, Experience: 15,
         DefaultSpawnsPerMinute: 3f, ArrivesAtSeconds: 420f, SpinSpeed: 0f,
-        speed => new ChasePlayer(speed), LogoShapes.Meta(32f));
+        speed => new ChasePlayer(speed), LogoShapes.Meta(32f),
+        ContactDamage: 8f);
+
+    /// <summary>Base contact damage per tick of every boss, before time scaling.</summary>
+    public const float BossContactDamage = 15f;
+
+    /// <summary>
+    /// The one owner of how contact damage grows with the clock: base damage x (1 + elapsedMinutes / 10), uncapped and
+    /// rounded to hundredths. So the base value at 0:00, twice it at 10:00 and three times it at 20:00. Every contact
+    /// source (enemy, boss, bullet, trail, ring) reads its damage through here.
+    /// </summary>
+    public static float ScaledContactDamage(float baseDamage, float elapsedSeconds) =>
+        MathF.Round(baseDamage * ContactDamageScale(elapsedSeconds), 2);
+
+    /// <summary>The time multiplier on contact damage: 1 + elapsedMinutes / 10, uncapped.</summary>
+    public static float ContactDamageScale(float elapsedSeconds) => 1f + elapsedSeconds / 600f;
 
     private const float GeminiBossSpeed = 30f;
 
@@ -96,7 +120,8 @@ public static class EnemyRoster
                 CreateMovement: () => Claude.CreateMovement(4f * GeminiBossSpeed),
                 Shield: GeminiShield(count: 10, orbitRadius: 2f * GeminiShieldRadius)),
         ],
-        Shield: GeminiShield(count: 5));
+        Shield: GeminiShield(count: 5),
+        ContactDamage: BossContactDamage);
 
     /// <summary>
     /// Boss arriving at 4:30. Base behaviour alternates a 1.2 s telegraph and a straight charge
@@ -116,7 +141,8 @@ public static class EnemyRoster
             new(0.75f, RetuneMovement: m => ((ChargeAlongLine)m).Retune(chargeSpeed: 550f, chargeDistance: 900f)),
             new(0.50f, CreateAbility: () => new BulletBursts()),
             new(0.25f, RetuneMovement: m => ((ChargeAlongLine)m).Retune(chargeSpeed: 700f, chargeDistance: 900f, telegraphSeconds: 1.0f)),
-        ]);
+        ],
+        ContactDamage: BossContactDamage);
 
     /// <summary>
     /// Boss arriving at 7:00. Chases at 70 px/s and splits into 2 look-alike copies every 5 s.
@@ -135,7 +161,8 @@ public static class EnemyRoster
             new(0.75f),
             new(0.50f, CreateMovement: () => new ChasePlayer(100f)),
             new(0.25f, CreateMovement: () => new Dash(100f, dashSpeed: 420f, creepSeconds: 1.2f, dashSeconds: 0.45f)),
-        ]);
+        ],
+        ContactDamage: BossContactDamage);
 
     /// <summary>
     /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
@@ -158,7 +185,8 @@ public static class EnemyRoster
             new(0.75f),
             new(0.50f, RetuneMovement: m => { if (m is Dash dash) dash.Retune(dashSpeed: 560f); }),
             new(0.25f),
-        ]);
+        ],
+        ContactDamage: BossContactDamage);
 
     private static ThrowMinions ThrowClaudes() =>
         new(Claude, secondsBetweenThrows: 4f, speedMultiplier: 4f, minLandingDistance: 150f, maxLandingDistance: 250f,

@@ -15,6 +15,7 @@ namespace SoftwareFactorySurvivors.Core;
 /// <param name="CreateAbility">Builds a fresh special ability for each enemy, e.g. a boss throwing minions; null for none.</param>
 /// <param name="Shield">Enemies that orbit this one and make it immune to damage until they're all dead; null for none.</param>
 /// <param name="Phases">Behaviour changes as the enemy loses health, from the highest AtHealthFraction down; null for none.</param>
+/// <param name="ContactDamage">Base damage per contact tick while touching the ship, before EnemyRoster.ScaledContactDamage grows it with the clock.</param>
 public sealed record EnemyType(
     string Name,
     float Radius,
@@ -28,7 +29,11 @@ public sealed record EnemyType(
     IReadOnlyList<Vector2[]> Outline,
     Func<IEnemyAbility>? CreateAbility = null,
     IReadOnlyList<BossPhase>? Phases = null,
-    EnemyShield? Shield = null)
+    EnemyShield? Shield = null,
+    float ContactDamage = EnemyType.DefaultContactDamage)
 {
+    /// <summary>Contact damage of a type that names none: the low end of a regular enemy's 5-8.</summary>
+    public const float DefaultContactDamage = 5f;
+
     public Enemy Create(Vector2 position) => new(this, position);
 }

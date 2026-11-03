@@ -201,12 +201,10 @@ public class HitReferenceTests
     [Fact]
     public void Steady_state_frame_allocates_no_copy_of_the_enemy_list()
     {
-        // One contact hit makes the ship briefly immune, so the contact pass (which builds outlines) is skipped
-        // and what's left of the frame shouldn't grow with the enemy count.
+        // The enemies sit far from the ship, so the contact pass rejects them on distance alone without building
+        // their outlines, and with no projectile reaching them what's left of the frame shouldn't grow with the
+        // enemy count.
         var session = QuietSession();
-        session.AddEnemy(TestEnemies.Stationary(Speck(5f), Center));
-        session.Update(Vector2.Zero, null, 0.001f, Width, Height);
-        Assert.True(session.InvulnerableSecondsLeft > 0f);
 
         const int count = 2_000;
         for (var i = 0; i < count; i++)
@@ -342,7 +340,8 @@ public class HitReferenceTests
     private static GameSession QuietSession()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000;
+        session.Stats.MaxHitPoints = 1_000f;
+        session.Stats.HitPoints = 1_000f;
         return session;
     }
 

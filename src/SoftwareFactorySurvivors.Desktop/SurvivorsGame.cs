@@ -292,7 +292,7 @@ public class SurvivorsGame : Game
         if (filled > 1f)
             _batch.AddThickStroke([new(left, barTop + 5f), new(left + filled, barTop + 5f)], 8f, ShipRendering.Color);
 
-        DrawTextLeft($"HP {stats.HitPoints}/{stats.MaxHitPoints}", new(left, 96f), 16f, 2f, Color.White);
+        DrawTextLeft($"HP {stats.DisplayHitPoints}/{stats.DisplayMaxHitPoints}", new(left, 96f), 16f, 2f, Color.White);
 
         var weaponY = 124f;
         foreach (var weapon in stats.Weapons)

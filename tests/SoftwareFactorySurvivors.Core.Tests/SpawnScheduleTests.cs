@@ -21,7 +21,8 @@ public class SpawnScheduleTests
     public void Regular_spawning_halts_during_the_lull_then_resumes_at_its_normal_rate()
     {
         var session = new GameSession(Center, new Random(1), roster: [EnemyRoster.Gemini], bosses: [], rings: []).WithLaser();
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
         var seen = new HashSet<Enemy>();
 
         RunUntil(session, seen, 79.9f);

@@ -33,9 +33,9 @@ Each weapon the ship owns (up to 3) has its own level, damage, attack speed and 
 | Lightning | +0.4 damage, +0.2 attacks/s, +1 chain |
 | Orbs | +1 orb, +30 deg/s and +15 px orbit, +3 px orb size, +0.5 damage |
 
-The ship starts with 1 hit point, so the first touch is fatal. With extra hit points, a touch costs 1 hit point, destroys the enemy, and makes the ship blink and ignore contact for 1 second.
+The ship starts with 100 hit points. Anything that touches it deals contact damage the moment it first touches and again every 0.5 s while it stays in contact, each enemy or hazard on its own timer, so a swarm hurts in proportion to how many are touching. Enemies survive the contact. Regular enemies deal 5–8 per tick, bosses 15, a boss's trail 4, the closing ring's band 6, and a bullet 8 once before it vanishes. All contact damage grows with the clock: base × (1 + minutes / 10), so twice the base at 10:00 (`EnemyRoster.ScaledContactDamage`). Hit points are shown as whole numbers rounded up, so a living ship never shows 0.
 
-A clock at the top of the screen counts up in minutes and seconds; your level, experience bar and hit points are in the top-left corner. Survive until 10:00 to win. Each enemy killed is worth 1 point. If an enemy touches the ship first, the game freezes and shows GAME OVER. On a win you can type up to three initials to save your score to the high-score table, which lasts until the game is closed.
+A clock at the top of the screen counts up in minutes and seconds; your level, experience bar and hit points are in the top-left corner. Survive until 10:00 to win. Each enemy killed is worth 1 point. If the ship's hit points run out first, the game freezes and shows GAME OVER. On a win you can type up to three initials to save your score to the high-score table, which lasts until the game is closed.
 
 ## Controls
 

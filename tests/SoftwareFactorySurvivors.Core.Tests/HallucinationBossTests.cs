@@ -142,10 +142,9 @@ public class HallucinationBossTests
     }
 
     [Fact]
-    public void Copy_touching_ship_costs_a_hit_like_non_boss_enemy_and_is_removed_on_survived_hit()
+    public void Copy_touching_ship_survives_and_deals_boss_contact_damage_each_tick()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
 
         // Place copy directly on the ship
         var copy = new Enemy(
@@ -156,16 +155,19 @@ public class HallucinationBossTests
             isCopy: true);
         session.AddEnemy(copy);
 
-        Assert.Contains(copy, session.Enemies);
-
-        // Step one frame to resolve contact
+        // First frame of contact: one tick of the boss type's contact damage, and the copy stays.
         session.Update(Vector2.Zero, null, Frame, Width, Height);
+        var tick = EnemyRoster.ScaledContactDamage(EnemyRoster.Hallucination.ContactDamage, session.ElapsedSeconds);
+        Assert.Equal(100f - tick, session.Stats.HitPoints, precision: 2);
+        Assert.Contains(copy, session.Enemies);
+        Assert.False(copy.IsDead);
+        Assert.Equal(0f, session.InvulnerableSecondsLeft);
 
-        // Ship took 1 hit
-        Assert.Equal(2, session.Stats.HitPoints);
-        // Copy is destroyed on contact because ship survived and copy is non-boss enemy
-        Assert.DoesNotContain(copy, session.Enemies);
-        Assert.True(session.InvulnerableSecondsLeft > 0f);
+        // Half a second later it has ticked again and is still there.
+        for (var i = 0; i < 30; i++)
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
+        Assert.True(session.Stats.HitPoints < 100f - tick - 14f);
+        Assert.Contains(copy, session.Enemies);
     }
 
     [Fact]
@@ -513,7 +515,8 @@ public class HallucinationBossTests
     private static (GameSession Session, Enemy Boss) FarSession(EnemyType type)
     {
         var session = TestEnemies.QuietSession(new Vector2(6000, 6000));
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 50;
+        session.Stats.MaxHitPoints = 50f;
+        session.Stats.HitPoints = 50f;
         var boss = new Enemy(type, new Vector2(200, 200));
         session.AddEnemy(boss);
         return (session, boss);

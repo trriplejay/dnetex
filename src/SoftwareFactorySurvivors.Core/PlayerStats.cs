@@ -12,10 +12,45 @@ public sealed class PlayerStats
     private readonly List<OwnedWeapon> _weapons = [];
     private readonly List<OwnedEnhancement> _enhancements = [];
 
-    /// <summary>Contact hits the ship can take; at the base of 1, any touch ends the game.</summary>
-    public int MaxHitPoints { get; set; } = 1;
+    /// <summary>The hit points every run starts with, full.</summary>
+    public const float StartingHitPoints = 100f;
 
-    public int HitPoints { get; set; } = 1;
+    private float _maxHitPoints = StartingHitPoints;
+    private float _hitPoints = StartingHitPoints;
+
+    /// <summary>The most hit points the ship can have; stored rounded to hundredths and never below 0.</summary>
+    public float MaxHitPoints
+    {
+        get => _maxHitPoints;
+        set
+        {
+            _maxHitPoints = MathF.Max(0f, RoundToHundredths(value));
+            _hitPoints = Math.Clamp(_hitPoints, 0f, _maxHitPoints);
+        }
+    }
+
+    /// <summary>
+    /// Hit points left. Always stored rounded to the nearest hundredth and clamped to [0, MaxHitPoints];
+    /// contact damage lowers it, and at 0 the run is lost.
+    /// </summary>
+    public float HitPoints
+    {
+        get => _hitPoints;
+        set => _hitPoints = Math.Clamp(RoundToHundredths(value), 0f, _maxHitPoints);
+    }
+
+    /// <summary>
+    /// HitPoints as the HUD shows it, a whole number rounded up: a living ship never shows 0, and only a dead one
+    /// (exactly 0) does.
+    /// </summary>
+    public int DisplayHitPoints => Whole(_hitPoints);
+
+    /// <summary>MaxHitPoints as the HUD shows it, by the same rule as DisplayHitPoints.</summary>
+    public int DisplayMaxHitPoints => Whole(_maxHitPoints);
+
+    private static int Whole(float hitPoints) => (int)MathF.Ceiling(hitPoints);
+
+    private static float RoundToHundredths(float value) => MathF.Round(value, 2);
 
     /// <summary>Owned weapons in the order they were picked.</summary>
     public IReadOnlyList<OwnedWeapon> Weapons => _weapons;

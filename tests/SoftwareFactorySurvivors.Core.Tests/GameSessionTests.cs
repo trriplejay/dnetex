@@ -10,9 +10,11 @@ public class GameSessionTests
     private static readonly Vector2 Center = new(500, 400);
 
     [Fact]
-    public void Enemy_touching_the_ship_ends_the_game_and_freezes_it()
+    public void Contact_damage_taking_hit_points_to_zero_ends_the_game_as_a_loss_and_freezes_it()
     {
         var session = new GameSession(Center, new Random(1)).WithLaser();
+        var tick = EnemyRoster.ScaledContactDamage(EnemyRoster.Gemini.ContactDamage, 0.1f);
+        session.Stats.HitPoints = tick - 1f;
         session.AddEnemy(EnemyRoster.Gemini.Create(Center + new Vector2(60, 0)));
 
         session.Update(Vector2.Zero, null, 0.1f, Width, Height);
@@ -21,12 +23,32 @@ public class GameSessionTests
         for (var i = 0; i < 20 && !session.IsGameOver; i++)
             session.Update(Vector2.Zero, null, 0.05f, Width, Height);
         Assert.True(session.IsGameOver);
+        Assert.False(session.IsVictory);
+        Assert.Equal(0f, session.Stats.HitPoints);
 
         var shipPosition = session.Ship.Position;
         var enemyPosition = session.Enemies[0].Position;
-        session.Update(new Vector2(0, -1), null, 1f, Width, Height);
+        var elapsed = session.ElapsedSeconds;
+        for (var i = 0; i < 3; i++)
+            session.Update(new Vector2(0, -1), null, 1f, Width, Height);
         Assert.Equal(shipPosition, session.Ship.Position);
         Assert.Equal(enemyPosition, session.Enemies[0].Position);
+        Assert.Equal(elapsed, session.ElapsedSeconds);
+        Assert.Equal(0f, session.Stats.HitPoints);
+    }
+
+    [Fact]
+    public void A_ship_with_more_than_one_tick_left_survives_a_touch()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        var tick = EnemyRoster.ScaledContactDamage(EnemyRoster.Gemini.ContactDamage, 0.01f);
+        session.Stats.HitPoints = tick + 1f;
+        session.AddEnemy(TestEnemies.StationaryGemini(Center));
+
+        session.Update(Vector2.Zero, null, 0.01f, Width, Height);
+
+        Assert.False(session.IsGameOver);
+        Assert.Equal(1f, session.Stats.HitPoints, precision: 2);
     }
 
     [Fact]

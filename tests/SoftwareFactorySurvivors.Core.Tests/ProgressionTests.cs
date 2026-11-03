@@ -278,32 +278,160 @@ public class ProgressionTests
         Assert.Equal(2f, back.HitPoints);
     }
 
+    // ---- Ship hit points and contact damage ----
+
     [Fact]
-    public void Extra_hit_points_survive_a_touch_with_brief_immunity()
+    public void A_new_session_starts_at_100_of_100_hit_points_whatever_the_start_options()
+    {
+        foreach (var start in new[] { StartOptions.Default, new StartOptions(StartLevel: 5) })
+        {
+            var session = new GameSession(Center, new Random(1), start: start);
+            Assert.Equal(100f, session.Stats.MaxHitPoints);
+            Assert.Equal(100f, session.Stats.HitPoints);
+        }
+    }
+
+    [Fact]
+    public void Touching_enemy_survives_and_deals_a_tick_at_once_then_every_half_second_with_no_immunity()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = 2;
-        session.Stats.HitPoints = 2;
-        session.AddEnemy(TestEnemies.StationaryGemini(Center));
-        session.AddEnemy(TestEnemies.StationaryGemini(Center + new Vector2(0, 200)));
+        var enemy = TestEnemies.Stationary(Tough, Center);
+        session.AddEnemy(enemy);
+
+        // First touch: one tick at once, and the enemy stays.
+        var ticks = StepCountingTicks(session, frames: 1);
+        Assert.Equal(1, ticks);
+        Assert.Equal(100f - EnemyRoster.ScaledContactDamage(Tough.ContactDamage, Frame), session.Stats.HitPoints);
+        Assert.Contains(enemy, session.Enemies);
+        Assert.Equal(0f, session.InvulnerableSecondsLeft);
+
+        // Staying in contact for 1.0 s more: exactly two more ticks, each the damage scaled for when it landed.
+        Assert.Equal(2, StepCountingTicks(session, frames: 60));
+        Assert.Contains(enemy, session.Enemies);
+        Assert.Equal(0f, session.InvulnerableSecondsLeft);
+
+        // Fly clear (0.3 s, before the next tick is due) and stay clear: no more losses.
+        for (var i = 0; i < 18; i++)
+            session.Update(new Vector2(1, 0), null, Frame, Width, Height);
+        var clear = session.Stats.HitPoints;
+        Assert.Equal(0, StepCountingTicks(session, frames: 120));
+        Assert.Equal(clear, session.Stats.HitPoints);
+    }
+
+    [Fact]
+    public void Contact_timer_clears_when_contact_ends_so_a_fresh_touch_ticks_at_once()
+    {
+        var session = TestEnemies.QuietSession(Center + new Vector2(-100, 0));
+        session.AddEnemy(TestEnemies.Stationary(Tough, Center));
+
+        // Fly through: first contact ticks at once.
+        var ticks = 0;
+        for (var i = 0; i < 30 && ticks == 0; i++)
+            ticks += StepCountingTicks(session, frames: 1, direction: new Vector2(1, 0));
+        Assert.Equal(1, ticks);
+        var firstTickAt = session.ElapsedSeconds;
+
+        // Back off out of reach, then fly back: the touch ticks again at once, well before the old 0.5 s timer would.
+        while (Vector2.Distance(session.Ship.Position, Center) < 80f)
+            session.Update(new Vector2(-1, 0), null, Frame, Width, Height);
+        var again = 0;
+        for (var i = 0; i < 60 && again == 0; i++)
+            again += StepCountingTicks(session, frames: 1, direction: new Vector2(1, 0));
+        Assert.Equal(1, again);
+        Assert.True(session.ElapsedSeconds - firstTickAt < GameSession.ContactTickSeconds - 0.05f,
+            $"Second touch ticked {session.ElapsedSeconds - firstTickAt} s after the first");
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(50)]
+    public void A_swarm_costs_one_tick_per_touching_enemy_on_the_first_frame(int count)
+    {
+        var session = TestEnemies.QuietSession(Center);
+        session.Stats.MaxHitPoints = 10_000f;
+        session.Stats.HitPoints = 10_000f;
+        for (var i = 0; i < count; i++)
+            session.AddEnemy(TestEnemies.Stationary(Tough, Center));
 
         session.Update(Vector2.Zero, null, Frame, Width, Height);
 
-        Assert.False(session.IsGameOver);
-        Assert.Equal(1, session.Stats.HitPoints);
-        Assert.Single(session.Enemies);
-        Assert.Equal(GameSession.InvulnerableSeconds, session.InvulnerableSecondsLeft);
+        var tick = EnemyRoster.ScaledContactDamage(Tough.ContactDamage, Frame);
+        Assert.Equal(10_000f - count * tick, session.Stats.HitPoints, precision: 2);
+        Assert.Equal(count, session.Enemies.Count);
+    }
 
-        // Fly the ship into the second enemy while still immune: no damage.
-        session.AddEnemy(TestEnemies.StationaryGemini(Center));
-        session.Update(Vector2.Zero, null, Frame, Width, Height);
-        Assert.Equal(1, session.Stats.HitPoints);
-
-        // Once immunity wears off, the next touch is fatal.
-        for (var i = 0; i < 70 && !session.IsGameOver; i++)
+    [Fact]
+    public void No_touching_source_costs_nothing()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        for (var i = 0; i < 300; i++)
             session.Update(Vector2.Zero, null, Frame, Width, Height);
-        Assert.True(session.IsGameOver);
-        Assert.Equal(0, session.Stats.HitPoints);
+
+        Assert.Equal(100f, session.Stats.HitPoints);
+        Assert.False(session.IsGameOver);
+    }
+
+    [Fact]
+    public void Hit_points_are_stored_to_the_hundredth_clamped_and_shown_rounded_up()
+    {
+        var stats = new PlayerStats();
+
+        stats.HitPoints = 57.456f;
+        Assert.Equal(57.46f, stats.HitPoints);
+        Assert.Equal(58, stats.DisplayHitPoints);
+
+        stats.HitPoints = -3f;
+        Assert.Equal(0f, stats.HitPoints);
+        Assert.Equal(0, stats.DisplayHitPoints);
+
+        stats.HitPoints = 150f;
+        Assert.Equal(100f, stats.HitPoints);
+        Assert.Equal(100, stats.DisplayHitPoints);
+        Assert.Equal(100, stats.DisplayMaxHitPoints);
+
+        stats.HitPoints = 0.01f;
+        Assert.Equal(1, stats.DisplayHitPoints);
+
+        // Lowering the maximum below the current value pulls the current value down with it.
+        stats.HitPoints = 80f;
+        stats.MaxHitPoints = 60f;
+        Assert.Equal(60f, stats.HitPoints);
+    }
+
+    [Fact]
+    public void A_tick_at_a_fractional_scale_leaves_hit_points_a_whole_number_of_hundredths()
+    {
+        // At 1:17 a 7-damage enemy's tick is 7 x (1 + 77/600) = 7.898..., dealt as 7.90.
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [], rings: [],
+            start: new StartOptions(StartSeconds: 77f)).WithLaser();
+        session.AddEnemy(TestEnemies.Stationary(Tough with { ContactDamage = 7f }, Center));
+
+        session.Update(Vector2.Zero, null, Frame, Width, Height);
+
+        var hundredths = session.Stats.HitPoints * 100f;
+        Assert.Equal(MathF.Round(hundredths), hundredths, precision: 2);
+        Assert.True(session.Stats.HitPoints < 100f);
+    }
+
+    /// <summary>A Gemini that a stray laser can't kill during a contact test.</summary>
+    private static readonly EnemyType Tough = EnemyRoster.Gemini with { HitPoints = 1_000_000f };
+
+    /// <summary>Steps frame by frame and counts the frames whose hit point loss matched one tick scaled for that moment.</summary>
+    private static int StepCountingTicks(GameSession session, int frames, Vector2? direction = null)
+    {
+        var ticks = 0;
+        for (var i = 0; i < frames; i++)
+        {
+            var before = session.Stats.HitPoints;
+            session.Update(direction ?? Vector2.Zero, null, Frame, Width, Height);
+            var lost = before - session.Stats.HitPoints;
+            if (lost <= 0f)
+                continue;
+            Assert.Equal(EnemyRoster.ScaledContactDamage(Tough.ContactDamage, session.ElapsedSeconds), lost, precision: 2);
+            ticks++;
+        }
+        return ticks;
     }
 
     [Fact]
@@ -313,7 +441,8 @@ public class ProgressionTests
         Assert.Equal([EnemyRoster.Gemini], session.Spawner.Types);
 
         session.Spawner.SetSpawnsPerMinute(EnemyRoster.Gemini, 0f);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1000;
+        session.Stats.MaxHitPoints = 1000f;
+        session.Stats.HitPoints = 1000f;
         for (var t = 0; t < 31 && !session.IsFinished; t++)
         {
             session.Update(Vector2.Zero, null, 1f, Width, Height);
@@ -338,7 +467,7 @@ public class ProgressionTests
         Assert.Null(UpgradeCards.HitTest(Center, 3, corners[0] + new Vector2(UpgradeCards.CardSize.X + 5, 5)));
     }
 
-    private static (int, int, float, int, float, int) Snapshot(PlayerStats stats) =>
+    private static (int, int, float, int, float, float) Snapshot(PlayerStats stats) =>
         (stats.Weapons.Count, stats.Laser().Level, stats.Laser().Damage, stats.Laser().Count, stats.Laser().AttacksPerSecond, stats.MaxHitPoints);
 
     private static (WeaponKind Kind, int Level, float Damage, float AttacksPerSecond, int Count, int Pierce, double Progress) WeaponSnapshot(OwnedWeapon weapon) =>

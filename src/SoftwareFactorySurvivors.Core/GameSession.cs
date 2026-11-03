@@ -4,8 +4,12 @@ namespace SoftwareFactorySurvivors.Core;
 
 /// <summary>
 /// One play-through: the ship, its lasers and the enemies, plus the player's level and upgrades.
-/// It ends in defeat when the ship runs out of hit points, or in victory when it is still alive after
-/// SurvivalSeconds. It opens paused on the starting-weapon pick; each level gained then pauses play until the
+/// The ship starts with 100 hit points. Whatever touches it (an enemy, a boss, an armed trail or ring band)
+/// deals its contact damage the moment it first touches and again every ContactTickSeconds while it stays in
+/// contact, each source on its own timer; enemies and bosses survive the contact, and an armed bullet deals its
+/// damage once and is gone. Contact damage grows with the clock (EnemyRoster.ScaledContactDamage).
+/// It ends in defeat when the ship's hit points reach 0, or in victory when the Claude Boss is killed.
+/// It opens paused on the starting-weapon pick; each level gained then pauses play until the
 /// player picks one of up to three offered cards (a level with no card left to offer doesn't pause).
 /// Every owned weapon fires on its own timer with its own stats.
 /// </summary>
@@ -20,8 +24,14 @@ public sealed class GameSession
     /// <summary>Angle between neighbouring lasers in a multi-laser volley.</summary>
     public const float VolleySpreadRadians = 10f * MathF.PI / 180f;
 
-    /// <summary>After an enemy touches the ship, further contact is ignored for this long.</summary>
-    public const float InvulnerableSeconds = 1f;
+    /// <summary>While a source stays in contact with the ship, it deals its damage again after each this many seconds.</summary>
+    public const float ContactTickSeconds = 0.5f;
+
+    // The ship's outline reaches 24 px from its centre; the slack absorbs float rounding in the transformed strokes.
+    private const float ShipContactRadius = 24.5f;
+
+    // Absorbs float drift in a contact timer summed from many small frames, so a tick due at 0.5 s isn't a frame late.
+    private const float ContactTimerSlack = 1e-4f;
 
     public const int UpgradeChoices = 3;
 
@@ -38,6 +48,10 @@ public sealed class GameSession
     private readonly List<LightningSegment> _lightningSegments = [];
     private readonly List<Vector2> _laserExplosions = [];
     private readonly Action<Enemy, float> _damageEnemy;
+    // Seconds until each touching source (enemy or hazard) deals its next tick; a source not touching has no entry.
+    // Two maps swapped each frame, so a source that stops touching drops its timer without a per-frame allocation.
+    private Dictionary<object, float> _contactTimers = new(ReferenceEqualityComparer.Instance);
+    private Dictionary<object, float> _nextContactTimers = new(ReferenceEqualityComparer.Instance);
     private int _pendingLevelUps;
 
     /// <param name="roster">Enemy types that join the spawner at their arrival times; defaults to EnemyRoster.All.</param>
@@ -113,7 +127,7 @@ public sealed class GameSession
     public bool IsVictory { get; private set; }
     public bool IsFinished => IsGameOver || IsVictory;
 
-    /// <summary>Seconds of contact immunity left after the ship was last hit.</summary>
+    /// <summary>Seconds of immunity left; ordinary contact damage grants none, so it stays 0 after a hit.</summary>
     public float InvulnerableSecondsLeft { get; private set; }
 
     /// <summary>The cards on offer while play is paused for the starting pick or a level-up; null while playing.</summary>
@@ -219,7 +233,7 @@ public sealed class GameSession
         foreach (var enemy in SnapshotEnemies())
             _enemies.AddRange(enemy.TakeNewShields());
         _lasers.RemoveAll(laser => laser.IsExpired(width, height));
-        ResolveContact();
+        ResolveContact(elapsedSeconds);
 
         var claudeBossKilled = _bosses.RemoveAll(boss => boss.IsDead && boss.Type == EnemyRoster.ClaudeBoss) > 0;
         var hallucinationBossKilled = _bosses.RemoveAll(boss => boss.IsDead && boss.Type == EnemyRoster.Hallucination) > 0;
@@ -368,35 +382,92 @@ public sealed class GameSession
         }
     }
 
-    private void ResolveContact()
+    /// <summary>
+    /// Contact damage: every enemy, boss or armed hazard touching the ship deals one tick of its time-scaled damage
+    /// the moment it first touches, then another every ContactTickSeconds while it stays in contact, each on its own
+    /// timer. Enemies and bosses survive the contact; an armed bullet deals its tick and is removed. A source that
+    /// stops touching loses its timer, so touching again deals a fresh tick at once.
+    /// </summary>
+    private void ResolveContact(float elapsedSeconds)
     {
-        if (InvulnerableSecondsLeft > 0f)
-            return;
-
+        _nextContactTimers.Clear();
         var shipStrokes = Ship.GetStrokes();
-        var touching = _enemies
-            .Where(enemy => !(enemy.Movement is Thrown thrown && thrown.IsHarmlessInFlight))
-            .Where(enemy => Collision.StrokesTouch(shipStrokes, enemy.GetStrokes()))
-            .ToList();
-        var touchingHazards = _hazards.Where(hazard => hazard.IsArmed && hazard.Touches(shipStrokes)).ToList();
-        if (touching.Count == 0 && touchingHazards.Count == 0)
-            return;
+        var shipPosition = Ship.Position;
 
-        Stats.HitPoints = Math.Max(0, Stats.HitPoints - 1);
-        if (Stats.HitPoints == 0)
+        foreach (var enemy in _enemies)
         {
-            // Leave the enemy that landed the final blow on screen behind the GAME OVER text.
-            IsGameOver = true;
-            return;
+            if (IsGameOver)
+                break;
+            if (enemy.IsDead || enemy.Movement is Thrown { IsHarmlessInFlight: true })
+                continue;
+            // The bounding circles only skip enemies that provably can't reach the ship, before the exact test.
+            var reach = ShipContactRadius + enemy.Type.Radius;
+            if (Vector2.DistanceSquared(shipPosition, enemy.Position) > reach * reach
+                || !Collision.StrokesTouch(shipStrokes, enemy.GetStrokes()))
+                continue;
+
+            var damage = EnemyRoster.ScaledContactDamage(enemy.Type.ContactDamage, ElapsedSeconds);
+            for (var tick = ContactTicksDue(enemy, elapsedSeconds); tick > 0 && !IsGameOver; tick--)
+                DamageShip(damage);
         }
 
-        // Surviving a hit destroys what touched the ship (for no points) and grants a moment of immunity.
-        // Bosses survive the collision; they can only be beaten with lasers.
-        foreach (var enemy in touching.Where(enemy => !_bosses.Contains(enemy)))
-            _enemies.Remove(enemy);
-        foreach (var hazard in touchingHazards.Where(h => h.ExpireOnContact))
-            _hazards.Remove(hazard);
-        InvulnerableSecondsLeft = InvulnerableSeconds;
+        foreach (var hazard in _hazards)
+        {
+            if (IsGameOver)
+                break;
+            if (!hazard.IsArmed || !hazard.Touches(shipStrokes))
+                continue;
+
+            var damage = EnemyRoster.ScaledContactDamage(hazard.ContactDamage, ElapsedSeconds);
+            if (hazard.ExpireOnContact)
+            {
+                // A bullet hurts once and is gone; it keeps no timer.
+                DamageShip(damage);
+                hazard.MarkSpent();
+                continue;
+            }
+            for (var tick = ContactTicksDue(hazard, elapsedSeconds); tick > 0 && !IsGameOver; tick--)
+                DamageShip(damage);
+        }
+
+        // Leave whatever landed the final blow on screen behind the GAME OVER text.
+        if (!IsGameOver)
+            _hazards.RemoveAll(hazard => hazard.IsSpent);
+        (_contactTimers, _nextContactTimers) = (_nextContactTimers, _contactTimers);
+    }
+
+    /// <summary>
+    /// How many ticks a touching source deals this frame: one on first contact, then one each time its own
+    /// ContactTickSeconds timer runs out (several, if a long frame covers several). Records its timer for next frame.
+    /// </summary>
+    private int ContactTicksDue(object source, float elapsedSeconds)
+    {
+        int ticks;
+        float left;
+        if (_contactTimers.TryGetValue(source, out var previous))
+        {
+            left = previous - elapsedSeconds;
+            ticks = left > ContactTimerSlack ? 0 : 1 + (int)MathF.Floor((ContactTimerSlack - left) / ContactTickSeconds);
+            left += ticks * ContactTickSeconds;
+        }
+        else
+        {
+            ticks = 1;
+            left = ContactTickSeconds;
+        }
+        _nextContactTimers[source] = left;
+        return ticks;
+    }
+
+    /// <summary>
+    /// The one place the ship loses hit points, for every source (enemy, boss, bullet, trail, ring). Takes damage
+    /// already scaled for the clock; at 0 hit points the run is lost.
+    /// </summary>
+    private void DamageShip(float damage)
+    {
+        Stats.HitPoints -= damage;
+        if (Stats.HitPoints <= 0f)
+            IsGameOver = true;
     }
 
     private void OfferNextUpgrade()

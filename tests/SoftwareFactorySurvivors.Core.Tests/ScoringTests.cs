@@ -63,12 +63,15 @@ public class ScoringTests
     {
         var session = TestEnemies.QuietSession(Center);
         session.Update(Vector2.Zero, null, 599.9f, Width, Height);
+        // Less than one tick left, so the final-frame touch is lethal.
+        session.Stats.HitPoints = 1f;
         session.AddEnemy(EnemyRoster.Gemini.Create(Center));
 
         session.Update(Vector2.Zero, null, 0.5f, Width, Height);
 
         Assert.True(session.IsGameOver);
         Assert.False(session.IsVictory);
+        Assert.Equal(0f, session.Stats.HitPoints);
     }
 
     [Fact]

@@ -67,7 +67,8 @@ public class ClosingRingTests
     public void Ship_on_band_during_warmup_takes_no_damage()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
+        session.Stats.MaxHitPoints = 3f;
+        session.Stats.HitPoints = 3f;
 
         // Create ring directly on the ship (radius = 0 or band intersecting ship)
         // With Center at ship's Position, radius = 10f puts circle right on ship strokes
@@ -86,40 +87,43 @@ public class ClosingRingTests
     }
 
     [Fact]
-    public void Ship_crossing_the_armed_ring_band_costs_exactly_one_hit_through_contact_rule()
+    public void Ship_on_the_armed_ring_band_loses_six_times_the_time_scale_each_tick_and_the_ring_stays()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 5;
 
-        // Place ring centred at Center + (200, 0), with stationary radius 100f
-        // Band passes through x = Center.X + 100
+        // Ring centred at Center + (200, 0), stationary radius 100: its band passes through x = Center.X + 100.
         var ringCenter = Center + new Vector2(200, 0);
         var hazard = ClosingRing.CreateRingHazard(ringCenter, initialRadius: 100f, minRadius: 100f, contractionSpeed: 0f, warmupSeconds: 1.0f, lifetimeSeconds: 10f);
+        Assert.Equal(6f, hazard.ContactDamage);
         session.AddHazard(hazard);
 
-        // Advance 1.1s so ring becomes armed while ship is at Center (100 px away from band: distance to ring center is 200, radius is 100, so outside band)
+        // Armed while the ship is 100 px clear of the band: nothing.
         session.Update(Vector2.Zero, null, 1.1f, Width, Height);
         Assert.True(hazard.IsArmed);
-        Assert.Equal(5, session.Stats.HitPoints);
+        Assert.Equal(100f, session.Stats.HitPoints);
 
-        // Move ship to the right towards ringCenter so it crosses the band at radius 100
-        // Speed is 200 px/sec. In 0.5s it moves 100px from Center to Center + (100,0), directly intersecting the band
+        // Fly onto the band (200 px/s for 0.5 s = 100 px): one tick at once.
         session.Update(new Vector2(1, 0), null, 0.5f, Width, Height);
+        var expected = 100f - EnemyRoster.ScaledContactDamage(Hazard.RingContactDamage, session.ElapsedSeconds);
+        Assert.Equal(expected, session.Stats.HitPoints, precision: 2);
+        Assert.Equal(0f, session.InvulnerableSecondsLeft);
 
-        // Crossing the band costs exactly one hit
-        Assert.Equal(4, session.Stats.HitPoints);
-        Assert.True(session.InvulnerableSecondsLeft > 0f);
-
-        // While invulnerable, continuing to move across does not cost further hits
-        session.Update(new Vector2(1, 0), null, 0.2f, Width, Height);
-        Assert.Equal(4, session.Stats.HitPoints);
+        // Held on the band: another tick every 0.5 s, and the ring stays in play.
+        for (var tick = 0; tick < 3; tick++)
+        {
+            session.Update(Vector2.Zero, null, 0.5f, Width, Height);
+            expected -= EnemyRoster.ScaledContactDamage(Hazard.RingContactDamage, session.ElapsedSeconds);
+            Assert.Equal(expected, session.Stats.HitPoints, precision: 2);
+            Assert.Contains(hazard, session.Hazards);
+        }
     }
 
     [Fact]
     public void Ship_staying_strictly_inside_or_outside_the_band_takes_no_damage()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
+        session.Stats.MaxHitPoints = 3f;
+        session.Stats.HitPoints = 3f;
 
         // Place ring far away: radius 50, center at (100, 100) -> ship is strictly outside
         var hazard = ClosingRing.CreateRingHazard(new Vector2(100, 100), initialRadius: 50f, minRadius: 50f, contractionSpeed: 0f, warmupSeconds: 1.0f, lifetimeSeconds: 5f);
@@ -135,7 +139,8 @@ public class ClosingRingTests
     public void Ship_held_inside_the_minimum_radius_takes_no_damage_over_the_rings_whole_life()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 5;
+        session.Stats.MaxHitPoints = 5f;
+        session.Stats.HitPoints = 5f;
 
         // Ring centred at Center (ship position), initialRadius 200, contracting at 50/s down to minRadius 70 (> ship diameter ~48px)
         // Lifetime is 4.0s, warmup is 1.0s
@@ -166,7 +171,8 @@ public class ClosingRingTests
     public void ClosingRing_ability_emits_hazards_periodically_and_integrates_with_GameSession()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 5;
+        session.Stats.MaxHitPoints = 5f;
+        session.Stats.HitPoints = 5f;
 
         var ability = new ClosingRing(
             initialRadius: 150f,

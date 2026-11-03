@@ -181,41 +181,49 @@ public class FinalBossesTests
     }
 
     [Fact]
-    public void Ship_on_fresh_trail_segment_after_arming_costs_hit_point_and_ends_game_when_exhausted()
+    public void Ship_on_armed_trail_loses_four_times_the_time_scale_each_tick_and_the_trail_stays_until_hit_points_run_out()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 2;
 
-        var trail = Hazard.CreateTrail(Center - new Vector2(50, 0), Center + new Vector2(50, 0), halfWidth: 25f, lifetimeSeconds: 4f, armSeconds: 1f);
+        var trail = Hazard.CreateTrail(Center - new Vector2(50, 0), Center + new Vector2(50, 0), halfWidth: 25f, lifetimeSeconds: 60f, armSeconds: 1f);
         session.AddHazard(trail);
+        Assert.Equal(4f, trail.ContactDamage);
 
         // Before arming (e.g. at 0.5s), no damage
         session.Update(Vector2.Zero, null, 0.5f, Width, Height);
-        Assert.Equal(2, session.Stats.HitPoints);
-        Assert.False(session.IsGameOver);
+        Assert.Equal(100f, session.Stats.HitPoints);
 
-        // Advance to 1.05s (now armed): takes 1 damage, invulnerability granted
+        // Advance to 1.05s (now armed): one tick of 4 x scale, no immunity, the trail stays.
         session.Update(Vector2.Zero, null, 0.55f, Width, Height);
-        Assert.Equal(1, session.Stats.HitPoints);
-        Assert.False(session.IsGameOver);
-        Assert.True(session.InvulnerableSecondsLeft > 0f);
+        var expected = 100f - EnemyRoster.ScaledContactDamage(Hazard.TrailContactDamage, session.ElapsedSeconds);
+        Assert.Equal(expected, session.Stats.HitPoints, precision: 2);
+        Assert.Equal(0f, session.InvulnerableSecondsLeft);
+        Assert.Contains(trail, session.Hazards);
 
-        // Advance while invulnerable: no further damage
-        session.Update(Vector2.Zero, null, 0.5f, Width, Height);
-        Assert.Equal(1, session.Stats.HitPoints);
+        // Every further 0.5 s on the trail costs another tick, scaled for its moment.
+        for (var tick = 0; tick < 3; tick++)
+        {
+            session.Update(Vector2.Zero, null, 0.25f, Width, Height);
+            Assert.Equal(expected, session.Stats.HitPoints, precision: 2);
+            session.Update(Vector2.Zero, null, 0.25f, Width, Height);
+            expected -= EnemyRoster.ScaledContactDamage(Hazard.TrailContactDamage, session.ElapsedSeconds);
+            Assert.Equal(expected, session.Stats.HitPoints, precision: 2);
+            Assert.Contains(trail, session.Hazards);
+        }
 
-        // Wait until invulnerability expires (at total time 1.05 + 0.5 + 0.6 = 2.15s < 4.0s lifetime)
-        session.Update(Vector2.Zero, null, 0.6f, Width, Height);
-        // Ship takes second hit, reducing HitPoints to 0 and triggering GameOver
-        Assert.Equal(0, session.Stats.HitPoints);
+        // Stay on it: hit points run out, are stored as exactly 0, and the game is lost.
+        for (var i = 0; i < 400 && !session.IsGameOver; i++)
+            session.Update(Vector2.Zero, null, 0.05f, Width, Height);
         Assert.True(session.IsGameOver);
+        Assert.Equal(0f, session.Stats.HitPoints);
     }
 
     [Fact]
     public void Ship_off_trail_segment_takes_no_damage()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
+        session.Stats.MaxHitPoints = 3f;
+        session.Stats.HitPoints = 3f;
 
         var trail = Hazard.CreateTrail(new Vector2(100, 100), new Vector2(200, 100), halfWidth: 25f, lifetimeSeconds: 4f, armSeconds: 1f);
         session.AddHazard(trail);
@@ -231,14 +239,16 @@ public class FinalBossesTests
     public void Trail_segment_expires_after_lifetime_and_no_longer_damages()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 5;
+        session.Stats.MaxHitPoints = 5f;
+        session.Stats.HitPoints = 5f;
 
         var trail = Hazard.CreateTrail(Center - new Vector2(50, 0), Center + new Vector2(50, 0), halfWidth: 25f, lifetimeSeconds: 2.0f, armSeconds: 1.0f);
         session.AddHazard(trail);
 
-        // Advance 1.1s: armed, ship takes 1 damage
+        // Advance 1.1s: armed, ship takes one trail tick
         session.Update(Vector2.Zero, null, 1.1f, Width, Height);
-        Assert.Equal(4, session.Stats.HitPoints);
+        var afterTick = 5f - EnemyRoster.ScaledContactDamage(Hazard.TrailContactDamage, 1.1f);
+        Assert.Equal(afterTick, session.Stats.HitPoints, precision: 2);
         Assert.Contains(trail, session.Hazards);
 
         // Advance past lifetime (another 1.0s, total 2.1s > 2.0s):
@@ -246,9 +256,9 @@ public class FinalBossesTests
         Assert.DoesNotContain(trail, session.Hazards);
         Assert.Empty(session.Hazards);
 
-        // Advance further at the same position, invulnerability now gone: no further damage taken
+        // Advance further at the same position: the expired trail deals no further damage
         session.Update(Vector2.Zero, null, 1.5f, Width, Height);
-        Assert.Equal(4, session.Stats.HitPoints);
+        Assert.Equal(afterTick, session.Stats.HitPoints, precision: 2);
     }
 
     [Fact]
@@ -268,7 +278,8 @@ public class FinalBossesTests
         foreach (var kind in kinds)
         {
             var session = TestEnemies.QuietSession(Center);
-            session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
+            session.Stats.MaxHitPoints = 30f;
+            session.Stats.HitPoints = 30f;
 
             Hazard hazard = kind switch
             {
@@ -284,16 +295,17 @@ public class FinalBossesTests
             // Placed on ship at creation, asserts no hit before 1.0s
             session.Update(Vector2.Zero, null, 0.4f, Width, Height);
             Assert.False(hazard.IsArmed);
-            Assert.Equal(3, session.Stats.HitPoints);
+            Assert.Equal(30f, session.Stats.HitPoints);
 
             session.Update(Vector2.Zero, null, 0.5f, Width, Height); // total 0.9s < 1.0s
             Assert.False(hazard.IsArmed);
-            Assert.Equal(3, session.Stats.HitPoints);
+            Assert.Equal(30f, session.Stats.HitPoints);
 
-            // Advance past 1.0s (total 1.05s) -> now armed and hits
+            // Advance past 1.0s (total 1.05s) -> now armed and hits for its kind's damage, scaled for the clock
             session.Update(Vector2.Zero, null, 0.15f, Width, Height);
             Assert.True(hazard.IsArmed);
-            Assert.Equal(2, session.Stats.HitPoints);
+            Assert.Equal(30f - EnemyRoster.ScaledContactDamage(Hazard.DefaultContactDamage(kind), session.ElapsedSeconds),
+                session.Stats.HitPoints, precision: 2);
         }
     }
 
@@ -356,7 +368,8 @@ public class FinalBossesTests
         // A finished session stops advancing ElapsedSeconds; keep the ship alive so the wait loop below terminates.
         // Hold the boss still: an added (non-arrival) boss rammed by its Dash is destroyed on contact before
         // BulletBursts' first burst at 3 s, which is not what this hazard test is about.
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
         var claudeBoss = TestEnemies.Stationary(EnemyRoster.ClaudeBoss, new Vector2(200, 200));
         session.AddEnemy(claudeBoss);
 
@@ -387,7 +400,8 @@ public class FinalBossesTests
     public void Hallucination_boss_in_GameSession_produces_copies_after_split_interval()
     {
         var session = TestEnemies.QuietSession(new Vector2(900, 700));
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 50;
+        session.Stats.MaxHitPoints = 50f;
+        session.Stats.HitPoints = 50f;
         var hallucination = new Enemy(EnemyRoster.Hallucination, new Vector2(200, 200));
         session.AddEnemy(hallucination);
 
@@ -430,7 +444,8 @@ public class FinalBossesTests
     public void Hallucination_copies_have_no_ability_and_do_not_split_further_over_multiple_periods()
     {
         var session = TestEnemies.QuietSession(new Vector2(2500, 2500));
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 50;
+        session.Stats.MaxHitPoints = 50f;
+        session.Stats.HitPoints = 50f;
         var boss = new Enemy(EnemyRoster.Hallucination, new Vector2(300, 300));
         session.AddEnemy(boss);
 
@@ -449,69 +464,55 @@ public class FinalBossesTests
     }
 
     [Fact]
-    public void ClaudeBoss_closing_ring_band_hits_once_when_armed_but_interior_and_exterior_are_safe()
+    public void Closing_ring_interior_exterior_and_disarmed_band_cost_nothing()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 5;
 
-        // Ring centred at Center (ship position), initialRadius 200, contracting down to minRadius 70
-        // (minRadius 70 > ship radius ~24)
-        var hazard = ClosingRing.CreateRingHazard(
-            Center,
-            initialRadius: 200f,
-            minRadius: 70f,
-            contractionSpeed: 40f,
-            warmupSeconds: 1.0f,
-            lifetimeSeconds: 5.0f);
-        session.AddHazard(hazard);
-
-        // (a) First 1.0s: ship is inside the ring (and even if on band, unarmed). No damage in first 1.0s.
-        session.Update(Vector2.Zero, null, 0.5f, Width, Height);
-        Assert.Equal(5, session.Stats.HitPoints);
-        Assert.False(hazard.IsArmed);
-
-        // (b) Ship held strictly inside the ring for its whole life -> HitPoints unchanged
-        for (var t = 0.5f; t < 5.5f; t += 0.5f)
+        // Ship held strictly inside a contracting ring for its whole life: nothing.
+        var inside = ClosingRing.CreateRingHazard(Center, initialRadius: 200f, minRadius: 70f, contractionSpeed: 40f,
+            warmupSeconds: 1.0f, lifetimeSeconds: 5.0f);
+        session.AddHazard(inside);
+        for (var t = 0f; t < 5.5f; t += 0.5f)
         {
             session.Update(Vector2.Zero, null, 0.5f, Width, Height);
-            Assert.Equal(5, session.Stats.HitPoints);
+            Assert.Equal(100f, session.Stats.HitPoints);
         }
-        Assert.DoesNotContain(hazard, session.Hazards);
+        Assert.DoesNotContain(inside, session.Hazards);
 
-        // (c) Ship strictly outside the ring -> HitPoints unchanged
-        var farCenter = Center + new Vector2(400, 0);
-        var farRing = ClosingRing.CreateRingHazard(farCenter, initialRadius: 80f, minRadius: 60f, warmupSeconds: 1.0f, lifetimeSeconds: 3.0f);
-        session.AddHazard(farRing);
-        session.Update(Vector2.Zero, null, 1.5f, Width, Height); // now armed
-        Assert.True(farRing.IsArmed);
-        Assert.Equal(5, session.Stats.HitPoints); // Ship at Center is ~400px away, outside
+        // Ship strictly outside an armed ring: nothing.
+        var outside = ClosingRing.CreateRingHazard(Center + new Vector2(400, 0), initialRadius: 80f, minRadius: 60f,
+            warmupSeconds: 1.0f, lifetimeSeconds: 3.0f);
+        session.AddHazard(outside);
+        session.Update(Vector2.Zero, null, 1.5f, Width, Height);
+        Assert.True(outside.IsArmed);
+        Assert.Equal(100f, session.Stats.HitPoints);
 
-        // (d) Armed, with ship touching the band -> costs exactly one hit through contact rule
-        // Spawn ring whose band passes directly through ship's position (Center)
-        // Center is (500, 400). Ring center at (600, 400), radius 100 -> band passes right through (500, 400)
-        var bandRingCenter = Center + new Vector2(100, 0);
-        var onBandRing = ClosingRing.CreateRingHazard(
-            bandRingCenter,
-            initialRadius: 100f,
-            minRadius: 100f,
-            contractionSpeed: 0f,
-            warmupSeconds: 1.0f,
-            lifetimeSeconds: 5.0f);
-        session.AddHazard(onBandRing);
-
-        // Advance 0.5s: ship is on band, but ring is still unarmed -> 0 hits
+        // Ship on the band of a ring still warming up: nothing until it arms.
+        var onBand = ClosingRing.CreateRingHazard(Center + new Vector2(100, 0), initialRadius: 100f, minRadius: 100f,
+            contractionSpeed: 0f, warmupSeconds: 1.0f, lifetimeSeconds: 5.0f);
+        session.AddHazard(onBand);
         session.Update(Vector2.Zero, null, 0.5f, Width, Height);
-        Assert.Equal(5, session.Stats.HitPoints);
-        Assert.False(onBandRing.IsArmed);
+        Assert.False(onBand.IsArmed);
+        Assert.Equal(100f, session.Stats.HitPoints);
+    }
 
-        // Advance another 0.6s (total age 1.1s): ring becomes armed -> exactly one hit
-        session.Update(Vector2.Zero, null, 0.6f, Width, Height);
-        Assert.Equal(4, session.Stats.HitPoints);
-        Assert.True(session.InvulnerableSecondsLeft > 0f);
+    [Fact]
+    public void Boss_on_the_ship_survives_and_deals_fifteen_times_the_time_scale_each_tick()
+    {
+        var session = TestEnemies.QuietSession(Center);
+        var boss = TestEnemies.Stationary(EnemyRoster.Hallucination, Center);
+        session.AddEnemy(boss);
+        Assert.Equal(15f, EnemyRoster.Hallucination.ContactDamage);
 
-        // Further time while invulnerable costs no extra hits
-        session.Update(Vector2.Zero, null, 0.2f, Width, Height);
-        Assert.Equal(4, session.Stats.HitPoints);
+        var expected = 100f;
+        for (var tick = 0; tick < 4; tick++)
+        {
+            session.Update(Vector2.Zero, null, tick == 0 ? 0.01f : 0.5f, Width, Height);
+            expected -= EnemyRoster.ScaledContactDamage(EnemyRoster.BossContactDamage, session.ElapsedSeconds);
+            Assert.Equal(expected, session.Stats.HitPoints, precision: 2);
+            Assert.Contains(boss, session.Enemies);
+        }
+        Assert.False(boss.IsDead);
     }
 
     [Fact]
@@ -520,7 +521,8 @@ public class FinalBossesTests
         // Realistic dt = 1/60s (approx 0.016667s)
         const float dt = 1f / 60f;
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 5;
+        session.Stats.MaxHitPoints = 50f;
+        session.Stats.HitPoints = 50f;
 
         // Create an armed-guarded hazard touching the ship at Center with default clamped armSeconds = 1.0s
         var trail = Hazard.CreateTrail(Center - new Vector2(20, 0), Center + new Vector2(20, 0), halfWidth: 25f, armSeconds: 1.0f);
@@ -532,7 +534,7 @@ public class FinalBossesTests
         session.Update(Vector2.Zero, null, dt, Width, Height);
         Assert.Equal(dt, trail.AgeSeconds, precision: 4);
         Assert.False(trail.IsArmed);
-        Assert.Equal(5, session.Stats.HitPoints);
+        Assert.Equal(50f, session.Stats.HitPoints);
 
         // Step frame-by-frame with dt = 1/60s. For every update where cumulative time since hazard appeared is < 1.0s,
         // no hit may occur.
@@ -543,21 +545,23 @@ public class FinalBossesTests
             session.Update(Vector2.Zero, null, dt, Width, Height);
             var totalTime = (frame + 1) * dt;
             Assert.False(trail.IsArmed, $"Trail hazard was armed at cumulative time {totalTime:F4}s (< 1.0s)");
-            Assert.Equal(5, session.Stats.HitPoints);
+            Assert.Equal(50f, session.Stats.HitPoints);
         }
 
         // Step clearly past 1.0s (e.g. two frames of dt, reaching 61/60s = ~1.0167s) so float accumulation
         // roundoff does not stop at 0.9999997s. Now it becomes armed and deals exactly one hit.
         session.Update(Vector2.Zero, null, dt * 2, Width, Height);
         Assert.True(trail.IsArmed);
-        Assert.Equal(4, session.Stats.HitPoints);
+        Assert.Equal(50f - EnemyRoster.ScaledContactDamage(Hazard.TrailContactDamage, session.ElapsedSeconds),
+            session.Stats.HitPoints, precision: 2);
     }
 
     [Fact]
     public void Directly_built_ring_with_aggressive_contraction_never_drops_below_minimum_radius_and_center_ship_stays_safe()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 5;
+        session.Stats.MaxHitPoints = 5f;
+        session.Stats.HitPoints = 5f;
 
         // Create ring directly with parameters that would contract well below DefaultMinRadius (60f)
         // e.g. initial radius 100, contractionSpeed 100 px/s over 3 seconds -> unconstrained would reach -200px or tiny minRadius.
@@ -614,7 +618,8 @@ public class FinalBossesTests
             roster: [],
             bosses: [new BossArrival(0f, EnemyRoster.Hallucination)],
             rings: []).WithLaser();
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 50;
+        session.Stats.MaxHitPoints = 50f;
+        session.Stats.HitPoints = 50f;
 
         // Advance 1 frame so boss arrives
         session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);

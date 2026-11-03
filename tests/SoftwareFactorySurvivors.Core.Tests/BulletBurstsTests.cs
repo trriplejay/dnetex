@@ -97,26 +97,31 @@ public class BulletBurstsTests
     }
 
     [Fact]
-    public void Armed_bullet_touching_ship_in_GameSession_costs_exactly_one_hit_point()
+    public void Armed_bullet_touching_ship_deals_eight_times_the_time_scale_once_and_is_removed()
     {
-        var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
+        // At 10:00 the scale is 2, so the bullet's 8 base damage lands as 16.
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [], rings: [],
+            start: new StartOptions(StartSeconds: 600f)).WithLaser();
 
         var bullet = Hazard.CreateBullet(Center, radius: 10f, lifetimeSeconds: 4.0f, armSeconds: 1.0f);
+        Assert.Equal(8f, bullet.ContactDamage);
+        Assert.True(bullet.ExpireOnContact);
         session.AddHazard(bullet);
 
         // Before arming (e.g. 0.5s), no damage
         session.Update(Vector2.Zero, null, 0.5f, Width, Height);
-        Assert.Equal(3, session.Stats.HitPoints);
+        Assert.Equal(100f, session.Stats.HitPoints);
         Assert.False(bullet.IsArmed);
 
-        // Advance to 1.05s total (bullet is now armed) -> contact occurs and costs exactly 1 HP
+        // Advance to 1.05s total (bullet is now armed): one hit of 8 x scale, and the bullet is gone.
         session.Update(Vector2.Zero, null, 0.55f, Width, Height);
         Assert.True(bullet.IsArmed);
-        Assert.Equal(2, session.Stats.HitPoints);
-        Assert.True(session.InvulnerableSecondsLeft > 0f);
-
-        // Bullet expires on contact per ExpireOnContact = true
+        Assert.Equal(100f - 16f, session.Stats.HitPoints);
         Assert.DoesNotContain(bullet, session.Hazards);
+        Assert.Equal(0f, session.InvulnerableSecondsLeft);
+
+        // Staying put costs nothing more.
+        session.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(100f - 16f, session.Stats.HitPoints);
     }
 }

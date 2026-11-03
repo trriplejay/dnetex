@@ -144,7 +144,8 @@ public class ClaudeBossRingFiftyPercentTests
     public void In_a_GameSession_at_most_one_ring_is_out_and_the_pre_crossing_ring_lives_out_its_8s(float crossingAge)
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
         // Held still below the ship (which fires upward), so only the ability's timing is in play.
         var boss = TestEnemies.Stationary(EnemyRoster.ClaudeBoss, new Vector2(500f, 780f));
         session.AddEnemy(boss);

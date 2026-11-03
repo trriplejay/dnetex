@@ -23,12 +23,27 @@ public interface IHazardProducer
 /// </summary>
 public class Hazard
 {
+    /// <summary>Base damage per contact tick of a trail segment, before time scaling.</summary>
+    public const float TrailContactDamage = 4f;
+
+    /// <summary>Base damage per contact tick of a closing-ring band, before time scaling.</summary>
+    public const float RingContactDamage = 6f;
+
+    /// <summary>Base damage of a bullet, dealt once before it is removed, before time scaling.</summary>
+    public const float BulletContactDamage = 8f;
+
     public HazardKind Kind { get; }
     public ProjectileShape Shape { get; protected set; }
     public float AgeSeconds { get; protected set; }
     public float ArmSeconds { get; }
     public float LifetimeSeconds { get; }
     public bool ExpireOnContact { get; set; }
+
+    /// <summary>Base damage per contact tick (see EnemyRoster.ScaledContactDamage for how it grows with the clock).</summary>
+    public float ContactDamage { get; }
+
+    /// <summary>True once a hazard that expires on contact has hit the ship; the session removes it.</summary>
+    public bool IsSpent { get; private set; }
 
     public bool IsArmed => AgeSeconds >= ArmSeconds;
     public bool IsExpired => AgeSeconds >= LifetimeSeconds;
@@ -46,8 +61,21 @@ public class Hazard
         Shape = shape;
         LifetimeSeconds = lifetimeSeconds;
         ArmSeconds = MathF.Max(1.0f, armSeconds);
+        ContactDamage = DefaultContactDamage(kind);
         _onUpdate = onUpdate;
     }
+
+    /// <summary>The base contact damage of each hazard kind: trail 4, ring 6, bullet 8.</summary>
+    public static float DefaultContactDamage(HazardKind kind) => kind switch
+    {
+        HazardKind.Trail => TrailContactDamage,
+        HazardKind.Ring => RingContactDamage,
+        HazardKind.Bullet => BulletContactDamage,
+        _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Hazard kind has no contact damage."),
+    };
+
+    /// <summary>Marks a hazard that expires on contact as used up, so the session removes it.</summary>
+    internal void MarkSpent() => IsSpent = true;
 
     public virtual void Update(float elapsedSeconds)
     {
