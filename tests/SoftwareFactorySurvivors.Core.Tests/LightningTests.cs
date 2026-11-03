@@ -103,8 +103,97 @@ public class LightningTests
         var segments = RunUntilStrike(session);
 
         Assert.Single(segments);
+        Assert.Equal(new LightningSegment(session.Ship.Position, lone.Position), segments[0]);
         Assert.Equal(10f - 0.8f, lone.HitPoints, precision: 4);
         Assert.Equal(10f, outOfRange.HitPoints);
+    }
+
+    [Fact]
+    public void Strike_with_no_live_enemy_leaves_segments_empty_and_damages_nobody()
+    {
+        var deadEnemy = Target(new Vector2(100, 100));
+        deadEnemy.TakeDamage(100f);
+        Assert.True(deadEnemy.IsDead);
+
+        var segments = new List<LightningSegment>();
+        var damaged = new List<(Enemy, float)>();
+        Lightning.Strike(
+            origin: Vector2.Zero,
+            damage: 10f,
+            hops: 3,
+            enemies: [deadEnemy],
+            random: new Random(42),
+            dealDamage: (enemy, dmg) => damaged.Add((enemy, dmg)),
+            segments: segments);
+
+        Assert.Empty(segments);
+        Assert.Empty(damaged);
+
+        var session = LightningSession();
+        var sessionDead = Target(Center + new Vector2(0, -150));
+        sessionDead.TakeDamage(100f);
+        session.AddEnemy(sessionDead);
+
+        for (var i = 0; i < 120; i++)
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
+
+        Assert.Empty(session.LightningSegments);
+    }
+
+    [Fact]
+    public void When_chain_runs_out_of_range_reports_only_hops_made_with_endpoints_at_ship_or_struck_enemies()
+    {
+        var origin = new Vector2(0, 0);
+        var first = Target(new Vector2(0, 50), hitPoints: 1f);
+        var second = Target(new Vector2(0, 150), hitPoints: 100f); // 100 px from first: within ChainRange (150 px)
+        var third = Target(new Vector2(0, 350), hitPoints: 100f);  // 200 px from second: out of ChainRange
+        var enemies = new List<Enemy> { first, second, third };
+
+        var segments = new List<LightningSegment>();
+        var struck = new List<Enemy>();
+        // 5 hops allowed, but only 1 hop can be made before chain runs out of range (first is dead, third is 200 px away)
+        Lightning.Strike(
+            origin: origin,
+            damage: 10f,
+            hops: 5,
+            enemies: enemies,
+            random: new Random(1),
+            dealDamage: (e, dmg) =>
+            {
+                struck.Add(e);
+                e.TakeDamage(dmg);
+            },
+            segments: segments);
+
+        // 1 initial hit + 1 hop = 2 segments
+        Assert.Equal(2, segments.Count);
+        Assert.Equal([first, second], struck);
+        Assert.True(first.IsDead);
+        Assert.False(second.IsDead);
+        Assert.Equal(new LightningSegment(origin, first.Position), segments[0]);
+        Assert.Equal(new LightningSegment(first.Position, second.Position), segments[1]);
+        Assert.Equal(100f, third.HitPoints);
+
+        var session = LightningSession();
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningChain), session.Stats);
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningChain), session.Stats);
+        // Stats has lightning count = 3 (first hit + 2 hops allowed)
+        // Make sFirst have very low HP (0.1f) so the first hit (0.8f) kills it.
+        var sFirst = Target(Center + new Vector2(0, -100), hitPoints: 0.1f);
+        var sSecond = Target(Center + new Vector2(0, -200), hitPoints: 10f);
+        var sFar = Target(Center + new Vector2(0, -400), hitPoints: 10f);
+        session.AddEnemy(sFirst);
+        session.AddEnemy(sSecond);
+        session.AddEnemy(sFar);
+
+        var sessionSegments = RunUntilStrike(session);
+        // Only 1 hop made because sFirst died and sFar is out of range (>150 px)
+        Assert.Equal(2, sessionSegments.Count);
+        Assert.Equal(new LightningSegment(session.Ship.Position, sFirst.Position), sessionSegments[0]);
+        Assert.Equal(new LightningSegment(sFirst.Position, sSecond.Position), sessionSegments[1]);
+        Assert.True(sFirst.IsDead);
+        Assert.False(sSecond.IsDead);
+        Assert.Equal(10f, sFar.HitPoints);
     }
 
     [Fact]

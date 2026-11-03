@@ -29,6 +29,8 @@ public class SurvivorsGame : Game
     private readonly FrameBatch _batch = new();
     private readonly TextStrokeCache _textStrokes = new();
     private VertexPositionColor[] _vertexBuffer = new VertexPositionColor[1024];
+    private readonly Random _lightningRng = new();
+    private readonly System.Numerics.Vector2[] _lightningBuffer = new System.Numerics.Vector2[LightningRendering.DefaultPointCount];
 
     public SurvivorsGame(StartOptions? start = null)
     {
@@ -206,7 +208,10 @@ public class SurvivorsGame : Game
                 DrawProjectile(projectile.GetShape(), Color.White);
 
             foreach (var segment in _session.LightningSegments)
-                _batch.AddThickStroke([segment.From, segment.To], 2f, ToRgb(Color.Cyan));
+            {
+                var count = LightningRendering.BoltPoints(segment, _lightningRng, _lightningBuffer.AsSpan());
+                _batch.AddThickStroke(_lightningBuffer.AsSpan(0, count), LightningRendering.StrokeWidth, LightningRendering.Color);
+            }
 
             if (_session.Stats.Find(WeaponKind.Orbs)?.Orbs is { } orbs)
             {
