@@ -36,6 +36,7 @@ public sealed class GameSession
     private readonly List<Hazard> _hazards = [];
     private readonly List<Enemy> _enemySnapshot = [];
     private readonly List<LightningSegment> _lightningSegments = [];
+    private readonly List<Vector2> _laserExplosions = [];
     private readonly Action<Enemy, float> _damageEnemy;
     private int _pendingLevelUps;
 
@@ -89,6 +90,9 @@ public sealed class GameSession
 
     /// <summary>The lightning drawn this frame: ship to first target, then each hop; cleared at the start of every played frame.</summary>
     public IReadOnlyList<LightningSegment> LightningSegments => _lightningSegments;
+
+    /// <summary>Impact points of level-5 laser explosions this frame (radius is <see cref="Laser.ExplosionRadius"/>); cleared at the start of every played frame.</summary>
+    public IReadOnlyList<Vector2> LaserExplosions => _laserExplosions;
 
     /// <summary>Bosses currently alive. While there are any, the regular spawner is paused.</summary>
     public IReadOnlyList<Enemy> Bosses => _bosses;
@@ -166,6 +170,7 @@ public sealed class GameSession
         foreach (var laser in _lasers)
             laser.Update(elapsedSeconds);
         _lightningSegments.Clear();
+        _laserExplosions.Clear();
         foreach (var weapon in Stats.Weapons)
             FireWeapon(weapon, elapsedSeconds);
 
@@ -329,6 +334,8 @@ public sealed class GameSession
 
                 // Each projectile deals its own damage, fixed when it was fired.
                 DamageEnemy(enemy, laser.Damage);
+                if (laserLevel >= Laser.ExplosionLevel)
+                    _laserExplosions.Add(enemy.Position);
                 foreach (var splashed in Laser.GetExplosionTargets(enemy.Position, _enemies, laserLevel, enemy))
                     DamageEnemy(splashed, laser.Damage);
                 if (laser.RegisterHit(enemy))

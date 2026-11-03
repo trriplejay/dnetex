@@ -24,6 +24,9 @@ public sealed class Laser : Projectile
     /// <summary>Radius of the level-5 impact explosion in pixels.</summary>
     public const float ExplosionRadius = 40f;
 
+    /// <summary>The laser level from which an impact explodes.</summary>
+    public const int ExplosionLevel = 5;
+
     /// <summary>
     /// Identifies all other live enemies within the level-5 explosion radius (40 px) of an impact point.
     /// Below level 5, returns an empty list.
@@ -38,7 +41,7 @@ public sealed class Laser : Projectile
         int weaponLevel,
         Enemy? struckEnemy = null)
     {
-        if (weaponLevel < 5)
+        if (weaponLevel < ExplosionLevel)
             return Array.Empty<Enemy>();
 
         var targets = new List<Enemy>();
