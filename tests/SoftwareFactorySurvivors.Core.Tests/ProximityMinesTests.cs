@@ -3,7 +3,7 @@ using SoftwareFactorySurvivors.Core;
 
 namespace SoftwareFactorySurvivors.Core.Tests;
 
-/// <summary>Proximity Mines: drop, arming, blast, expiry, the 12-mine cap and the level-5 CLUSTER mini-mines.</summary>
+/// <summary>Proximity Mines: drop, arming, blast, expiry and the 12-mine cap.</summary>
 public class ProximityMinesTests
 {
     private static readonly Vector2 Spot = new(500, 400);
@@ -90,58 +90,32 @@ public class ProximityMinesTests
     }
 
     [Fact]
-    public void A_level_5_explosion_throws_3_mini_mines_50_px_out_that_go_off_0_3_s_later_at_half_damage_and_radius_once()
+    public void A_level_20_mine_explodes_once_with_its_normal_blast_and_nothing_follows_beyond_it()
     {
         var mines = new ProximityMines();
-        mines.Drop(MinesAtLevel(5), [Spot]);
+        var weapon = MinesAtLevel(20);
+        mines.Drop(weapon, [Spot]);
         var toucher = Gemini(Spot, hitPoints: 1000f);
-        // 50 px out to the right lies the first mini-mine; these two are beyond the 60 px main blast.
-        var inMiniBlast = Gemini(Spot + new Vector2(50 + 29, 0));
-        var outsideMiniBlast = Gemini(Spot + new Vector2(0, -50 - 31));
-        Enemy[] enemies = [toucher, inMiniBlast, outsideMiniBlast];
+        // Beyond the 60 px blast, on the three spots 50 px out where thrown mini-mines would have landed and reached.
+        var beyond = Enumerable.Range(0, 3)
+            .Select(i => i * MathF.Tau / 3f)
+            .Select(angle => Gemini(Spot + new Vector2(MathF.Cos(angle), MathF.Sin(angle)) * (weapon.BlastRadius + 15f)))
+            .ToArray();
+        Enemy[] enemies = [toucher, .. beyond];
 
         Arm(mines, enemies);
-        Assert.Single(mines.Explosions);
-        Assert.Equal(3, mines.MiniMines.Count);
-        Assert.All(mines.MiniMines, mini =>
-        {
-            Assert.Equal(50f, Vector2.Distance(Spot, mini.Position), 3);
-            Assert.Equal((1.5f, 30f), (mini.Damage, mini.BlastRadius));
-        });
-        Assert.Equal(1000f - 3f, toucher.HitPoints);
-        Assert.Equal(10f, inMiniBlast.HitPoints);
+        Assert.Equal(new Circle(Spot, weapon.BlastRadius), Assert.Single(mines.Explosions));
+        Assert.Equal(1000f - weapon.Damage, toucher.HitPoints);
 
-        mines.Update(0.1f, enemies, Hit);
-        mines.Update(0.1f, enemies, Hit);
-        Assert.Equal(3, mines.MiniMines.Count);
-        Assert.Empty(mines.Explosions);
-
-        mines.Update(0.1f, enemies, Hit);
-        Assert.Equal(3, mines.Explosions.Count);
-        Assert.All(mines.Explosions, blast => Assert.Equal(30f, blast.Radius));
-        Assert.Equal(10f - 1.5f, inMiniBlast.HitPoints);
-        Assert.Equal(10f, outsideMiniBlast.HitPoints);
-        // Each mini-mine is 50 px from the toucher, outside its 30 px blast.
-        Assert.Equal(1000f - 3f, toucher.HitPoints);
-
-        // Mini-mine detonations throw nothing more.
-        Assert.Empty(mines.MiniMines);
         for (var i = 0; i < 10; i++)
+        {
             mines.Update(0.1f, enemies, Hit);
-        Assert.Empty(mines.MiniMines);
-        Assert.Equal(10f - 1.5f, inMiniBlast.HitPoints);
-    }
+            Assert.Empty(mines.Explosions);
+        }
 
-    [Fact]
-    public void A_level_4_explosion_throws_no_mini_mines()
-    {
-        var mines = new ProximityMines();
-        mines.Drop(MinesAtLevel(4), [Spot]);
-
-        Arm(mines, [Gemini(Spot, hitPoints: 1000f)]);
-
-        Assert.Single(mines.Explosions);
-        Assert.Empty(mines.MiniMines);
+        Assert.Empty(mines.Mines);
+        Assert.All(beyond, enemy => Assert.Equal(10f, enemy.HitPoints));
+        Assert.Equal(1000f - weapon.Damage, toucher.HitPoints);
     }
 
     /// <summary>Runs the mine past its arming time with the enemies in place, until it explodes.</summary>

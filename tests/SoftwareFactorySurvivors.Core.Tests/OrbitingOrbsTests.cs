@@ -153,66 +153,31 @@ public class OrbitingOrbsTests
         Assert.Equal(level, existing.Level);
     }
 
-    [Fact]
-    public void Level_4_still_has_discrete_orbs_and_level_5_has_none()
+    [Theory]
+    [InlineData(5)]
+    [InlineData(20)]
+    public void At_levels_5_and_20_the_orbs_stay_discrete_and_an_enemy_in_the_gap_between_two_orbs_is_never_hit(int level)
     {
-        Assert.False(new OrbitingOrbs(4).IsRingMode);
-        Assert.Equal(3, new OrbitingOrbs(4).GetOrbPositions(Ship).Count);
+        var orbs = new OrbitingOrbs(level);
 
-        var ring = new OrbitingOrbs(5);
-        Assert.True(ring.IsRingMode);
-        Assert.Empty(ring.GetOrbPositions(Ship));
-    }
+        var positions = orbs.GetOrbPositions(Ship);
+        Assert.Equal(orbs.OrbCount, positions.Count);
+        Assert.All(positions, orb => Assert.Equal(orbs.OrbitRadius, Vector2.Distance(Ship, orb), Eps));
 
-    [Fact]
-    public void An_enemy_on_the_ring_band_for_2_and_a_half_seconds_takes_two_hits()
-    {
-        var ring = new OrbitingOrbs(5);
-        var enemy = Gemini(new Vector2(80f, 0f));
+        // The enemy sits on the orbit circle midway between the first two orbs. The ship is moved each frame so
+        // the gap stays on the enemy while the orbs turn: a continuous band would touch it the whole 3 s.
+        var enemy = Gemini(new Vector2(orbs.OrbitRadius, 0f));
+        var gapOffset = MathF.Tau / orbs.OrbCount / 2f;
         var hits = new List<(Enemy Enemy, float Damage)>();
-
-        for (var i = 0; i < 5; i++)
-            hits.AddRange(ring.Update(0.5f, Ship, [enemy]));
-
-        Assert.Equal(2, hits.Count);
-        Assert.All(hits, hit => Assert.Equal(1f, hit.Damage));
-    }
-
-    [Fact]
-    public void The_ring_hit_is_the_orb_damage_after_upgrades()
-    {
-        var ring = new OrbitingOrbs(5);
-        ring.AddDamage();
-        var enemy = Gemini(new Vector2(80f, 0f));
-
-        var hits = ring.Update(1f, Ship, [enemy]);
-
-        Assert.Equal(1.5f, Assert.Single(hits).Damage);
-    }
-
-    [Fact]
-    public void The_ring_does_not_touch_enemies_at_its_centre_or_at_twice_its_radius()
-    {
-        var ring = new OrbitingOrbs(5);
-        var centre = Gemini(Vector2.Zero);
-        var outside = Gemini(new Vector2(160f, 0f));
-
-        var hits = ring.Update(5f, Ship, [centre, outside]);
+        for (var i = 0; i < 3 * 60; i++)
+        {
+            var gap = orbs.Angle + gapOffset;
+            var ship = enemy.Position - new Vector2(MathF.Cos(gap), MathF.Sin(gap)) * orbs.OrbitRadius;
+            hits.AddRange(orbs.Update(1f / 60f, ship, [enemy]));
+        }
 
         Assert.Empty(hits);
-    }
-
-    [Fact]
-    public void Leaving_the_band_restarts_the_ring_second()
-    {
-        var ring = new OrbitingOrbs(5);
-        var enemy = Gemini(new Vector2(80f, 0f));
-        var away = Gemini(new Vector2(300f, 0f));
-
-        Assert.Empty(ring.Update(0.75f, Ship, [enemy]));
-        Assert.Empty(ring.Update(0.5f, Ship, [away]));
-        Assert.Empty(ring.Update(0.75f, Ship, [enemy]));
-        Assert.Single(ring.Update(0.25f, Ship, [enemy]));
+        Assert.Equal(EnemyRoster.Gemini.HitPoints, enemy.HitPoints);
     }
 
     private static (int Count, float Speed, float Orbit, float Radius, float Damage) Stats(OrbitingOrbs orbs) =>

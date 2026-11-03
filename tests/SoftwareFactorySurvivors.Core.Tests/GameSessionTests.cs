@@ -204,12 +204,14 @@ public class GameSessionTests
         Assert.Equal(120f, state.RotationSpeedDeg);
         Assert.Equal(95f, state.OrbitRadius);
         Assert.Equal(11f, state.OrbRadius);
-        Assert.False(state.IsRingMode);
+        Assert.Equal(4, state.GetOrbPositions(Center).Count);
 
+        // The fifth card leaves the orbs discrete: one position per orb.
         Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Orbs, WeaponOption.OrbsDamage), session.Stats);
         Assert.Equal(1.5f, state.Damage);
         Assert.Equal(1.5f, orbs.Damage);
-        Assert.True(state.IsRingMode);
+        Assert.Equal(5, state.Level);
+        Assert.Equal(4, state.GetOrbPositions(Center).Count);
 
         Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Orbs, WeaponOption.OrbsDamage), session.Stats);
         Assert.Equal(2.0f, state.Damage);
@@ -343,32 +345,22 @@ public class GameSessionTests
     public enum DiscOrMineSource
     {
         Disc,
-        Shard,
         Mine,
-        MiniMine,
     }
 
     [Theory]
     [InlineData(DiscOrMineSource.Disc)]
-    [InlineData(DiscOrMineSource.Shard)]
     [InlineData(DiscOrMineSource.Mine)]
-    [InlineData(DiscOrMineSource.MiniMine)]
-    public void A_kill_by_disc_shard_mine_or_mini_mine_credits_score_and_experience_exactly_once(DiscOrMineSource source)
+    public void A_kill_by_disc_or_mine_credits_score_and_experience_exactly_once(DiscOrMineSource source)
     {
         var (session, victim) = ArrangeDiscOrMineKill(source);
-        var sawShard = false;
 
         for (var i = 0; i < 6 * 60 && !victim.IsDead; i++)
-        {
             session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
-            sawShard |= session.DiscShards.Count > 0;
-        }
 
         Assert.True(victim.IsDead);
         Assert.Equal(GameSession.PointsPerKill, session.Score);
         Assert.Equal(victim.Experience, session.Leveling.Experience);
-        if (source == DiscOrMineSource.Shard)
-            Assert.True(sawShard, "The victim should die only once the disc has shattered");
 
         // The weapon keeps working; the kill is never credited again.
         for (var i = 0; i < 3 * 60; i++)
@@ -377,39 +369,9 @@ public class GameSessionTests
         Assert.Equal(victim.Experience, session.Leveling.Experience);
     }
 
-    [Fact]
-    public void Two_mini_mine_blasts_overlapping_a_dying_enemy_credit_its_kill_once()
-    {
-        var session = KillCreditTests.SessionWith(WeaponKind.ProximityMines);
-        // Level 5: blast 90 px (mini-mines 45 px), damage 6 (mini-mines 3).
-        RaiseWeapon(session, WeaponKind.ProximityMines, WeaponOption.MinesBlastRadius, 2);
-        RaiseWeapon(session, WeaponKind.ProximityMines, WeaponOption.MinesDamage, 2);
-        Assert.True(session.Stats.Find(WeaponKind.ProximityMines)!.IsFinale);
-        session.AddEnemy(TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 1000f, Experience = 3 }, Center));
-        // Between the first two mini-mines (thrown at 0 and 120 degrees), 43.3 px from each: inside both their
-        // blasts. The mine's blast leaves it 1 HP, then the two mini-mines go off on the same frame.
-        var spot = Center + 25f * new Vector2(MathF.Cos(MathF.PI / 3f), MathF.Sin(MathF.PI / 3f));
-        var victim = TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 7f, Experience = 1 }, spot);
-        session.AddEnemy(victim);
-
-        IReadOnlyList<Circle> blastsThatKilled = [];
-        for (var i = 0; i < 6 * 60 && !victim.IsDead; i++)
-        {
-            session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
-            blastsThatKilled = session.MineExplosions.ToArray();
-        }
-
-        Assert.True(victim.IsDead);
-        Assert.Equal(2, blastsThatKilled.Count(blast => Vector2.Distance(blast.Center, spot) <= blast.Radius));
-        Assert.All(blastsThatKilled, blast => Assert.Equal(45f, blast.Radius));
-        Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(victim.Experience, session.Leveling.Experience);
-    }
-
     private static (GameSession Session, Enemy Victim) ArrangeDiscOrMineKill(DiscOrMineSource source)
     {
         var victimType = EnemyRoster.HuggingFace with { HitPoints = 1f, Experience = 1 };
-        var tough = EnemyRoster.HuggingFace with { HitPoints = 1000f, Experience = 3 };
         switch (source)
         {
             case DiscOrMineSource.Disc:
@@ -419,29 +381,10 @@ public class GameSessionTests
                 session.AddEnemy(victim);
                 return (session, victim);
             }
-            case DiscOrMineSource.Shard:
-            {
-                var session = KillCreditTests.SessionWith(WeaponKind.RicochetDisc);
-                RaiseWeapon(session, WeaponKind.RicochetDisc, WeaponOption.DiscDamage, 19);
-                // Beyond the disc's 250 px reach, within a shard's 200 px flight from the far point.
-                var victim = TestEnemies.Stationary(victimType, Center + new Vector2(0, -310));
-                session.AddEnemy(victim);
-                return (session, victim);
-            }
             case DiscOrMineSource.Mine:
             {
                 var session = KillCreditTests.SessionWith(WeaponKind.ProximityMines);
                 var victim = TestEnemies.Stationary(victimType, Center);
-                session.AddEnemy(victim);
-                return (session, victim);
-            }
-            case DiscOrMineSource.MiniMine:
-            {
-                var session = KillCreditTests.SessionWith(WeaponKind.ProximityMines);
-                RaiseWeapon(session, WeaponKind.ProximityMines, WeaponOption.MinesDamage, 19);
-                session.AddEnemy(TestEnemies.Stationary(tough, Center));
-                // Outside the mine's 60 px blast, inside the 30 px blast of the mini-mine thrown 50 px to the right.
-                var victim = TestEnemies.Stationary(victimType, Center + new Vector2(75, 0));
                 session.AddEnemy(victim);
                 return (session, victim);
             }

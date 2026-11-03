@@ -197,7 +197,6 @@ public class FinalBossesTests
         session.Update(Vector2.Zero, null, 0.55f, Width, Height);
         var expected = 100f - EnemyRoster.ScaledContactDamage(Hazard.TrailContactDamage, session.ElapsedSeconds);
         Assert.Equal(expected, session.Stats.HitPoints, precision: 2);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
         Assert.Contains(trail, session.Hazards);
 
         // Every further 0.5 s on the trail costs another tick, scaled for its moment.

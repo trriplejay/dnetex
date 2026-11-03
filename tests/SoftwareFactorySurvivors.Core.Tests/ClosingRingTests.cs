@@ -106,7 +106,6 @@ public class ClosingRingTests
         session.Update(new Vector2(1, 0), null, 0.5f, Width, Height);
         var expected = 100f - EnemyRoster.ScaledContactDamage(Hazard.RingContactDamage, session.ElapsedSeconds);
         Assert.Equal(expected, session.Stats.HitPoints, precision: 2);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
 
         // Held on the band: another tick every 0.5 s, and the ring stays in play.
         for (var tick = 0; tick < 3; tick++)

@@ -150,15 +150,15 @@ public class ProgressionTests
 
         Assert.Equal("RICOCHET DISC", Upgrades.Title(disc, stats));
         Assert.Equal(
-            "Throws a disc that flies out and back, cutting through every enemy. LV5 SHATTER: bursts into 4 shards at its far point.",
+            "Throws a disc that flies out and back, cutting through every enemy.",
             Upgrades.Describe(disc, stats));
-        Assert.Contains("SHATTER", Upgrades.Describe(disc, stats));
+        Assert.DoesNotContain("SHATTER", Upgrades.Describe(disc, stats));
 
         Assert.Equal("PROXIMITY MINES", Upgrades.Title(mines, stats));
         Assert.Equal(
-            "Drops mines that explode when enemies touch them. LV5 CLUSTER: each blast throws 3 mini-mines.",
+            "Drops mines that explode when enemies touch them.",
             Upgrades.Describe(mines, stats));
-        Assert.Contains("CLUSTER", Upgrades.Describe(mines, stats));
+        Assert.DoesNotContain("CLUSTER", Upgrades.Describe(mines, stats));
 
         // The three original weapons keep their plain NEW WEAPON line.
         Assert.Equal("NEW WEAPON", Upgrades.Describe(Upgrade.NewWeapon(WeaponKind.Orbs), stats));
@@ -690,12 +690,10 @@ public class ProgressionTests
         Assert.Equal(1, ticks);
         Assert.Equal(100f - EnemyRoster.ScaledContactDamage(Tough.ContactDamage, Frame), session.Stats.HitPoints);
         Assert.Contains(enemy, session.Enemies);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
 
         // Staying in contact for 1.0 s more: exactly two more ticks, each the damage scaled for when it landed.
         Assert.Equal(2, StepCountingTicks(session, frames: 60));
         Assert.Contains(enemy, session.Enemies);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
 
         // Fly clear (0.3 s, before the next tick is due) and stay clear: no more losses.
         for (var i = 0; i < 18; i++)
@@ -881,7 +879,7 @@ public class ProgressionTests
     }
 
     [Fact]
-    public void Regeneration_heals_every_second_and_doubles_for_five_seconds_after_a_hit_at_level_5()
+    public void Regeneration_heals_every_second_and_a_hit_never_multiplies_it_even_at_level_20()
     {
         // Level 1 at 50/100 gives 50.20 after 1 s and 51.00 after 5 s.
         var session = TestEnemies.QuietSession(Center);
@@ -910,36 +908,28 @@ public class ProgressionTests
         lvl5.Update(Vector2.Zero, null, 1f, Width, Height);
         Assert.Equal(100f, lvl5.Stats.HitPoints, precision: 2);
 
-        // At level 5 after a hit, the next second gives +2, and 6 s after the hit it is +1/s again.
+        // At level 20 (+4 per s) a hit changes nothing: the second after it heals what the second before it did.
         var hitSession = TestEnemies.QuietSession(Center);
         var hitRegen = hitSession.Stats.AddEnhancement(ShipEnhancements.Regeneration);
-        while (hitRegen.Level < 5)
+        while (hitRegen.Level < OwnedEnhancement.MaxLevel)
             hitRegen.RaiseLevel();
         hitSession.Stats.HitPoints = 50f;
 
-        // Deal a hit that reduces HP
+        var beforeHit = hitSession.Stats.HitPoints;
+        hitSession.Update(Vector2.Zero, null, 1f, Width, Height);
+        var gainBeforeHit = hitSession.Stats.HitPoints - beforeHit;
+        Assert.Equal(ShipEnhancements.RegenPerTick(20), gainBeforeHit, precision: 2);
+
         var toucher = EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 10f };
         var enemy = TestEnemies.Stationary(toucher, Center);
         hitSession.AddEnemy(enemy);
         hitSession.Update(Vector2.Zero, null, Frame, Width, Height);
         enemy.TakeDamage(enemy.HitPoints);
         var hpAfterHit = hitSession.Stats.HitPoints;
-        Assert.True(hpAfterHit < 50f);
+        Assert.True(hpAfterHit < beforeHit + gainBeforeHit);
 
-        // Next second gives +2
         hitSession.Update(Vector2.Zero, null, 1f, Width, Height);
-        Assert.Equal(hpAfterHit + 2.00f, hitSession.Stats.HitPoints, precision: 2);
-
-        // 6 s after the hit it is +1/s again:
-        // Seconds 2, 3, 4, 5 after the hit are still boosted (+2/s)
-        for (var i = 0; i < 4; i++)
-            hitSession.Update(Vector2.Zero, null, 1f, Width, Height);
-        var hpAt5s = hitSession.Stats.HitPoints;
-        Assert.Equal(hpAfterHit + 10.00f, hpAt5s, precision: 2);
-
-        // The 6th second after the hit is standard (+1/s)
-        hitSession.Update(Vector2.Zero, null, 1f, Width, Height);
-        Assert.Equal(hpAt5s + 1.00f, hitSession.Stats.HitPoints, precision: 2);
+        Assert.Equal(gainBeforeHit, hitSession.Stats.HitPoints - hpAfterHit, precision: 2);
 
         // Paused seconds heal nothing.
         var pausedSession = new GameSession(Center, new Random(1));

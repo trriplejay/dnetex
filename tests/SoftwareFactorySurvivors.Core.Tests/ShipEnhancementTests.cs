@@ -199,35 +199,6 @@ public class ShipEnhancementTests
 
     // ---- HP stays in [0, Max]; 0 ends the run (CLM-12) ----
 
-    [Fact]
-    public void A_lethal_hit_with_second_wind_spent_ends_the_run_at_0_hp_and_freezes_it_despite_regen_and_armor()
-    {
-        var session = QuietSessionWith((ShipEnhancements.Health, 5), (ShipEnhancements.Regeneration, 5), (ShipEnhancements.Armor, 5));
-        // Spend Second Wind: a lethal hit leaves 1 HP and 2 s of immunity.
-        session.Stats.HitPoints = 0.5f;
-        var first = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 30f }, Center);
-        session.AddEnemy(first);
-        Step(session);
-        Assert.Equal(1f, session.Stats.HitPoints);
-        Assert.False(session.IsGameOver);
-        first.TakeDamage(float.MaxValue);
-        Step(session, 2.1f);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
-
-        // 30 less armor's 5 is far more than regen gave back: lethal, and Second Wind is gone.
-        session.AddEnemy(TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 30f }, Center));
-        Step(session);
-        Assert.True(session.IsGameOver);
-        Assert.Equal(0f, session.Stats.HitPoints);
-
-        var clock = session.ElapsedSeconds;
-        for (var i = 0; i < 120; i++)
-            Step(session, 0.5f);
-        Assert.Equal(0f, session.Stats.HitPoints);
-        Assert.Equal(clock, session.ElapsedSeconds);
-        Assert.True(session.IsGameOver);
-    }
-
     public static TheoryData<int, int, int> MaxedEnhancementTriples()
     {
         var data = new TheoryData<int, int, int>();
@@ -479,114 +450,29 @@ public class ShipEnhancementTests
         Assert.Equal([Upgrade.ForEnhancement(ShipEnhancements.Armor)], session.UpgradeOffer!);
     }
 
-    // ---- Blink (CLM-4) ----
+    // ---- An enhancement not owned gives nothing ----
 
     [Fact]
-    public void A_level_5_blink_jumps_250_px_along_forward_then_waits_3_s_for_the_next()
+    public void A_ship_with_no_enhancements_takes_the_full_contact_hit_has_no_shield_and_regains_nothing()
     {
-        var session = TestEnemies.QuietSession(new Vector2(Center.X, 700));
-        Own(session.Stats, ShipEnhancements.MoveSpeed, 5);
-        var start = session.Ship.Position;
+        var session = QuietSessionWith();
+        Assert.Empty(session.Stats.Enhancements);
+        Assert.Equal(0f, session.ShieldCapacity);
+        Assert.Equal(0f, session.ShieldPoints);
 
-        session.RequestBlink();
+        // The first hit is not absorbed and not reduced: the whole clock-scaled 8 comes off HP.
+        var toucher = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 8f }, Center);
+        session.AddEnemy(toucher);
         Step(session);
-        Assert.Equal(ShipEnhancements.BlinkDistance, Vector2.Distance(start, session.Ship.Position), precision: 3);
-        Assert.Equal(start + session.Ship.Forward * ShipEnhancements.BlinkDistance, session.Ship.Position);
+        Assert.Equal(100f - EnemyRoster.ScaledContactDamage(8f, session.ElapsedSeconds), session.Stats.HitPoints, precision: 2);
+        Assert.Equal(0f, session.ShieldPoints);
+        Assert.Equal(0f, session.ShieldRechargeSecondsLeft);
 
-        // Within the cooldown: the request is dropped.
-        var afterFirst = session.Ship.Position;
+        // Two idle seconds heal nothing.
+        toucher.TakeDamage(float.MaxValue);
+        var afterHit = session.Stats.HitPoints;
         for (var i = 0; i < 2 * 60; i++)
             Step(session);
-        session.RequestBlink();
-        Step(session);
-        Assert.Equal(afterFirst, session.Ship.Position);
-
-        // Just short of 3 s since the first blink: still dropped.
-        var sinceFirst = (2 * 60 + 1) * Frame;
-        Step(session, ShipEnhancements.BlinkCooldownSeconds - sinceFirst - 0.05f);
-        session.RequestBlink();
-        Step(session, 0.01f);
-        Assert.Equal(afterFirst, session.Ship.Position);
-
-        // Past 3 s: accepted.
-        Step(session, 0.05f);
-        session.RequestBlink();
-        Step(session);
-        Assert.Equal(ShipEnhancements.BlinkDistance, Vector2.Distance(afterFirst, session.Ship.Position), precision: 3);
-    }
-
-    [Fact]
-    public void Below_level_5_a_blink_request_leaves_the_ship_in_place()
-    {
-        var session = QuietSessionWith((ShipEnhancements.MoveSpeed, 4));
-        var start = session.Ship.Position;
-
-        session.RequestBlink();
-        Step(session);
-
-        Assert.Equal(start, session.Ship.Position);
-        Assert.Equal(0f, session.BlinkCooldownSecondsLeft);
-    }
-
-    [Fact]
-    public void A_blink_toward_an_edge_stops_at_the_edge()
-    {
-        var session = QuietSessionWith((ShipEnhancements.MoveSpeed, 5));
-        // Face right from 100 px short of the right edge.
-        session.Update(new Vector2(1, 0), new Vector2(Width + 500, Center.Y), (Width - 100 - Center.X) / (Ship.Speed * ShipEnhancements.SpeedMultiplier(5)), Width, Height);
-        var before = session.Ship.Position;
-        Assert.Equal(Width - 100, before.X, precision: 2);
-
-        session.RequestBlink();
-        session.Update(Vector2.Zero, null, Frame, Width, Height);
-
-        Assert.Equal(Width, session.Ship.Position.X, precision: 3);
-        Assert.Equal(before.Y, session.Ship.Position.Y, precision: 3);
-    }
-
-    // ---- Armor level-5 reflect (CLM-1) ----
-
-    [Fact]
-    public void Armor_level_5_reflects_blocked_contact_damage_to_touching_enemy_while_boss_bullet_reflects_nothing_and_changes_no_enemy_hp()
-    {
-        // (a) Touching enemy loses exactly the amount armor blocked from its contact tick.
-        var session = QuietSessionWith((ShipEnhancements.Armor, 5));
-        var touchingEnemy = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center);
-        var bystander = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center + new Vector2(200, 0));
-        session.AddEnemy(touchingEnemy);
-        session.AddEnemy(bystander);
-
-        Step(session);
-
-        // Raw 5, armor level 5 blocks 4 (minimum 1 dealt to ship): touching enemy takes 4 reflected damage.
-        Assert.Equal(6f, touchingEnemy.HitPoints);
-        Assert.Equal(10f, bystander.HitPoints);
-        Assert.Equal(99f, session.Stats.HitPoints);
-
-        // (b) Boss bullet hit changes no enemy HP: bystander and touching enemy are not damaged further.
-        var bullet = Hazard.CreateBullet(Center, radius: 10f);
-        bullet.Update(bullet.ArmSeconds);
-        session.AddHazard(bullet);
-
-        Step(session);
-
-        // Bullet deals 8 raw - 5 armor = 3 damage to ship. Attacker is null, so nothing is reflected.
-        Assert.Equal(6f, touchingEnemy.HitPoints);
-        Assert.Equal(10f, bystander.HitPoints);
-        Assert.Equal(96f, session.Stats.HitPoints);
-
-        // (c) Hazard-only hit (no touching enemy) changes no enemy HP at all.
-        var hazardOnlySession = QuietSessionWith((ShipEnhancements.Armor, 5));
-        var loneEnemy = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center + new Vector2(200, 0));
-        hazardOnlySession.AddEnemy(loneEnemy);
-
-        var soloBullet = Hazard.CreateBullet(Center, radius: 10f);
-        soloBullet.Update(soloBullet.ArmSeconds);
-        hazardOnlySession.AddHazard(soloBullet);
-
-        Step(hazardOnlySession);
-
-        Assert.Equal(10f, loneEnemy.HitPoints);
-        Assert.Equal(97f, hazardOnlySession.Stats.HitPoints);
+        Assert.Equal(afterHit, session.Stats.HitPoints);
     }
 }

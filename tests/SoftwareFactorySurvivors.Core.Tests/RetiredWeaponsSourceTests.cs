@@ -29,6 +29,35 @@ public class RetiredWeaponsSourceTests
         Assert.False(File.Exists(Path.Combine(core, "Bola.cs")));
     }
 
+    // The level-5 bonuses' names. The ship's blink is matched as a call on an object (".Blink("), so the enemy
+    // Blink movement pattern ("new Blink(") stays allowed.
+    private static readonly Regex LevelFiveBonus = new(
+        @"\b(IsFinale|BonusLevel|HasBonus|ExplosionLevel|BurnLevel|IsRingMode|DiscShards?|MiniMines?|LaserExplosions|"
+        + @"RequestBlink|UpdateBlink|BlinkDistance|BlinkCooldownSeconds|InvulnerableSecondsLeft|RegenBoostMultiplier|"
+        + @"RegenBoostSecondsLeft|RegenBoostSeconds|IsBurning|ApplyBurn|TickBurn|SecondWind\w*|ShieldExplosion\w*)\b"
+        + @"|\.Blink\(|(?i:\bshatter\b|\bcluster\b|\bLV5\b)",
+        RegexOptions.Compiled);
+
+    [Fact]
+    public void Core_desktop_and_readme_name_no_level_5_bonus()
+    {
+        var root = RepoRoot();
+        var files = new[] { "SoftwareFactorySurvivors.Core", "SoftwareFactorySurvivors.Desktop" }
+            .SelectMany(project => Directory.EnumerateFiles(Path.Combine(root, "src", project), "*.cs", SearchOption.AllDirectories))
+            .Where(file => !file.Split(Path.DirectorySeparatorChar).Any(part => part is "obj" or "bin"))
+            .Append(Path.Combine(root, "README.md"))
+            .ToArray();
+        Assert.Contains(files, file => file.EndsWith("SurvivorsGame.cs", StringComparison.Ordinal));
+
+        var hits = files
+            .SelectMany(file => File.ReadLines(file).Select((line, i) => (file, line, number: i + 1)))
+            .Where(entry => LevelFiveBonus.IsMatch(entry.line))
+            .Select(entry => $"{Path.GetFileName(entry.file)}:{entry.number}: {entry.line.Trim()}")
+            .ToArray();
+
+        Assert.True(hits.Length == 0, "Level-5 bonus names still in the source:\n" + string.Join("\n", hits));
+    }
+
     // The directory of this source file, two levels below the repository root.
     private static string RepoRoot([CallerFilePath] string thisFile = "") =>
         Path.GetFullPath(Path.Combine(Path.GetDirectoryName(thisFile)!, "..", ".."));

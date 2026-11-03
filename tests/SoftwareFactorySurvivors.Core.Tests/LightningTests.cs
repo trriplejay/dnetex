@@ -63,7 +63,7 @@ public class LightningTests
         for (var seed = 0; seed < 40; seed++)
         {
             var struck = new List<Enemy>();
-            Lightning.Strike(new Vector2(0, -10), 0f, 6, 1, enemies, new Random(seed), (enemy, _) => struck.Add(enemy), []);
+            Lightning.Strike(new Vector2(0, -10), 0f, 6, enemies, new Random(seed), (enemy, _) => struck.Add(enemy), []);
 
             Assert.Equal(7, struck.Count);
             Assert.Same(a, struck[0]);
@@ -134,52 +134,24 @@ public class LightningTests
     }
 
     [Fact]
-    public void Level_5_strike_burns_and_the_burn_kill_scores_and_grants_experience()
+    public void A_level_20_strike_deals_only_its_hit_and_the_struck_enemy_takes_no_damage_over_the_next_6_s()
     {
         var session = LightningSession();
-        for (var i = 0; i < 4; i++)
-            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningChain), session.Stats);
-        Assert.Equal(5, session.Stats.Find(WeaponKind.Lightning)!.Level);
-        var victim = Target(Center + new Vector2(0, -150), hitPoints: 1.5f);
+        for (var i = 1; i < OwnedWeapon.MaxLevel; i++)
+            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningDamage), session.Stats);
+        Assert.Equal(20, session.Stats.Find(WeaponKind.Lightning)!.Level);
+        var victim = Target(Center + new Vector2(0, -150), hitPoints: 100f);
         session.AddEnemy(victim);
 
         RunUntilStrike(session);
-        Assert.True(victim.IsBurning);
-        Assert.Equal(0, session.Score);
+        var afterStrike = victim.HitPoints;
+        Assert.True(afterStrike < 100f);
 
-        // 0.7 HP left burns away at 1/s, before the next strike is due (1/1.2 s after the first).
-        for (var i = 0; i < 45 && !victim.IsDead; i++)
-        {
-            session.Update(Vector2.Zero, null, Frame, Width, Height);
-            Assert.Empty(session.LightningSegments);
-        }
+        // With no further strikes, six seconds of the enemy's own updates take nothing more.
+        for (var i = 0; i < 6 * 60; i++)
+            victim.Update(victim.Position, Frame);
 
-        Assert.True(victim.IsDead);
-        Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(victim.Experience, session.Leveling.Experience);
-        Assert.DoesNotContain(victim, session.Enemies);
-
-        // Credited once: later frames add nothing.
-        session.Update(Vector2.Zero, null, 2f, Width, Height);
-        Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(victim.Experience, session.Leveling.Experience);
-    }
-
-    [Fact]
-    public void Below_level_5_a_strike_does_not_burn()
-    {
-        var session = LightningSession();
-        for (var i = 0; i < 3; i++)
-            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningChain), session.Stats);
-        var victim = Target(Center + new Vector2(0, -150), hitPoints: 1.5f);
-        session.AddEnemy(victim);
-
-        RunUntilStrike(session);
-        session.Update(Vector2.Zero, null, 0.5f, Width, Height);
-
-        Assert.False(victim.IsBurning);
-        Assert.Equal(0.7f, victim.HitPoints, precision: 4);
-        Assert.Equal(0, session.Score);
+        Assert.Equal(afterStrike, victim.HitPoints);
     }
 
     internal static GameSession LightningSession() => KillCreditTests.SessionWith(WeaponKind.Lightning);

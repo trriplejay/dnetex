@@ -4,8 +4,7 @@ using SoftwareFactorySurvivors.Core;
 namespace SoftwareFactorySurvivors.Core.Tests;
 
 /// <summary>
-/// Every kind of weapon damage credits a kill's score and experience exactly once. Burn kills are covered by
-/// LightningTests.Level_5_strike_burns_and_the_burn_kill_scores_and_grants_experience.
+/// Every kind of weapon damage credits a kill's score and experience exactly once.
 /// </summary>
 public class KillCreditTests
 {
@@ -17,20 +16,16 @@ public class KillCreditTests
     public enum Source
     {
         LaserHit,
-        LaserExplosion,
         LightningStrike,
         LightningHop,
         Orb,
-        Ring,
     }
 
     [Theory]
     [InlineData(Source.LaserHit)]
-    [InlineData(Source.LaserExplosion)]
     [InlineData(Source.LightningStrike)]
     [InlineData(Source.LightningHop)]
     [InlineData(Source.Orb)]
-    [InlineData(Source.Ring)]
     public void A_one_hp_kill_adds_the_kill_score_and_experience_exactly_once(Source source)
     {
         var (session, victim) = Arrange(source);
@@ -59,7 +54,6 @@ public class KillCreditTests
         var session = SessionWith(kind);
         var corpse = Victim(VictimSpot(kind));
         corpse.TakeDamage(corpse.HitPoints);
-        corpse.ApplyBurn();
         session.AddEnemy(corpse);
 
         for (var i = 0; i < 2 * 60; i++)
@@ -88,14 +82,6 @@ public class KillCreditTests
                 var session = SessionWith(WeaponKind.Laser);
                 return (session, Add(session, Victim(VictimSpot(WeaponKind.Laser))));
             }
-            case Source.LaserExplosion:
-            {
-                var session = SessionWith(WeaponKind.Laser);
-                Raise(session, WeaponKind.Laser, WeaponOption.LaserAttackSpeed, 4);
-                // The laser flies straight up into a tough enemy; the victim beside it only takes the splash.
-                Add(session, Tough(Center + new Vector2(0, -150)));
-                return (session, Add(session, Victim(Center + new Vector2(32, -150))));
-            }
             case Source.LightningStrike:
             {
                 var session = SessionWith(WeaponKind.Lightning);
@@ -112,13 +98,6 @@ public class KillCreditTests
             case Source.Orb:
             {
                 var session = SessionWith(WeaponKind.Orbs);
-                return (session, Add(session, Victim(VictimSpot(WeaponKind.Orbs))));
-            }
-            case Source.Ring:
-            {
-                var session = SessionWith(WeaponKind.Orbs);
-                Raise(session, WeaponKind.Orbs, WeaponOption.OrbsCount, 4);
-                Assert.True(session.Stats.Find(WeaponKind.Orbs)!.Orbs!.IsRingMode);
                 return (session, Add(session, Victim(VictimSpot(WeaponKind.Orbs))));
             }
             default:

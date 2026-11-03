@@ -3,7 +3,7 @@ using SoftwareFactorySurvivors.Core;
 
 namespace SoftwareFactorySurvivors.Core.Tests;
 
-/// <summary>The Ricochet Disc's throw, flight, per-leg hits and its level-5 SHATTER.</summary>
+/// <summary>The Ricochet Disc's throw, flight and per-leg hits.</summary>
 public class RicochetDiscTests
 {
     private const float Frame = 1f / 60f;
@@ -32,22 +32,20 @@ public class RicochetDiscTests
     public void A_disc_is_250_px_out_and_turns_back_after_0_625_s_then_returns_to_the_moving_ship()
     {
         var disc = Assert.Single(RicochetDisc.Throw(new OwnedWeapon(WeaponKind.RicochetDisc), Origin, Up, []));
-        var shards = new List<DiscShard>();
 
         for (var i = 0; i < 24; i++)
-            disc.Update(0.025f, Origin, shards);
+            disc.Update(0.025f, Origin);
         Assert.False(disc.IsReturning);
         AssertNear(Origin + new Vector2(0, -240), disc.Position);
 
-        disc.Update(0.025f, Origin, shards);
+        disc.Update(0.025f, Origin);
         Assert.True(disc.IsReturning);
         AssertNear(Origin + new Vector2(0, -250), disc.Position);
-        Assert.Empty(shards);
 
         // The ship has moved right; the disc flies to where it is now and is caught there.
         var ship = Origin + new Vector2(150, 0);
         for (var i = 0; i < 120 && !disc.IsCaught; i++)
-            disc.Update(Frame, ship, shards);
+            disc.Update(Frame, ship);
         Assert.True(disc.IsCaught);
         Assert.Equal(ship, disc.Position);
     }
@@ -57,13 +55,12 @@ public class RicochetDiscTests
     {
         var disc = Assert.Single(RicochetDisc.Throw(new OwnedWeapon(WeaponKind.RicochetDisc), Origin, Up, []));
         Enemy[] line = [Gemini(Origin + new Vector2(0, -60)), Gemini(Origin + new Vector2(0, -120)), Gemini(Origin + new Vector2(0, -180))];
-        var shards = new List<DiscShard>();
 
         // Small frames keep each enemy in contact over several frames of each leg.
         var contactFrames = 0;
         while (!disc.IsReturning)
         {
-            disc.Update(Frame, Origin, shards);
+            disc.Update(Frame, Origin);
             if (!disc.IsReturning)
                 contactFrames += line.Count(enemy => Touching(disc, enemy));
             disc.Strike(line, Hit);
@@ -73,7 +70,7 @@ public class RicochetDiscTests
 
         while (!disc.IsCaught)
         {
-            disc.Update(Frame, Origin, shards);
+            disc.Update(Frame, Origin);
             disc.Strike(line, Hit);
         }
         Assert.All(line, enemy => Assert.Equal(10f - 4f, enemy.HitPoints));
@@ -84,11 +81,10 @@ public class RicochetDiscTests
     {
         var disc = Assert.Single(RicochetDisc.Throw(new OwnedWeapon(WeaponKind.RicochetDisc), Origin, Up, []));
         var atTurn = Gemini(Origin + new Vector2(0, -250));
-        var shards = new List<DiscShard>();
 
         while (!disc.IsCaught)
         {
-            disc.Update(Frame, Origin, shards);
+            disc.Update(Frame, Origin);
             disc.Strike([atTurn], Hit);
         }
 
@@ -119,81 +115,31 @@ public class RicochetDiscTests
     }
 
     [Fact]
-    public void A_level_5_disc_shatters_into_4_half_damage_shards_at_its_far_point_and_still_returns()
+    public void A_level_20_disc_flies_out_and_back_and_enemies_around_its_far_point_off_its_path_keep_full_hit_points()
     {
-        var weapon = DiscAtLevel(5);
-        weapon.Damage = 6f;
-        var disc = Assert.Single(RicochetDisc.Throw(weapon, Origin, Up, []));
-        var shards = new List<DiscShard>();
+        var disc = Assert.Single(RicochetDisc.Throw(DiscAtLevel(20), Origin, Up, []));
+        var farPoint = Origin + new Vector2(0, -250);
+        // Off the disc's path (radius 12 along x = 500), 60 px from its far point on four sides.
+        Enemy[] around =
+        [
+            Gemini(farPoint + new Vector2(0, -60)),
+            Gemini(farPoint + new Vector2(60, 0)),
+            Gemini(farPoint + new Vector2(-60, 0)),
+            Gemini(farPoint + new Vector2(-60, 60)),
+        ];
+        var turned = false;
 
-        while (!disc.IsReturning)
-            disc.Update(Frame, Origin, shards);
-
-        Assert.Equal(4, shards.Count);
-        Assert.All(shards, shard =>
+        for (var i = 0; i < 240 && !disc.IsCaught; i++)
         {
-            Assert.Equal(3f, shard.Damage);
-            Assert.Equal(0, shard.Pierce);
-            AssertNear(Origin + new Vector2(0, -250), shard.Position);
-        });
-        // Flying outward: one straight on, the others spread evenly around.
-        AssertNear(Up, shards[0].Direction);
-        Assert.Equal(4, shards.Select(shard => (MathF.Round(shard.Direction.X), MathF.Round(shard.Direction.Y))).Distinct().Count());
-
-        for (var i = 0; i < 120 && !disc.IsCaught; i++)
-            disc.Update(Frame, Origin, shards);
-        Assert.True(disc.IsCaught);
-        Assert.Equal(4, shards.Count);
-    }
-
-    [Fact]
-    public void A_level_4_disc_bursts_no_shards()
-    {
-        var disc = Assert.Single(RicochetDisc.Throw(DiscAtLevel(4), Origin, Up, []));
-        var shards = new List<DiscShard>();
-
-        while (!disc.IsCaught)
-            disc.Update(Frame, Origin, shards);
-
-        Assert.Empty(shards);
-    }
-
-    [Fact]
-    public void A_shard_is_spent_on_its_first_hit()
-    {
-        var shard = new DiscShard(Origin, Up, 1.5f);
-        var first = Gemini(Origin + new Vector2(0, -60));
-        var behind = Gemini(Origin + new Vector2(0, -100));
-
-        for (var i = 0; i < 60 && !shard.IsGone; i++)
-        {
-            shard.Update(Frame);
-            shard.Strike([first, behind], Hit);
+            disc.Update(Frame, Origin);
+            turned |= disc.IsReturning;
+            disc.Strike(around, Hit);
         }
 
-        Assert.True(shard.IsSpent);
-        Assert.Equal(10f - 1.5f, first.HitPoints);
-        Assert.Equal(10f, behind.HitPoints);
-    }
-
-    [Fact]
-    public void A_shard_that_hits_nothing_is_gone_after_200_px()
-    {
-        var shard = new DiscShard(Origin, Up, 1f);
-
-        for (var i = 0; i < 19; i++)
-            shard.Update(0.025f);
-        Assert.False(shard.IsExpired);
-
-        shard.Update(0.025f);
-        Assert.True(shard.IsExpired);
-        Assert.False(shard.IsSpent);
-        AssertNear(Origin + new Vector2(0, -200), shard.Position);
-        var beyond = Gemini(Origin + new Vector2(0, -210));
-        shard.Strike([beyond], Hit);
-        Assert.Equal(10f, beyond.HitPoints);
-        shard.Update(0.1f);
-        AssertNear(Origin + new Vector2(0, -200), shard.Position);
+        Assert.True(turned);
+        Assert.True(disc.IsCaught);
+        Assert.Equal(Origin, disc.Position);
+        Assert.All(around, enemy => Assert.Equal(10f, enemy.HitPoints));
     }
 
     private static OwnedWeapon DiscAtLevel(int level)

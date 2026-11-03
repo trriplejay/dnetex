@@ -129,10 +129,6 @@ public class SurvivorsGame : Game
         {
             StartSession();
         }
-        else if (!_session.IsChoosingUpgrade && !_session.IsFinished && Pressed(Keys.Space))
-        {
-            _session.RequestBlink();
-        }
 
         _previousKeyboard = keyboard;
 
@@ -163,15 +159,10 @@ public class SurvivorsGame : Game
         // The victory screens replace the play field so the initials and table are easy to read.
         if (!_session.IsVictory)
         {
-            // Blink the ship while it's briefly immune after being hit.
-            var blinkedOut = _session.InvulnerableSecondsLeft > 0f && (int)(_session.InvulnerableSecondsLeft * 10f) % 2 == 0;
-            if (!blinkedOut)
-            {
-                foreach (var stroke in _session.Ship.GetStrokes())
-                    _batch.AddThickStroke(stroke, ShipRendering.StrokeWidth, ShipRendering.Color);
-                if (_session.ShieldPoints > 0f)
-                    _batch.AddThickStroke(CircleOutline(_session.Ship.Position, 24f), 1.5f, ToRgb(Color.LightCyan));
-            }
+            foreach (var stroke in _session.Ship.GetStrokes())
+                _batch.AddThickStroke(stroke, ShipRendering.StrokeWidth, ShipRendering.Color);
+            if (_session.ShieldPoints > 0f)
+                _batch.AddThickStroke(CircleOutline(_session.Ship.Position, 24f), 1.5f, ToRgb(Color.LightCyan));
 
             foreach (var hazard in _session.Hazards)
             {
@@ -206,48 +197,25 @@ public class SurvivorsGame : Game
                 var enemyBlinkedOut = isHallucinationBoss && enemy.IsFlickering && (int)(enemy.FlickerSecondsLeft * 15f) % 2 == 0;
                 if (!enemyBlinkedOut)
                 {
-                    var enemyColor = enemy.IsBurning ? ToRgb(Color.OrangeRed) : EnemyRendering.Color;
                     foreach (var stroke in enemy.GetStrokes())
-                        _batch.AddThickStroke(stroke, EnemyRendering.StrokeWidth, enemyColor);
+                        _batch.AddThickStroke(stroke, EnemyRendering.StrokeWidth, EnemyRendering.Color);
                 }
             }
 
             foreach (var projectile in _session.Lasers)
                 DrawProjectile(projectile.GetShape(), Color.White);
 
-            foreach (var impact in _session.LaserExplosions)
-                _batch.AddThickStroke(CircleOutline(impact, Laser.ExplosionRadius), 2f, ToRgb(Color.White));
-
             foreach (var segment in _session.LightningSegments)
                 _batch.AddThickStroke([segment.From, segment.To], 2f, ToRgb(Color.Cyan));
 
             if (_session.Stats.Find(WeaponKind.Orbs)?.Orbs is { } orbs)
             {
-                if (orbs.IsRingMode)
-                {
-                    // Level 5 solid ring at orbit radius (band: orbitRadius - orbRadius to orbitRadius + orbRadius)
-                    const int ringSegments = 32;
-                    for (var i = 0; i < ringSegments; i++)
-                    {
-                        var a1 = MathF.Tau * i / ringSegments;
-                        var a2 = MathF.Tau * (i + 1) / ringSegments;
-                        var p1 = _session.Ship.Position + new System.Numerics.Vector2(MathF.Cos(a1), MathF.Sin(a1)) * orbs.OrbitRadius;
-                        var p2 = _session.Ship.Position + new System.Numerics.Vector2(MathF.Cos(a2), MathF.Sin(a2)) * orbs.OrbitRadius;
-                        _batch.AddThickStroke([p1, p2], orbs.OrbRadius * 2f, ToRgb(Color.LightCyan));
-                    }
-                }
-                else
-                {
-                    foreach (var orbPos in orbs.GetOrbPositions(_session.Ship.Position))
-                        _batch.AddCircle(orbPos, orbs.OrbRadius, ToRgb(Color.LightCyan));
-                }
+                foreach (var orbPos in orbs.GetOrbPositions(_session.Ship.Position))
+                    _batch.AddCircle(orbPos, orbs.OrbRadius, ToRgb(Color.LightCyan));
             }
 
             foreach (var disc in _session.Discs)
                 _batch.AddCircle(disc.Position, disc.Radius, ToRgb(Color.Gold));
-
-            foreach (var shard in _session.DiscShards)
-                _batch.AddCircle(shard.Position, DiscShard.Radius, ToRgb(Color.Gold));
 
             foreach (var mine in _session.Mines)
             {
@@ -261,9 +229,6 @@ public class SurvivorsGame : Game
                     _batch.AddThickStroke(CircleOutline(mine.Position, ProximityMines.MineRadius), 1.5f, ToRgb(Color.DimGray));
                 }
             }
-
-            foreach (var mini in _session.MiniMines)
-                _batch.AddCircle(mini.Position, ProximityMines.MineRadius * 0.5f, ToRgb(Color.Orange));
 
             foreach (var blast in _session.MineExplosions)
                 _batch.AddThickStroke(CircleOutline(blast.Center, blast.Radius), 2f, ToRgb(Color.OrangeRed));
@@ -342,8 +307,6 @@ public class SurvivorsGame : Game
             if (enhancement.Definition == ShipEnhancements.Regeneration)
             {
                 var rate = ShipEnhancements.RegenPerReadout(enhancement.Level);
-                if (_session.RegenBoostSecondsLeft > 0f)
-                    rate *= ShipEnhancements.RegenBoostMultiplier;
                 enhancementText = $"REGEN LV {enhancement.Level} +{rate:0.##} HP/5s";
             }
             else
@@ -473,7 +436,7 @@ public class SurvivorsGame : Game
         return lines;
     }
 
-    /// <summary>A closed polyline approximating a circle, for outlines such as the laser explosion radius.</summary>
+    /// <summary>A closed polyline approximating a circle, for outlines such as the shield ring and mine blasts.</summary>
     private static System.Numerics.Vector2[] CircleOutline(System.Numerics.Vector2 center, float radius)
     {
         const int segments = 32;

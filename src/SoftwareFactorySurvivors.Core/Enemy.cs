@@ -78,73 +78,12 @@ public sealed class Enemy
 
     public bool IsDead => HitPoints <= 0f;
 
-    /// <summary>Duration of burn in seconds.</summary>
-    public const float BurnDuration = 5f;
-
-    /// <summary>Damage dealt per second of burn.</summary>
-    public const float BurnDamagePerSecond = 1f;
-
-    /// <summary>Seconds of game time left on burn.</summary>
-    public float BurnSecondsLeft { get; private set; }
-
-    /// <summary>True while this enemy is burning.</summary>
-    public bool IsBurning => BurnSecondsLeft > 0f;
-
-    /// <summary>Damage dealt by burn during the most recent update or burn tick.</summary>
-    public float LastBurnDamage { get; private set; }
-
-    /// <summary>
-    /// Applies 5 seconds of burn dealing 1 damage per second. If the enemy is already burning,
-    /// refreshes the duration to 5 seconds without stacking. Ignored while the enemy is shielded or dead.
-    /// </summary>
-    public void ApplyBurn(float duration = BurnDuration)
-    {
-        if (IsShielded || IsDead)
-            return;
-
-        BurnSecondsLeft = duration;
-    }
-
-    /// <summary>
-    /// Ticks burn by elapsedSeconds, dealing 1 damage per second burned and recording it in LastBurnDamage.
-    /// </summary>
-    public float TickBurn(float elapsedSeconds)
-    {
-        if (IsDead || BurnSecondsLeft <= 0f || elapsedSeconds <= 0f)
-        {
-            LastBurnDamage = 0f;
-            return 0f;
-        }
-
-        var burnTime = MathF.Min(elapsedSeconds, BurnSecondsLeft);
-        BurnSecondsLeft = MathF.Max(0f, BurnSecondsLeft - elapsedSeconds);
-        var damage = burnTime * BurnDamagePerSecond;
-
-        if (damage > 0f)
-        {
-            if (IsCopy)
-            {
-                HitPoints = 0f;
-            }
-            else
-            {
-                HitPoints = MathF.Max(0f, HitPoints - damage);
-                EnterReachedPhases();
-            }
-        }
-
-        LastBurnDamage = damage;
-        return damage;
-    }
-
     public void Update(Vector2 playerPosition, float elapsedSeconds)
     {
         Position = Movement.Move(Position, playerPosition, elapsedSeconds);
         Rotation += Type.SpinSpeed * elapsedSeconds;
         if (IsFlickering)
             FlickerSecondsLeft = MathF.Max(0f, FlickerSecondsLeft - elapsedSeconds);
-
-        TickBurn(elapsedSeconds);
     }
 
     /// <summary>Runs the enemy's special ability, if it has one, and returns any enemies it created.</summary>
