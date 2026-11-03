@@ -450,4 +450,50 @@ public class ShipEnhancementTests
         Assert.Equal(Width, session.Ship.Position.X, precision: 3);
         Assert.Equal(before.Y, session.Ship.Position.Y, precision: 3);
     }
+
+    // ---- Armor level-5 reflect (CLM-1) ----
+
+    [Fact]
+    public void Armor_level_5_reflects_blocked_contact_damage_to_touching_enemy_while_boss_bullet_reflects_nothing_and_changes_no_enemy_hp()
+    {
+        // (a) Touching enemy loses exactly the amount armor blocked from its contact tick.
+        var session = QuietSessionWith((ShipEnhancements.Armor, 5));
+        var touchingEnemy = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center);
+        var bystander = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center + new Vector2(200, 0));
+        session.AddEnemy(touchingEnemy);
+        session.AddEnemy(bystander);
+
+        Step(session);
+
+        // Raw 5, armor level 5 blocks 4 (minimum 1 dealt to ship): touching enemy takes 4 reflected damage.
+        Assert.Equal(6f, touchingEnemy.HitPoints);
+        Assert.Equal(10f, bystander.HitPoints);
+        Assert.Equal(99f, session.Stats.HitPoints);
+
+        // (b) Boss bullet hit changes no enemy HP: bystander and touching enemy are not damaged further.
+        var bullet = Hazard.CreateBullet(Center, radius: 10f);
+        bullet.Update(bullet.ArmSeconds);
+        session.AddHazard(bullet);
+
+        Step(session);
+
+        // Bullet deals 8 raw - 5 armor = 3 damage to ship. Attacker is null, so nothing is reflected.
+        Assert.Equal(6f, touchingEnemy.HitPoints);
+        Assert.Equal(10f, bystander.HitPoints);
+        Assert.Equal(96f, session.Stats.HitPoints);
+
+        // (c) Hazard-only hit (no touching enemy) changes no enemy HP at all.
+        var hazardOnlySession = QuietSessionWith((ShipEnhancements.Armor, 5));
+        var loneEnemy = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center + new Vector2(200, 0));
+        hazardOnlySession.AddEnemy(loneEnemy);
+
+        var soloBullet = Hazard.CreateBullet(Center, radius: 10f);
+        soloBullet.Update(soloBullet.ArmSeconds);
+        hazardOnlySession.AddHazard(soloBullet);
+
+        Step(hazardOnlySession);
+
+        Assert.Equal(10f, loneEnemy.HitPoints);
+        Assert.Equal(97f, hazardOnlySession.Stats.HitPoints);
+    }
 }
