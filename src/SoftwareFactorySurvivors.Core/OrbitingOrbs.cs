@@ -9,7 +9,7 @@ public sealed class OrbitingOrbs
 {
     public const int DefaultOrbCount = 3;
     public const float DefaultOrbitRadius = 80f;
-    public const float DefaultOrbRadius = 8f;
+    public const float DefaultOrbRadius = 11f;
     public const float DefaultRotationSpeedDeg = 90f; // degrees per second
     public const float DefaultDamage = 1f;
     public const float OrbHitCooldown = 0.5f; // seconds per enemy

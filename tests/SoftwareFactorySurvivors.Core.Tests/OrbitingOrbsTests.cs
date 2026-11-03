@@ -21,14 +21,14 @@ public class OrbitingOrbsTests
     }
 
     [Fact]
-    public void Level_1_is_three_orbs_120_degrees_apart_at_80_px_with_radius_8()
+    public void Level_1_is_three_orbs_120_degrees_apart_at_80_px_with_radius_11()
     {
         var orbs = new OrbitingOrbs();
 
         var positions = orbs.GetOrbPositions(Ship);
 
         Assert.Equal(3, positions.Count);
-        Assert.Equal(8f, orbs.OrbRadius);
+        Assert.Equal(11f, orbs.OrbRadius);
         for (var i = 0; i < 3; i++)
         {
             Assert.Equal(80f, Vector2.Distance(Ship, positions[i]), Eps);
@@ -95,26 +95,39 @@ public class OrbitingOrbsTests
         var orbs = new OrbitingOrbs();
 
         orbs.AddOrb();
-        Assert.Equal((4, 90f, 80f, 8f, 1f), Stats(orbs));
+        Assert.Equal((4, 90f, 80f, 11f, 1f), Stats(orbs));
         orbs.AddSpeedAndOrbit();
-        Assert.Equal((4, 120f, 95f, 8f, 1f), Stats(orbs));
-        orbs.AddOrbRadius();
         Assert.Equal((4, 120f, 95f, 11f, 1f), Stats(orbs));
+        orbs.AddOrbRadius();
+        Assert.Equal((4, 120f, 95f, 14f, 1f), Stats(orbs));
         orbs.AddDamage();
-        Assert.Equal((4, 120f, 95f, 11f, 1.5f), Stats(orbs));
+        Assert.Equal((4, 120f, 95f, 14f, 1.5f), Stats(orbs));
         Assert.Equal(4, orbs.GetOrbPositions(Ship).Count);
+    }
+
+    [Fact]
+    public void Base_radius_hits_at_90_px_and_misses_at_92_px()
+    {
+        // Orbit radius is 80 px, base orb radius is 11 px -> reach is 91 px.
+        // A half-10 px square centred at 100 px has its nearest edge at 90 px (within 91 px reach -> hit).
+        var nearEnemy = BigSquare(Ship + new Vector2(100f, 0f), half: 10f);
+        Assert.Single(new OrbitingOrbs().Update(0f, Ship, [nearEnemy]));
+
+        // A half-10 px square centred at 102 px has its nearest edge at 92 px (beyond 91 px reach -> miss).
+        var farEnemy = BigSquare(Ship + new Vector2(102f, 0f), half: 10f);
+        Assert.Empty(new OrbitingOrbs().Update(0f, Ship, [farEnemy]));
     }
 
     [Fact]
     public void A_bigger_orb_radius_reaches_enemies_a_smaller_one_misses()
     {
-        // A 10 px square centred 100 px out has its nearest edge at 90 px: past radius 8's reach (88), within radius 17's (97).
-        var enemy = BigSquare(Ship + new Vector2(100f, 0f), half: 10f);
+        // Orbit radius 80 px, base orb radius 11 px -> reach is 91 px.
+        // A half-10 px square centred at 103 px out has its nearest edge at 93 px:
+        // past base radius 11's reach (91), within one AddOrbRadius (14 px -> reach 94).
+        var enemy = BigSquare(Ship + new Vector2(103f, 0f), half: 10f);
         Assert.Empty(new OrbitingOrbs().Update(0f, Ship, [enemy]));
 
         var bigger = new OrbitingOrbs();
-        bigger.AddOrbRadius();
-        bigger.AddOrbRadius();
         bigger.AddOrbRadius();
         Assert.Single(bigger.Update(0f, Ship, [enemy]));
     }

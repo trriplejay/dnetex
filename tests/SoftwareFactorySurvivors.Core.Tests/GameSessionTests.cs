@@ -203,7 +203,7 @@ public class GameSessionTests
         Assert.Equal(4, orbs.Count);
         Assert.Equal(120f, state.RotationSpeedDeg);
         Assert.Equal(95f, state.OrbitRadius);
-        Assert.Equal(11f, state.OrbRadius);
+        Assert.Equal(14f, state.OrbRadius);
         Assert.Equal(4, state.GetOrbPositions(Center).Count);
 
         // The fifth card leaves the orbs discrete: one position per orb.
@@ -457,5 +457,16 @@ public class GameSessionTests
         var clockBefore = session.ElapsedSeconds;
         session.Update(Vector2.Zero, null, 0.5f, Width, Height);
         Assert.Equal(clockBefore + 0.5f, session.ElapsedSeconds, precision: 4);
+    }
+
+    [Fact]
+    public void Session_started_on_laser_has_no_orbs_weapon()
+    {
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [], rings: []);
+        // Choose Laser (index 0)
+        session.ChooseUpgrade(0);
+        var weapon = Assert.Single(session.Stats.Weapons);
+        Assert.Equal(WeaponKind.Laser, weapon.Kind);
+        Assert.Null(session.Stats.Find(WeaponKind.Orbs));
     }
 }
