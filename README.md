@@ -19,24 +19,27 @@ Enemies are white line-art logos of AI companies, each with its own hit points, 
 | Apple Intelligence | 10 | Spirals in wide | 9 | 6:00 |
 | Meta | 20 | Slow tank | 15 | 7:00 |
 
-**Lull and ring.** From 1:20 to 1:30 regular spawning stops. At 1:30 it resumes at the normal rates, and 16 Geminis appear in a ring 500 px around the ship and close in from every side; they are spaced so you can still slip between two of them if you fly straight at the ring. Lulls and rings are scheduled in `EnemyRoster.SpawnPauses` and `EnemyRoster.Rings`.
+**Lull and ring.** From 1:20 to 1:30 regular spawning stops. At 1:30 it resumes at the normal rates, and 32 Geminis appear in a ring 500 px around the ship and close in from every side; they are spaced so you can still slip between two of them if you fly straight at the ring. Lulls and rings are scheduled in `EnemyRoster.SpawnPauses` and `EnemyRoster.Rings`.
 
 **Bosses.** At 3:00 the Gemini Boss enters: a Gemini logo 4× normal size with 40 hit points that crawls toward you at a third of a regular Gemini's speed. Five regular Geminis orbit it at 10× Gemini speed as a shield: the boss takes no damage, and lasers that reach it are absorbed, until all five are dead (its health bar is grey while shielded). The shield respawns at each phase: 5 Geminis at 75%, 10 at 50%, and 10 orbiting twice as far out at 25%. Shields are data on the enemy type (`EnemyType.Shield`). Every 3 seconds it throws a regular Gemini at a random spot 80–180 px from you; the thrown Gemini flies there at 4× Gemini speed, then lands and chases normally. Thrown Geminis still score a point when killed but give no experience. It gets more dangerous as it is worn down: at 75% health it throws 3 Geminis at a time and they fly twice as fast (8× Gemini speed); at 50% it throws 5; at 25% it throws two waves of 5, 0.25 s apart, and starts moving like Claude (creeping, then lunging) at 4× its own speed. At 4:30 Autocomplete enters: it telegraphs its aim line, then charges straight along it (400 px/s, up to 700 px, stopping where you were when it locked on). At 75% it charges faster and farther (550 px/s, up to 900 px). At 50% it also fires rings of slow bullets with a gap to escape through. At 25% it charges faster again (700 px/s) with a shorter wind-up of never less than 1 second, and keeps firing bullet rings. A charge already under way finishes as it started. Its health bar is notched at 75%, 50% and 25%. At 7:00 Hallucination enters: it splits into look-alike copies; at 75% health it splits every 3.5 s; at 50% it makes 3 copies per split and moves faster; at 25% it splits every 2.5 s and dashes like Claude Boss. Copies move like the boss in its current phase, at most 8 are alive at once, they never appear within 100 px of the ship, they die in one hit, and they vanish when the boss dies. Its health bar is notched at 75%, 50% and 25%. At 10:00 Claude Boss enters: it creeps then lunges, with a closing ring every 10 s and 12-bullet rings with an escape gap every 3 s. At 75% the bullet rings come every 2 s with 16 bullets. At 50% the closing ring comes every 6 s, shrinks faster and lasts 6 s, and its lunges are faster. At 25% it also throws 2 regular Claudes every 4 s, landing 150-250 px from the ship and harmless until they land. Each phase builds on the last. Its health bar is notched at 75%, 50% and 25%. Phases are data on the enemy type (`EnemyType.Phases`), so any boss can have them. While a boss is alive no other enemies spawn; regular spawning resumes once it's defeated. A boss isn't destroyed by touching the ship, and its health bar runs down the right side of the screen, notched at each phase. Bosses are scheduled in `EnemyRoster.Bosses`.
 
-Kills give experience; level *n* needs 3.5 × *n*^1.5 experience (4, 10, 18, 28, 39 …). Each level pauses the game and offers three random upgrade cards; the one you pick lasts for the rest of the game:
+Kills give experience; level *n* needs max(1, round(2.0 × *n*^1.25)) experience (2, 5, 8, 11, 15 …). Each level pauses the game and offers three random upgrade cards; the one you pick lasts for the rest of the game:
 
-| Upgrade | Effect per pick |
+Each weapon the ship owns (up to 3) has its own level, damage, attack speed and count, and fires on its own timer; an upgrade to one weapon leaves the others unchanged. Every game opens on a pick of the starting weapon (Laser, Lightning, Orbs, Ricochet Disc or Proximity Mines). After that, a level-up offers up to three different cards: a new weapon (while a weapon slot is free), or one option for a weapon you own below level 5, which raises that weapon one level (shown as `LV n > n+1`). A level with no card left to offer is used up without pausing.
+
+| Weapon | Options per upgrade card |
 |---|---|
-| Attack speed | +0.25 volleys per second (starts at 1) |
-| Projectile size | Lasers +100% wider and longer |
-| Projectiles | +1 laser per volley, fanned out (max 9) |
-| Damage | +1 damage per hit |
-| Piercing | Lasers pass through +1 more enemy |
-| Max HP | +1 max hit point (and heals 1) |
+| Laser | +1 projectile, +1 damage, +0.25 attacks/s |
+| Lightning | +0.4 damage, +0.2 attacks/s, +1 chain |
+| Orbs | +1 orb, +30 deg/s and +15 px orbit, +3 px orb size, +0.5 damage |
+| Ricochet Disc | +1 disc, +1 damage, +0.15 attacks/s, +25% disc size |
+| Proximity Mines | +1.5 damage, +15 px blast radius, +0.15 drops/s, +1 mine per drop |
 
-The ship starts with 1 hit point, so the first touch is fatal. With extra hit points, a touch costs 1 hit point, destroys the enemy, and makes the ship blink and ignore contact for 1 second.
+The Ricochet Disc (2 damage, one throw every 2 s) is thrown at the nearest enemy, or straight ahead with none, flies out 250 px at 400 px/s and back to the ship, and hits every enemy it passes through once each way. At level 5 (Shatter) it bursts into 4 shards at its far point, each dealing half its damage to the first enemy it hits within 200 px. Proximity Mines drops a mine at the ship every 2 s (3 damage, 60 px blast). A mine arms after 0.5 s, explodes when an enemy touches it and damages every enemy within its blast once; an untouched mine is gone after 10 s, and at most 12 lie at once (a new one removes the oldest). At level 5 (Cluster) each explosion throws 3 mini-mines 50 px out that go off 0.3 s later at half damage and half radius.
 
-A clock at the top of the screen counts up in minutes and seconds; your level, experience bar and hit points are in the top-left corner. Survive until 10:00 to win. Each enemy killed is worth 1 point. If an enemy touches the ship first, the game freezes and shows GAME OVER. On a win you can type up to three initials to save your score to the high-score table, which lasts until the game is closed.
+The ship starts with 100 hit points. Anything that touches it deals contact damage the moment it first touches and again every 0.5 s while it stays in contact, each enemy or hazard on its own timer, so a swarm hurts in proportion to how many are touching. Enemies survive the contact. Regular enemies deal 5–8 per tick, bosses 15, a boss's trail 4, the closing ring's band 6, and a bullet 8 once before it vanishes. All contact damage grows with the clock: base × (1 + minutes / 10), so twice the base at 10:00 (`EnemyRoster.ScaledContactDamage`). Hit points are shown as whole numbers rounded up, so a living ship never shows 0.
+
+A clock at the top of the screen counts up in minutes and seconds; your level, experience bar and hit points are in the top-left corner. Survive until 10:00 to win. Each enemy killed is worth 1 point. If the ship's hit points run out first, the game freezes and shows GAME OVER. On a win you can type up to three initials to save your score to the high-score table, which lasts until the game is closed.
 
 ## Controls
 
@@ -129,7 +132,7 @@ dotnet run --project src/SoftwareFactorySurvivors.Desktop -- --time 3:00 --level
 ```
 
 - `--time MM:SS` (or whole seconds) starts the clock there, with every enemy type that has arrived by then. A boss due at exactly that time enters straight away; bosses due earlier are skipped.
-- `--level N` starts the ship at level N, offering the upgrade cards for each skipped level before play begins.
+- `--level N` starts the ship at level N. The starting-weapon pick comes first, then the upgrade cards for each of the N-1 skipped levels, oldest first, all before the clock starts.
 
 Both apply again when you restart with Enter.
 

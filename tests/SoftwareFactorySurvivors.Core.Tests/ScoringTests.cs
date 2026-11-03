@@ -23,7 +23,7 @@ public class ScoringTests
     [Fact]
     public void Surviving_ten_minutes_wins_and_stops_the_clock_at_ten()
     {
-        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(600f, EnemyRoster.ClaudeBoss)], rings: []);
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(600f, EnemyRoster.ClaudeBoss)], rings: []).WithLaser();
 
         session.Update(Vector2.Zero, null, 600f, Width, Height);
         var claudeBoss = Assert.Single(session.Bosses);
@@ -48,7 +48,7 @@ public class ScoringTests
         Assert.Equal(GameSession.SurvivalSeconds, session.ElapsedSeconds);
 
         // A session where only GeminiBoss dies is not a victory
-        var geminiSession = new GameSession(Center, new Random(2), roster: [], bosses: [new BossArrival(180f, EnemyRoster.GeminiBoss)], rings: []);
+        var geminiSession = new GameSession(Center, new Random(2), roster: [], bosses: [new BossArrival(180f, EnemyRoster.GeminiBoss)], rings: []).WithLaser();
         geminiSession.Update(Vector2.Zero, null, 180f, Width, Height);
         var gemini = Assert.Single(geminiSession.Bosses);
         foreach (var shield in gemini.Shields)
@@ -63,12 +63,15 @@ public class ScoringTests
     {
         var session = TestEnemies.QuietSession(Center);
         session.Update(Vector2.Zero, null, 599.9f, Width, Height);
+        // Less than one tick left, so the final-frame touch is lethal.
+        session.Stats.HitPoints = 1f;
         session.AddEnemy(EnemyRoster.Gemini.Create(Center));
 
         session.Update(Vector2.Zero, null, 0.5f, Width, Height);
 
         Assert.True(session.IsGameOver);
         Assert.False(session.IsVictory);
+        Assert.Equal(0f, session.Stats.HitPoints);
     }
 
     [Fact]
@@ -95,7 +98,7 @@ public class ScoringTests
     [Fact]
     public void Session_rates_can_be_changed_mid_game()
     {
-        var session = new GameSession(Center, new Random(3));
+        var session = new GameSession(Center, new Random(3)).WithLaser();
         session.Spawner.SetSpawnsPerMinute(EnemyRoster.Gemini, 600f);
 
         session.Update(Vector2.Zero, null, 0.5f, Width, Height);

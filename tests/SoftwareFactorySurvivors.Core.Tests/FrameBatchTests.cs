@@ -129,12 +129,15 @@ public class FrameBatchTests
         Assert.Equal(StripTriangles(StrokeA, 3f).Length, batch.GetBatch(0).VertexCount);
     }
 
+    /// <summary>A closed triangle: one wing, the tip, the other wing, back to the first wing.</summary>
+    private static readonly Vector2[] Triangle = [new(290f, 210f), new(318f, 182f), new(304f, 224f), new(290f, 210f)];
+
     [Fact]
     public void Circle_and_arrowhead_match_the_per_piece_fill_geometry()
     {
         var center = new Vector2(123.5f, 77.25f);
         const float radius = 6.5f;
-        var arrowhead = new Ballista(new(300, 200), 0.7f, scale: 1.5f).GetArrowhead();
+        var arrowhead = Triangle;
 
         var batch = new FrameBatch();
         batch.AddCircle(center, radius, White);
@@ -195,7 +198,7 @@ public class FrameBatchTests
             .Select(s => Enumerable.Range(0, 40).Select(i => new Vector2(s + i * 3f, MathF.Sin(i) * 20f)).ToArray())
             .Append(StrokeA).Append(StrokeB)
             .ToArray();
-        var arrowhead = new Ballista(new(300, 200), 0.7f).GetArrowhead();
+        var arrowhead = Triangle;
         var batch = new FrameBatch();
 
         BuildFrame(batch, strokes, arrowhead); // warm-up
@@ -214,7 +217,7 @@ public class FrameBatchTests
     {
         var batch = new FrameBatch();
         var big = Enumerable.Range(0, 100).Select(_ => StrokeB).ToArray();
-        var arrowhead = new Ballista(new(300, 200), 0.7f).GetArrowhead();
+        var arrowhead = Triangle;
         BuildFrame(batch, big, arrowhead);
         BuildFrame(batch, big, arrowhead);
 

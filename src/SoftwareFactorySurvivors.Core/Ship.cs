@@ -47,14 +47,30 @@ public class Ship
     public Vector2 Nose => Vector2.Transform(new Vector2(0, -24), Matrix3x2.CreateRotation(Heading)) + Position;
 
     /// <summary>
-    /// Moves along a screen direction (up is -Y) regardless of Heading. Directions longer than 1 are
-    /// shortened to 1, so diagonals are no faster than straight moves.
+    /// This ship's speed as a multiple of Speed; 1 by default. The session sets it from the Move Speed
+    /// enhancement (ShipEnhancements.SpeedMultiplier).
+    /// </summary>
+    public float SpeedMultiplier { get; set; } = 1f;
+
+    /// <summary>
+    /// Moves along a screen direction (up is -Y) regardless of Heading, at Speed × SpeedMultiplier. Directions
+    /// longer than 1 are shortened to 1, so diagonals are no faster than straight moves.
     /// </summary>
     public void Move(Vector2 direction, float elapsedSeconds)
     {
         if (direction.LengthSquared() > 1f)
             direction = Vector2.Normalize(direction);
-        Position += direction * Speed * elapsedSeconds;
+        Position += direction * (Speed * SpeedMultiplier) * elapsedSeconds;
+    }
+
+    /// <summary>
+    /// Jumps distance pixels along Forward at once, then clamps the position into the play area
+    /// [0, width] × [0, height], so a blink toward an edge stops at that edge.
+    /// </summary>
+    public void Blink(float distance, float width, float height)
+    {
+        var target = Position + Forward * distance;
+        Position = new Vector2(Math.Clamp(target.X, 0f, width), Math.Clamp(target.Y, 0f, height));
     }
 
     /// <summary>Turns instantly to face target. Aiming at the ship's own position keeps the current heading.</summary>

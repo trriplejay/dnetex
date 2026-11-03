@@ -297,10 +297,10 @@ public class ClaudeBossThrowTests
     [Fact]
     public void ClaudeBoss_thrown_claude_is_harmless_in_flight_and_damages_after_landing()
     {
-        // CLM-1: In a GameSession, an enemy thrown by ClaudeBoss whose Thrown movement has not landed
-        // never costs the ship a hit point. It is never removed by touching the ship and never starts
-        // the ship's invulnerability. Once its Thrown.HasLanded is true, touching the ship costs a hit point
-        // and removes it, exactly like any other regular enemy.
+        // In a GameSession, an enemy thrown by ClaudeBoss whose Thrown movement has not landed never costs the
+        // ship hit points and is never removed by touching it. Once its Thrown.HasLanded is true, touching the
+        // ship deals the Claude type's contact damage (scaled for the clock) like any other regular enemy, and
+        // it survives the contact.
         // Discriminating case: an airborne minion thrown by GeminiBoss still hurts on contact, as today.
         var shipPos = new Vector2(500, 400);
 
@@ -324,18 +324,16 @@ public class ClaudeBossThrowTests
         // Claude minion position is currently boss.Position which is shipPos!
         session1.AddEnemy(claudeMinion);
         Assert.Equal(shipPos, claudeMinion.Position);
-        Assert.Equal(1, session1.Stats.HitPoints);
-        Assert.Equal(0f, session1.InvulnerableSecondsLeft);
+        Assert.Equal(100f, session1.Stats.HitPoints);
 
         // Update session
         session1.Update(Vector2.Zero, null, 0.01f, 1000f, 800f);
 
-        // HitPoints unchanged, minion still in Enemies, InvulnerableSecondsLeft is 0
-        Assert.Equal(1, session1.Stats.HitPoints);
+        // HitPoints unchanged, minion still in Enemies
+        Assert.Equal(100f, session1.Stats.HitPoints);
         Assert.Contains(claudeMinion, session1.Enemies);
-        Assert.Equal(0f, session1.InvulnerableSecondsLeft);
 
-        // Case 2: Once the Claude minion lands overlapping the ship, touching costs a hit point and removes it
+        // Case 2: Once the Claude minion lands overlapping the ship, touching deals its contact damage and it survives
         // Drive movement until HasLanded is true
         while (!thrownMovement.HasLanded)
         {
@@ -346,20 +344,17 @@ public class ClaudeBossThrowTests
 
         // Place a landed Claude at the ship's position
         var session2 = TestEnemies.QuietSession(shipPos);
-        session2.Stats.MaxHitPoints = session2.Stats.HitPoints = 3;
         var landedClaude = new Enemy(EnemyRoster.Claude, shipPos, claudeMinion.Movement);
         session2.AddEnemy(landedClaude);
 
-        Assert.Equal(3, session2.Stats.HitPoints);
+        Assert.Equal(100f, session2.Stats.HitPoints);
         session2.Update(Vector2.Zero, null, 0.01f, 1000f, 800f);
 
-        Assert.Equal(2, session2.Stats.HitPoints);
-        Assert.DoesNotContain(landedClaude, session2.Enemies);
-        Assert.Equal(GameSession.InvulnerableSeconds, session2.InvulnerableSecondsLeft);
+        Assert.Equal(100f - EnemyRoster.ScaledContactDamage(EnemyRoster.Claude.ContactDamage, 0.01f), session2.Stats.HitPoints);
+        Assert.Contains(landedClaude, session2.Enemies);
 
         // Case 3: Discriminating case - an airborne GeminiBoss-thrown Gemini still hurts on contact
         var session3 = TestEnemies.QuietSession(shipPos);
-        session3.Stats.MaxHitPoints = session3.Stats.HitPoints = 3;
         var geminiBoss = new Enemy(EnemyRoster.GeminiBoss, shipPos);
         var geminiMinions = geminiBoss.UseAbility(shipPos, 3.0f, new Random(456));
         Assert.NotEmpty(geminiMinions);
@@ -370,13 +365,11 @@ public class ClaudeBossThrowTests
         Assert.False(geminiThrown.HasLanded);
 
         session3.AddEnemy(geminiMinion);
-        Assert.Equal(3, session3.Stats.HitPoints);
+        Assert.Equal(100f, session3.Stats.HitPoints);
         session3.Update(Vector2.Zero, null, 0.01f, 1000f, 800f);
 
-        // Airborne Gemini costs a hit point and is removed
-        Assert.Equal(2, session3.Stats.HitPoints);
-        Assert.DoesNotContain(geminiMinion, session3.Enemies);
-        Assert.True(session3.InvulnerableSecondsLeft > 0f);
+        // Airborne Gemini deals its contact damage
+        Assert.Equal(100f - EnemyRoster.ScaledContactDamage(EnemyRoster.Gemini.ContactDamage, 0.01f), session3.Stats.HitPoints);
     }
 
     [Fact]

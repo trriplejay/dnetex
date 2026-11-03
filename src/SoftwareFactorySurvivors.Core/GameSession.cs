@@ -4,9 +4,15 @@ namespace SoftwareFactorySurvivors.Core;
 
 /// <summary>
 /// One play-through: the ship, its lasers and the enemies, plus the player's level and upgrades.
-/// It ends in defeat when the ship runs out of hit points, or in victory when it is still alive after
-/// SurvivalSeconds. Each level gained pauses play until the player picks one of three offered upgrades;
-/// the round for level 3 instead offers the two weapon paths, Ballista and Bola, and the pick lasts all game.
+/// The ship starts with 100 hit points. Whatever touches it (an enemy, a boss, an armed trail or ring band)
+/// deals its contact damage the moment it first touches and again every ContactTickSeconds while it stays in
+/// contact, each source on its own timer; enemies and bosses survive the contact, and an armed bullet deals its
+/// damage once and is gone. Contact damage grows with the clock (EnemyRoster.ScaledContactDamage).
+/// Each hit then passes through the ship's enhancements in order: shield, armor, Second Wind (see DamageShip).
+/// It ends in defeat when the ship's hit points reach 0, or in victory when the Claude Boss is killed.
+/// It opens paused on the starting-weapon pick; each level gained then pauses play until the
+/// player picks one of up to three offered cards (a level with no card left to offer doesn't pause).
+/// Every owned weapon fires on its own timer with its own stats.
 /// </summary>
 public sealed class GameSession
 {
@@ -19,13 +25,19 @@ public sealed class GameSession
     /// <summary>Angle between neighbouring lasers in a multi-laser volley.</summary>
     public const float VolleySpreadRadians = 10f * MathF.PI / 180f;
 
-    /// <summary>After an enemy touches the ship, further contact is ignored for this long.</summary>
-    public const float InvulnerableSeconds = 1f;
+    /// <summary>While a source stays in contact with the ship, it deals its damage again after each this many seconds.</summary>
+    public const float ContactTickSeconds = 0.5f;
+
+    /// <summary>Maximum number of live regular (non-boss) enemies in play at once.</summary>
+    public const int MaxRegularEnemies = 300;
+
+    // The ship's outline reaches 24 px from its centre; the slack absorbs float rounding in the transformed strokes.
+    private const float ShipContactRadius = 24.5f;
+
+    // Absorbs float drift in a contact timer summed from many small frames, so a tick due at 0.5 s isn't a frame late.
+    private const float ContactTimerSlack = 1e-4f;
 
     public const int UpgradeChoices = 3;
-
-    /// <summary>The level whose round offers the weapon paths instead of general upgrades.</summary>
-    public const int WeaponPathLevel = 3;
 
     private readonly Random _random;
     private readonly IReadOnlyList<EnemyType> _roster;
@@ -33,12 +45,31 @@ public sealed class GameSession
     private readonly List<Enemy> _bosses = [];
     private readonly IReadOnlyList<SpawnPause> _spawnPauses;
     private readonly List<RingSpawn> _ringsToCome;
-    private readonly FiringTimer _firingTimer = new();
     private readonly List<Projectile> _lasers = [];
     private readonly List<Enemy> _enemies = [];
     private readonly List<Hazard> _hazards = [];
     private readonly List<Enemy> _enemySnapshot = [];
+    private readonly List<LightningSegment> _lightningSegments = [];
+    private readonly List<Vector2> _laserExplosions = [];
+    private readonly List<RicochetDisc> _discs = [];
+    private readonly List<DiscShard> _discShards = [];
+    private readonly ProximityMines _mines = new();
+    private readonly Action<Enemy, float> _damageEnemy;
+    // Seconds until each touching source (enemy or hazard) deals its next tick; a source not touching has no entry.
+    // Two maps swapped each frame, so a source that stops touching drops its timer without a per-frame allocation.
+    private Dictionary<object, float> _contactTimers = new(ReferenceEqualityComparer.Instance);
+    private Dictionary<object, float> _nextContactTimers = new(ReferenceEqualityComparer.Instance);
     private int _pendingLevelUps;
+    // The Shield level the shield was last filled for, so a level gained (from a card or straight on Stats) fills it.
+    private int _shieldLevelFilled;
+    // Seconds until a broken shield refills; runs only while the shield is broken.
+    private float _shieldRechargeTimer;
+    private bool _secondWindUsed;
+    private float _regenTimer;
+    private float _regenBoostSecondsLeft;
+    // A blink asked for since the last played frame; the next Update accepts or drops it.
+    private bool _blinkRequested;
+    private float _blinkCooldownLeft;
 
     /// <param name="roster">Enemy types that join the spawner at their arrival times; defaults to EnemyRoster.All.</param>
     /// <param name="bosses">Bosses and when they enter; defaults to EnemyRoster.Bosses.</param>
@@ -47,14 +78,20 @@ public sealed class GameSession
     /// <param name="start">
     /// Debug start point. The clock starts at its time, with every enemy type that has arrived by then; bosses
     /// due earlier are skipped, while one due at exactly that time enters on the first frame. Starting above
-    /// level 1 offers the upgrade cards for each level skipped before anything moves. Rings follow the same rule as bosses.
+    /// level 1 offers the upgrade cards for each level skipped, after the starting pick and before anything moves.
+    /// Rings follow the same rule as bosses.
     /// </param>
+    /// <remarks>
+    /// Every session opens on the starting pick: play is paused on Upgrades.StartingWeapons and the ship owns no
+    /// weapon until one is chosen.
+    /// </remarks>
     public GameSession(Vector2 shipPosition, Random random, IReadOnlyList<EnemyType>? roster = null,
         IReadOnlyList<BossArrival>? bosses = null, StartOptions? start = null,
         IReadOnlyList<SpawnPause>? spawnPauses = null, IReadOnlyList<RingSpawn>? rings = null)
     {
         start ??= StartOptions.Default;
         _random = random;
+        _damageEnemy = DamageEnemy;
         _roster = roster ?? EnemyRoster.All;
         ElapsedSeconds = start.StartSeconds;
         _bossesToCome = [.. (bosses ?? EnemyRoster.Bosses).Where(arrival => arrival.AtSeconds >= ElapsedSeconds)];
@@ -63,9 +100,11 @@ public sealed class GameSession
         Ship = new Ship(shipPosition);
         Spawner = new EnemySpawner(random);
         Leveling = new Leveling(start.StartLevel);
+        // The skipped levels' rounds wait until the starting pick is made.
         _pendingLevelUps = start.StartLevel - 1;
         AddArrivedEnemyTypes();
-        OfferNextUpgrade();
+        IsStartingPick = true;
+        UpgradeOffer = Upgrades.StartingWeapons;
     }
 
     public Ship Ship { get; }
@@ -76,9 +115,30 @@ public sealed class GameSession
     public PlayerStats Stats { get; } = new();
     public Leveling Leveling { get; }
 
-    /// <summary>Projectiles in flight: lasers, or the chosen weapon path's projectiles once one is picked.</summary>
+    /// <summary>Projectiles in flight, fired by the owned weapons.</summary>
     public IReadOnlyList<Projectile> Lasers => _lasers;
     public IReadOnlyList<Enemy> Enemies => _enemies;
+
+    /// <summary>The lightning drawn this frame: ship to first target, then each hop; cleared at the start of every played frame.</summary>
+    public IReadOnlyList<LightningSegment> LightningSegments => _lightningSegments;
+
+    /// <summary>Impact points of level-5 laser explosions this frame (radius is <see cref="Laser.ExplosionRadius"/>); cleared at the start of every played frame.</summary>
+    public IReadOnlyList<Vector2> LaserExplosions => _laserExplosions;
+
+    /// <summary>Ricochet Discs in flight, out or back (position, radius, leg).</summary>
+    public IReadOnlyList<RicochetDisc> Discs => _discs;
+
+    /// <summary>Shards from level-5 discs (SHATTER) still flying.</summary>
+    public IReadOnlyList<DiscShard> DiscShards => _discShards;
+
+    /// <summary>Proximity Mines lying in play, oldest first (position, armed).</summary>
+    public IReadOnlyList<Mine> Mines => _mines.Mines;
+
+    /// <summary>Level-5 mini-mines (CLUSTER) waiting for their fuse.</summary>
+    public IReadOnlyList<MiniMine> MiniMines => _mines.MiniMines;
+
+    /// <summary>Mine and mini-mine explosions this frame (centre, blast radius); cleared at the start of every played frame's hit pass.</summary>
+    public IReadOnlyList<Circle> MineExplosions => _mines.Explosions;
 
     /// <summary>Bosses currently alive. While there are any, the regular spawner is paused.</summary>
     public IReadOnlyList<Enemy> Bosses => _bosses;
@@ -87,6 +147,9 @@ public sealed class GameSession
     public IReadOnlyList<Hazard> Hazards => _hazards;
 
     public bool IsBossActive => _bosses.Count > 0;
+
+    /// <summary>Number of live regular (non-boss) enemies currently in play.</summary>
+    public int LiveRegularEnemyCount => _enemies.Count(enemy => !enemy.IsDead && !_bosses.Contains(enemy));
 
     /// <summary>True during a scheduled lull, when regular spawning stops.</summary>
     public bool IsSpawningPaused => _spawnPauses.Any(pause => pause.Covers(ElapsedSeconds));
@@ -99,13 +162,28 @@ public sealed class GameSession
     public bool IsVictory { get; private set; }
     public bool IsFinished => IsGameOver || IsVictory;
 
-    /// <summary>Seconds of contact immunity left after the ship was last hit.</summary>
+    /// <summary>
+    /// Seconds of immunity left, during which no contact damages the ship. Only Second Wind grants it
+    /// (ShipEnhancements.SecondWindSeconds); ordinary contact damage grants none, so it stays 0 after a hit.
+    /// </summary>
     public float InvulnerableSecondsLeft { get; private set; }
 
-    /// <summary>The upgrades on offer while play is paused for a level-up; null while playing.</summary>
+    /// <summary>Shield points left (read from Stats.ShieldPoints, their one owner); a hit takes from these first.</summary>
+    public float ShieldPoints => Stats.ShieldPoints;
+
+    /// <summary>Shield points a full shield holds at the owned Shield level (Stats.ShieldCapacity).</summary>
+    public float ShieldCapacity => Stats.ShieldCapacity;
+
+    /// <summary>Seconds until a broken shield refills to capacity; 0 while the shield is up or not owned.</summary>
+    public float ShieldRechargeSecondsLeft => _shieldRechargeTimer;
+
+    /// <summary>The cards on offer while play is paused for the starting pick or a level-up; null while playing.</summary>
     public IReadOnlyList<Upgrade>? UpgradeOffer { get; private set; }
 
     public bool IsChoosingUpgrade => UpgradeOffer is not null;
+
+    /// <summary>True while the offer is the starting-weapon pick rather than a level-up round.</summary>
+    public bool IsStartingPick { get; private set; }
 
     /// <summary>Adds an enemy (and any shield orbiting it) directly, for spawns that don't come from the edge spawner.</summary>
     public void AddEnemy(Enemy enemy) => AddEnemies([enemy]);
@@ -116,7 +194,23 @@ public sealed class GameSession
     /// <summary>Adds multiple hazards directly to the session.</summary>
     public void AddHazards(IEnumerable<Hazard> hazards) => _hazards.AddRange(hazards);
 
+    /// <summary>Seconds until the next blink is accepted; 0 when one can go now.</summary>
+    public float BlinkCooldownSecondsLeft => _blinkCooldownLeft;
+
+    /// <summary>Seconds left on the level-5 regeneration boost after a hit; 0 when inactive.</summary>
+    public float RegenBoostSecondsLeft => _regenBoostSecondsLeft;
+
+    /// <summary>
+    /// Asks for one blink (e.g. on a Space press). The next Update moves the ship ShipEnhancements.BlinkDistance
+    /// along Forward, clamped to the play area, but only at Move Speed level 5 and once
+    /// ShipEnhancements.BlinkCooldownSeconds of game time have passed since the last blink; otherwise the request
+    /// is dropped and the ship stays put.
+    /// </summary>
+    public void RequestBlink() => _blinkRequested = true;
+
     /// <summary>Applies the chosen card, then offers the next level-up's cards or resumes play.</summary>
+    /// <exception cref="InvalidOperationException">No card is on offer.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The index names no card on offer.</exception>
     public void ChooseUpgrade(int index)
     {
         if (UpgradeOffer is null)
@@ -125,7 +219,12 @@ public sealed class GameSession
             throw new ArgumentOutOfRangeException(nameof(index));
 
         Upgrades.Apply(UpgradeOffer[index], Stats);
-        _pendingLevelUps--;
+        GrantShieldCapacity();
+        // The starting pick grants no level, so it uses up no waiting round.
+        if (IsStartingPick)
+            IsStartingPick = false;
+        else
+            _pendingLevelUps--;
         UpgradeOffer = null;
         OfferNextUpgrade();
     }
@@ -136,23 +235,40 @@ public sealed class GameSession
     public void Update(Vector2 moveDirection, Vector2? aimTarget, float elapsedSeconds, float width, float height)
     {
         if (IsFinished || IsChoosingUpgrade)
+        {
+            // A request made while play is stopped is not saved for later.
+            _blinkRequested = false;
             return;
+        }
 
         ElapsedSeconds = MathF.Min(ElapsedSeconds + elapsedSeconds, SurvivalSeconds);
         InvulnerableSecondsLeft = MathF.Max(0f, InvulnerableSecondsLeft - elapsedSeconds);
         AddArrivedEnemyTypes();
 
+        UpdateShieldRecharge(elapsedSeconds);
+        UpdateRegeneration(elapsedSeconds);
+
+        var moveSpeedLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.MoveSpeed);
+        UpdateBlink(moveSpeedLevel, elapsedSeconds, width, height);
+        Ship.SpeedMultiplier = ShipEnhancements.SpeedMultiplier(moveSpeedLevel);
         Ship.Update(moveDirection, aimTarget, elapsedSeconds);
 
         foreach (var laser in _lasers)
             laser.Update(elapsedSeconds);
-        foreach (var shot in _firingTimer.Update(elapsedSeconds, Ship.Nose, Ship.Heading, Stats.AttacksPerSecond))
-            _lasers.AddRange(Volley(shot.Position, shot.Heading));
+        // Shards burst this frame start flying next frame, like a freshly fired laser.
+        foreach (var shard in _discShards)
+            shard.Update(elapsedSeconds);
+        foreach (var disc in _discs)
+            disc.Update(elapsedSeconds, Ship.Position, _discShards);
+        _lightningSegments.Clear();
+        _laserExplosions.Clear();
+        foreach (var weapon in Stats.Weapons)
+            FireWeapon(weapon, elapsedSeconds);
 
         AddArrivedBosses(width, height);
         AddArrivedRings();
-        // Regular spawns wait while a boss is alive or during a lull; the spawner's timing is frozen, not saved up.
-        if (!IsBossActive && !IsSpawningPaused)
+        // Regular spawns wait while a boss is alive, during a lull, or while live regular enemies are at or above the cap; the spawner's timing is frozen, not saved up.
+        if (!IsBossActive && !IsSpawningPaused && LiveRegularEnemyCount < MaxRegularEnemies)
             AddEnemies(Spawner.Update(elapsedSeconds, width, height));
 
         // Existing hazards age and expire before any newly produced hazards this frame are added.
@@ -165,7 +281,10 @@ public sealed class GameSession
         foreach (var enemy in _enemies)
         {
             var prevChargeSeg = (enemy.Movement as ChargeAlongLine)?.LastChargeSegment;
+            // An enemy's update ticks its burn, the only damage it deals itself, so a burn kill is credited here.
+            var wasAlive = !enemy.IsDead;
             enemy.Update(Ship.Position, elapsedSeconds);
+            CreditKill(enemy, wasAlive);
             if (enemy.Movement is ChargeAlongLine charge)
             {
                 var seg = charge.LastChargeSegment;
@@ -186,12 +305,12 @@ public sealed class GameSession
                 AddHazards(abilityProds.TakeHazards());
         }
 
-        ResolveLaserHits();
+        ResolveWeaponHits(elapsedSeconds);
         // A boss can respawn its shield when a hit moves it into a new phase.
         foreach (var enemy in SnapshotEnemies())
             _enemies.AddRange(enemy.TakeNewShields());
         _lasers.RemoveAll(laser => laser.IsExpired(width, height));
-        ResolveContact();
+        ResolveContact(elapsedSeconds);
 
         var claudeBossKilled = _bosses.RemoveAll(boss => boss.IsDead && boss.Type == EnemyRoster.ClaudeBoss) > 0;
         var hallucinationBossKilled = _bosses.RemoveAll(boss => boss.IsDead && boss.Type == EnemyRoster.Hallucination) > 0;
@@ -252,24 +371,56 @@ public sealed class GameSession
         }
     }
 
-    private IEnumerable<Projectile> Volley(Vector2 nose, float heading)
+    /// <summary>Advances one weapon's own timer and fires what it emits this frame.</summary>
+    private void FireWeapon(OwnedWeapon weapon, float elapsedSeconds)
     {
-        var count = Stats.ProjectileCount;
-        for (var i = 0; i < count; i++)
+        switch (weapon.Kind)
         {
-            var offset = (i - (count - 1) / 2f) * VolleySpreadRadians;
-            yield return Stats.WeaponPath switch
-            {
-                // A ballista bolt passes through two more enemies than the player's piercing alone allows.
-                WeaponPath.Ballista => new Ballista(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce + 2),
-                WeaponPath.Bola => new Bola(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
-                _ => new Laser(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
-            };
+            case WeaponKind.Laser:
+                foreach (var shot in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
+                    _lasers.AddRange(Volley(weapon, shot));
+                break;
+            case WeaponKind.Lightning:
+                // With nothing to strike, the shot waits rather than being spent, so the next enemy is struck at once.
+                if (!Lightning.HasTarget(_enemies))
+                {
+                    weapon.Charge(elapsedSeconds);
+                    break;
+                }
+                foreach (var _ in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
+                    Lightning.Strike(Ship.Position, weapon.Damage, weapon.Count, weapon.Level, _enemies, _random, _damageEnemy, _lightningSegments);
+                break;
+            case WeaponKind.Orbs:
+                foreach (var (enemy, damage) in weapon.Orbs!.Update(elapsedSeconds, Ship.Position, _enemies))
+                    DamageEnemy(enemy, damage);
+                break;
+            case WeaponKind.RicochetDisc:
+                foreach (var _ in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
+                    _discs.AddRange(RicochetDisc.Throw(weapon, Ship.Position, Ship.Forward, _enemies));
+                break;
+            case WeaponKind.ProximityMines:
+                foreach (var _ in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
+                    _mines.Drop(weapon, weapon.MineDropPositions(Ship.Position, _random));
+                break;
+            default:
+                throw new InvalidOperationException($"{weapon.Kind} has no firing rule.");
         }
     }
 
-    private void ResolveLaserHits()
+    private static IEnumerable<Projectile> Volley(OwnedWeapon laser, ShotPose shot)
     {
+        var count = laser.Count;
+        for (var i = 0; i < count; i++)
+        {
+            var offset = (i - (count - 1) / 2f) * VolleySpreadRadians;
+            yield return new Laser(shot.Position, shot.Heading + offset, pierce: laser.Pierce, damage: laser.Damage);
+        }
+    }
+
+    private void ResolveWeaponHits(float elapsedSeconds)
+    {
+        // The laser's level-5 impact explosion follows its current level.
+        var laserLevel = Stats.Find(WeaponKind.Laser)?.Level ?? 0;
         _lasers.RemoveAll(laser =>
         {
             var shape = laser.GetShape();
@@ -280,61 +431,287 @@ public sealed class GameSession
                 if (enemy.IsDead || laser.HasHit(enemy) || !bounds.Reaches(enemy) || !shape.Touches(enemy.GetStrokes()))
                     continue;
 
-                // A bola hit also slows what it hits, unless a shield blocks the hit.
-                enemy.TakeDamage(Stats.Damage, slow: laser is Bola);
-                if (enemy.IsDead)
-                {
-                    Score += PointsPerKill;
-                    _pendingLevelUps += Leveling.Add(enemy.Experience);
-                }
+                // Each projectile deals its own damage, fixed when it was fired.
+                DamageEnemy(enemy, laser.Damage);
+                if (laserLevel >= Laser.ExplosionLevel)
+                    _laserExplosions.Add(enemy.Position);
+                foreach (var splashed in Laser.GetExplosionTargets(enemy.Position, _enemies, laserLevel, enemy))
+                    DamageEnemy(splashed, laser.Damage);
                 if (laser.RegisterHit(enemy))
                     return true;
             }
             return false;
         });
+        ResolveDiscAndMineHits(elapsedSeconds);
         _enemies.RemoveAll(enemy => enemy.IsDead);
     }
 
-    private void ResolveContact()
+    /// <summary>
+    /// Disc, shard, mine and mini-mine damage, all dealt through DamageEnemy so each kill is credited once; each
+    /// skips enemies already dead, so overlapping blasts never credit a kill twice.
+    /// </summary>
+    private void ResolveDiscAndMineHits(float elapsedSeconds)
+    {
+        foreach (var disc in _discs)
+            disc.Strike(_enemies, _damageEnemy);
+        _discs.RemoveAll(disc => disc.IsCaught);
+        foreach (var shard in _discShards)
+            shard.Strike(_enemies, _damageEnemy);
+        _discShards.RemoveAll(shard => shard.IsGone);
+        _mines.Update(elapsedSeconds, _enemies, _damageEnemy);
+    }
+
+    /// <summary>A weapon hit: deals damage to the enemy and credits the kill if this hit is what killed it.</summary>
+    private void DamageEnemy(Enemy enemy, float damage)
+    {
+        var wasAlive = !enemy.IsDead;
+        enemy.TakeDamage(damage);
+        CreditKill(enemy, wasAlive);
+    }
+
+    /// <summary>
+    /// The one place a kill is credited, for every kind of weapon damage (hits, explosions, strikes, hops, orbs,
+    /// the ring and burn): adds the kill's points and experience when the enemy was alive before the damage and is
+    /// dead after it, so damage to an enemy already dead earns nothing and a kill is credited once.
+    /// </summary>
+    private void CreditKill(Enemy enemy, bool wasAlive)
+    {
+        if (wasAlive && enemy.IsDead)
+        {
+            Score += PointsPerKill;
+            _pendingLevelUps += Leveling.Add(enemy.Experience);
+        }
+    }
+
+    /// <summary>
+    /// Contact damage: every enemy, boss or armed hazard touching the ship deals one tick of its time-scaled damage
+    /// the moment it first touches, then another every ContactTickSeconds while it stays in contact, each on its own
+    /// timer. Enemies and bosses survive the contact; an armed bullet deals its tick and is removed. A source that
+    /// stops touching loses its timer, so touching again deals a fresh tick at once.
+    /// </summary>
+    private void ResolveContact(float elapsedSeconds)
+    {
+        _nextContactTimers.Clear();
+        var shipStrokes = Ship.GetStrokes();
+        var shipPosition = Ship.Position;
+
+        foreach (var enemy in _enemies)
+        {
+            if (IsGameOver)
+                break;
+            if (enemy.IsDead || enemy.Movement is Thrown { IsHarmlessInFlight: true })
+                continue;
+            // The bounding circles only skip enemies that provably can't reach the ship, before the exact test.
+            var reach = ShipContactRadius + enemy.Type.Radius;
+            if (Vector2.DistanceSquared(shipPosition, enemy.Position) > reach * reach
+                || !Collision.StrokesTouch(shipStrokes, enemy.GetStrokes()))
+                continue;
+
+            var damage = EnemyRoster.ScaledContactDamage(enemy.Type.ContactDamage, ElapsedSeconds);
+            for (var tick = ContactTicksDue(enemy, elapsedSeconds); tick > 0 && !IsGameOver; tick--)
+                DamageShip(damage, enemy);
+        }
+
+        foreach (var hazard in _hazards)
+        {
+            if (IsGameOver)
+                break;
+            if (!hazard.IsArmed || !hazard.Touches(shipStrokes))
+                continue;
+
+            var damage = EnemyRoster.ScaledContactDamage(hazard.ContactDamage, ElapsedSeconds);
+            if (hazard.ExpireOnContact)
+            {
+                // A bullet hurts once and is gone; it keeps no timer. Hazards have no enemy to reflect armor onto.
+                DamageShip(damage, attacker: null);
+                hazard.MarkSpent();
+                continue;
+            }
+            for (var tick = ContactTicksDue(hazard, elapsedSeconds); tick > 0 && !IsGameOver; tick--)
+                DamageShip(damage, attacker: null);
+        }
+
+        // Leave whatever landed the final blow on screen behind the GAME OVER text.
+        if (!IsGameOver)
+            _hazards.RemoveAll(hazard => hazard.IsSpent);
+        (_contactTimers, _nextContactTimers) = (_nextContactTimers, _contactTimers);
+    }
+
+    /// <summary>
+    /// How many ticks a touching source deals this frame: one on first contact, then one each time its own
+    /// ContactTickSeconds timer runs out (several, if a long frame covers several). Records its timer for next frame.
+    /// </summary>
+    private int ContactTicksDue(object source, float elapsedSeconds)
+    {
+        int ticks;
+        float left;
+        if (_contactTimers.TryGetValue(source, out var previous))
+        {
+            left = previous - elapsedSeconds;
+            ticks = left > ContactTimerSlack ? 0 : 1 + (int)MathF.Floor((ContactTimerSlack - left) / ContactTickSeconds);
+            left += ticks * ContactTickSeconds;
+        }
+        else
+        {
+            ticks = 1;
+            left = ContactTickSeconds;
+        }
+        _nextContactTimers[source] = left;
+        return ticks;
+    }
+
+    /// <summary>
+    /// The one place the ship loses hit points, for every source (enemy, boss, bullet, trail, ring). Takes damage
+    /// already scaled for the clock and applies it in order: nothing during Second Wind's immunity; the shield
+    /// absorbs first (a level-5 shield blasts nearby enemies as it breaks); armor takes its reduction off what is
+    /// left, never below its minimum, and at level 5 deals what it blocked to the attacker; then a hit that would
+    /// leave 0 hit points triggers Second Wind once per run at Health level 5. Otherwise at 0 hit points the run is lost.
+    /// </summary>
+    /// <param name="attacker">The enemy or boss dealing the hit; null for a hazard, which takes no reflected damage.</param>
+    private void DamageShip(float damage, Enemy? attacker)
     {
         if (InvulnerableSecondsLeft > 0f)
             return;
 
-        var shipStrokes = Ship.GetStrokes();
-        var touching = _enemies
-            .Where(enemy => !(enemy.Movement is Thrown thrown && thrown.IsHarmlessInFlight))
-            .Where(enemy => Collision.StrokesTouch(shipStrokes, enemy.GetStrokes()))
-            .ToList();
-        var touchingHazards = _hazards.Where(hazard => hazard.IsArmed && hazard.Touches(shipStrokes)).ToList();
-        if (touching.Count == 0 && touchingHazards.Count == 0)
+        damage = AbsorbWithShield(damage);
+        if (damage <= 0f)
             return;
 
-        Stats.HitPoints = Math.Max(0, Stats.HitPoints - 1);
-        if (Stats.HitPoints == 0)
+        var armorLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.Armor);
+        var armored = ShipEnhancements.ArmoredDamage(damage, armorLevel);
+        if (ShipEnhancements.HasBonus(armorLevel) && attacker is not null)
+            DamageEnemy(attacker, damage - armored);
+
+        var hitPointsLeft = Stats.HitPoints - armored;
+        // Below half a hundredth, hit points are stored as 0: that hit is lethal.
+        var isLethal = hitPointsLeft < 0.005f;
+        if (isLethal && !_secondWindUsed
+            && ShipEnhancements.HasBonus(ShipEnhancements.LevelOf(Stats, ShipEnhancements.Health)))
         {
-            // Leave the enemy that landed the final blow on screen behind the GAME OVER text.
-            IsGameOver = true;
-            return;
+            _secondWindUsed = true;
+            hitPointsLeft = ShipEnhancements.SecondWindHitPoints;
+            InvulnerableSecondsLeft = ShipEnhancements.SecondWindSeconds;
         }
+        var hpBefore = Stats.HitPoints;
+        Stats.HitPoints = hitPointsLeft;
+        if (Stats.HitPoints < hpBefore
+            && ShipEnhancements.HasBonus(ShipEnhancements.LevelOf(Stats, ShipEnhancements.Regeneration)))
+        {
+            _regenBoostSecondsLeft = ShipEnhancements.RegenBoostSeconds;
+        }
+        if (Stats.HitPoints <= 0f)
+            IsGameOver = true;
+    }
 
-        // Surviving a hit destroys what touched the ship (for no points) and grants a moment of immunity.
-        // Bosses survive the collision; they can only be beaten with lasers.
-        foreach (var enemy in touching.Where(enemy => !_bosses.Contains(enemy)))
-            _enemies.Remove(enemy);
-        foreach (var hazard in touchingHazards.Where(h => h.ExpireOnContact))
-            _hazards.Remove(hazard);
-        InvulnerableSecondsLeft = InvulnerableSeconds;
+    private void UpdateRegeneration(float elapsedSeconds)
+    {
+        _regenTimer += elapsedSeconds;
+        while (_regenTimer + ContactTimerSlack >= ShipEnhancements.RegenTickSeconds)
+        {
+            _regenTimer = MathF.Max(0f, _regenTimer - ShipEnhancements.RegenTickSeconds);
+            var regenLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.Regeneration);
+            if (regenLevel != 0 && Stats.HitPoints > 0f)
+            {
+                var heal = ShipEnhancements.RegenPerTick(regenLevel);
+                if (_regenBoostSecondsLeft > 0f)
+                    heal *= ShipEnhancements.RegenBoostMultiplier;
+                Stats.HitPoints += heal;
+            }
+        }
+        _regenBoostSecondsLeft = MathF.Max(0f, _regenBoostSecondsLeft - elapsedSeconds);
+    }
+
+    /// <summary>
+    /// Takes the damage out of the shield first and returns what gets through. When the hit empties a level-5
+    /// shield, it deals ShipEnhancements.ShieldExplosionDamage once to every enemy (bosses included) whose centre
+    /// is within ShipEnhancements.ShieldExplosionRadius of the ship, crediting kills.
+    /// </summary>
+    private float AbsorbWithShield(float damage)
+    {
+        // Picks up a level applied straight to Stats as well as one chosen from the cards.
+        GrantShieldCapacity();
+        var shieldLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.Shield);
+        if (shieldLevel == 0)
+            return damage;
+        // A broken shield absorbs nothing, and a hit leaves its running wait alone: the wait starts on the break
+        // and runs out even while the ship stays under contact.
+        if (Stats.ShieldPoints <= 0f)
+            return damage;
+
+        var absorbed = MathF.Min(Stats.ShieldPoints, damage);
+        Stats.ShieldPoints -= absorbed;
+        if (Stats.ShieldPoints <= 0f)
+        {
+            _shieldRechargeTimer = ShipEnhancements.ShieldRechargeSeconds(shieldLevel);
+            if (ShipEnhancements.HasBonus(shieldLevel))
+                ShieldExplosion();
+        }
+        return damage - absorbed;
+    }
+
+    /// <summary>Fills the shield to capacity whenever a Shield level has been gained since it was last filled.</summary>
+    private void GrantShieldCapacity()
+    {
+        var shieldLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.Shield);
+        if (shieldLevel <= _shieldLevelFilled)
+            return;
+        _shieldLevelFilled = shieldLevel;
+        Stats.ShieldPoints = Stats.ShieldCapacity;
+        _shieldRechargeTimer = 0f;
+    }
+
+    /// <summary>
+    /// Runs a broken shield's wait down on each played frame; when it reaches 0 the shield refills to capacity
+    /// (ShipEnhancements.ShieldCapacity at the owned level).
+    /// </summary>
+    private void UpdateShieldRecharge(float elapsedSeconds)
+    {
+        GrantShieldCapacity();
+        if (_shieldRechargeTimer <= 0f)
+            return;
+        _shieldRechargeTimer -= elapsedSeconds;
+        if (_shieldRechargeTimer > ContactTimerSlack)
+            return;
+        _shieldRechargeTimer = 0f;
+        Stats.ShieldPoints = Stats.ShieldCapacity;
+    }
+
+    private void ShieldExplosion()
+    {
+        const float radiusSquared = ShipEnhancements.ShieldExplosionRadius * ShipEnhancements.ShieldExplosionRadius;
+        foreach (var enemy in _enemies)
+        {
+            if (!enemy.IsDead && Vector2.DistanceSquared(enemy.Position, Ship.Position) <= radiusSquared)
+                DamageEnemy(enemy, ShipEnhancements.ShieldExplosionDamage);
+        }
+    }
+
+    private void UpdateBlink(int moveSpeedLevel, float elapsedSeconds, float width, float height)
+    {
+        _blinkCooldownLeft = MathF.Max(0f, _blinkCooldownLeft - elapsedSeconds);
+        var requested = _blinkRequested;
+        _blinkRequested = false;
+        // The slack keeps a request made exactly BlinkCooldownSeconds later from missing by float drift.
+        if (!requested || !ShipEnhancements.HasBonus(moveSpeedLevel) || _blinkCooldownLeft > ContactTimerSlack)
+            return;
+
+        Ship.Blink(ShipEnhancements.BlinkDistance, width, height);
+        _blinkCooldownLeft = ShipEnhancements.BlinkCooldownSeconds;
     }
 
     private void OfferNextUpgrade()
     {
-        if (UpgradeOffer is not null || _pendingLevelUps <= 0)
-            return;
+        while (UpgradeOffer is null && _pendingLevelUps > 0)
+        {
+            var offer = Upgrades.Offer(Stats, _random, UpgradeChoices);
+            if (offer.Count > 0)
+            {
+                UpgradeOffer = offer;
+                return;
+            }
 
-        // Rounds are offered oldest first, so this round grants the lowest level still waiting for its cards.
-        var levelGranted = Leveling.Level - _pendingLevelUps + 1;
-        UpgradeOffer = levelGranted == WeaponPathLevel
-            ? Upgrades.WeaponPaths
-            : Upgrades.Offer(Stats, _random, UpgradeChoices);
+            // Nothing left to take: the level is used up without pausing play.
+            _pendingLevelUps--;
+        }
     }
 }

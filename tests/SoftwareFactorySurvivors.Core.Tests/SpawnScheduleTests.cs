@@ -11,24 +11,25 @@ public class SpawnScheduleTests
     private const float Frame = 1f / 60f;
 
     [Fact]
-    public void Spawning_stops_from_1_20_to_1_30_and_a_ring_of_16_geminis_500_px_out_arrives_at_1_30()
+    public void Spawning_stops_from_1_20_to_1_30_and_a_ring_of_32_geminis_500_px_out_arrives_at_1_30()
     {
         Assert.Equal([new SpawnPause(80f, 90f)], EnemyRoster.SpawnPauses);
-        Assert.Equal([new RingSpawn(90f, EnemyRoster.Gemini, 16, 500f)], EnemyRoster.Rings);
+        Assert.Equal([new RingSpawn(90f, EnemyRoster.Gemini, 32, 500f)], EnemyRoster.Rings);
     }
 
     [Fact]
     public void Regular_spawning_halts_during_the_lull_then_resumes_at_its_normal_rate()
     {
-        var session = new GameSession(Center, new Random(1), roster: [EnemyRoster.Gemini], bosses: [], rings: []);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        var session = new GameSession(Center, new Random(1), roster: [EnemyRoster.Gemini], bosses: [], rings: []).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
         var seen = new HashSet<Enemy>();
 
         RunUntil(session, seen, 79.9f);
         Assert.NotEmpty(seen);
         Assert.False(session.IsSpawningPaused);
 
-        // A Gemini spawns every 2 seconds normally (the one due at 1:20 may land on the boundary frame);
+        // A Gemini spawns every 0.5 seconds at 120/min (the one due at 1:20 may land on the boundary frame);
         // after that nothing new appears during the lull.
         RunUntil(session, seen, 80.1f);
         Assert.Empty(RunUntil(session, seen, 89.9f));
@@ -36,14 +37,14 @@ public class SpawnScheduleTests
 
         RunUntil(session, seen, 90f);
         Assert.False(session.IsSpawningPaused);
-        Assert.Equal(2, RunUntil(session, seen, 94f).Count);
+        Assert.Equal(8, RunUntil(session, seen, 94f).Count);
     }
 
     [Fact]
     public void Ring_surrounds_the_ship_evenly_when_its_time_comes()
     {
         var session = new GameSession(Center, new Random(1), roster: [], bosses: [], spawnPauses: [],
-            rings: [new RingSpawn(60f, EnemyRoster.Gemini, 16, 400f)], start: new StartOptions(StartSeconds: 59f));
+            rings: [new RingSpawn(60f, EnemyRoster.Gemini, 16, 400f)], start: new StartOptions(StartSeconds: 59f)).WithLaser();
 
         var seen = new HashSet<Enemy>();
         Assert.Empty(RunUntil(session, seen, 59.9f));
@@ -71,7 +72,7 @@ public class SpawnScheduleTests
     public void Starting_after_the_ring_skips_it()
     {
         var session = new GameSession(Center, new Random(1), roster: [], bosses: [], spawnPauses: [],
-            rings: [new RingSpawn(60f, EnemyRoster.Gemini, 16, 400f)], start: new StartOptions(StartSeconds: 61f));
+            rings: [new RingSpawn(60f, EnemyRoster.Gemini, 16, 400f)], start: new StartOptions(StartSeconds: 61f)).WithLaser();
 
         Assert.Empty(RunUntil(session, [], 62f));
     }

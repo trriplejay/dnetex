@@ -4,7 +4,7 @@ using SoftwareFactorySurvivors.Core;
 namespace SoftwareFactorySurvivors.Core.Tests;
 
 /// <summary>
-/// The quick reject ResolveLaserHits runs before the exact hit test: whenever a projectile's bounds can't reach an
+/// The quick reject ResolveWeaponHits runs before the exact hit test: whenever a projectile's bounds can't reach an
 /// enemy's bounding circle, the exact test must agree that they don't touch.
 /// </summary>
 public class ProjectileBoundsTests
@@ -53,30 +53,6 @@ public class ProjectileBoundsTests
         Assert.True(laser.GetShape().GetBounds().Reaches(speck));
     }
 
-    [Theory]
-    [InlineData(0f)]
-    [InlineData(1.1f)]
-    public void Bola_ball_graze_inside_the_radius_is_kept_by_the_bounds(float heading)
-    {
-        // A tiny enemy 2.9 out from ball B's centre, straight away from the bola: only the ball's radius reaches it.
-        var bola = new Bola(new Vector2(300, 300), heading);
-        var outward = Vector2.Normalize(bola.BallB - bola.Position);
-        var speck = Speck(bola.BallB + outward * 2.9f);
-
-        Assert.True(bola.GetShape().Touches(speck.GetStrokes()));
-        Assert.True(bola.GetShape().GetBounds().Reaches(speck));
-    }
-
-    [Fact]
-    public void Ballista_head_enclosing_an_enemy_is_kept_by_the_bounds()
-    {
-        var ballista = new Ballista(new Vector2(300, 300), 0f);
-        var speck = Speck(new Vector2(300, 300 - 58f));
-
-        Assert.True(ballista.GetShape().Touches(speck.GetStrokes()));
-        Assert.True(ballista.GetShape().GetBounds().Reaches(speck));
-    }
-
     [Fact]
     public void Enemy_whose_outline_encloses_the_projectile_is_kept_by_the_bounds()
     {
@@ -87,18 +63,10 @@ public class ProjectileBoundsTests
         Assert.True(laser.GetShape().GetBounds().Reaches(meta));
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(1)]
-    [InlineData(2)]
-    public void Pairs_far_apart_are_rejected_by_the_bounds(int kind)
+    [Fact]
+    public void Pairs_far_apart_are_rejected_by_the_bounds()
     {
-        Projectile projectile = kind switch
-        {
-            0 => new Laser(new Vector2(100, 100), 0.3f, scale: 3f),
-            1 => new Bola(new Vector2(100, 100), 0.3f, scale: 3f),
-            _ => new Ballista(new Vector2(100, 100), 0.3f, scale: 3f),
-        };
+        var projectile = new Laser(new Vector2(100, 100), 0.3f, scale: 3f);
 
         foreach (var type in EnemyRoster.All.Append(EnemyRoster.GeminiBoss))
         {
@@ -126,22 +94,16 @@ public class ProjectileBoundsTests
     public void Warm_GetBounds_and_Reaches_allocate_zero_bytes()
     {
         var laser = new Laser(new Vector2(300, 300), 0.5f, scale: 2f);
-        var bola = new Bola(new Vector2(300, 300), 0.5f, scale: 2f);
-        var ballista = new Ballista(new Vector2(300, 300), 0.5f, scale: 2f);
         var enemy = TestEnemies.Stationary(EnemyRoster.Gemini, new Vector2(320, 320));
 
         // Warm up lazy bounds cache and any static jit
         _ = laser.GetShape().GetBounds().Reaches(enemy);
-        _ = bola.GetShape().GetBounds().Reaches(enemy);
-        _ = ballista.GetShape().GetBounds().Reaches(enemy);
 
         var before = GC.GetAllocatedBytesForCurrentThread();
 
         for (var i = 0; i < 1000; i++)
         {
             _ = laser.GetShape().GetBounds().Reaches(enemy);
-            _ = bola.GetShape().GetBounds().Reaches(enemy);
-            _ = ballista.GetShape().GetBounds().Reaches(enemy);
         }
 
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
@@ -191,19 +153,14 @@ public class ProjectileBoundsTests
         Assert.Equal(new Vector2(202f, 102f), updatedBounds.Max);
     }
 
-    // A projectile of a random kind, size, heading and age (bolas spin as they age).
+    // A laser of a random size, heading and age.
     private static Projectile RandomProjectile(Random random)
     {
         var position = new Vector2(200 + random.NextSingle() * 600, 200 + random.NextSingle() * 400);
         var heading = random.NextSingle() * MathF.Tau;
         var scale = 0.5f + random.NextSingle() * 3f;
         var pierce = 0;
-        Projectile projectile = random.Next(3) switch
-        {
-            0 => new Laser(position, heading, scale, pierce),
-            1 => new Bola(position, heading, scale, pierce),
-            _ => new Ballista(position, heading, scale, pierce),
-        };
+        Projectile projectile = new Laser(position, heading, scale, pierce);
         projectile.Update(random.NextSingle() * 0.1f);
         return projectile;
     }

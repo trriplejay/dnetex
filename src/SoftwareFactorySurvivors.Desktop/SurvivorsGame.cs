@@ -88,14 +88,25 @@ public class SurvivorsGame : Game
         if (_session.UpgradeOffer is { } offer)
         {
             int? choice = null;
-            Keys[][] cardKeys = [[Keys.D1, Keys.NumPad1], [Keys.D2, Keys.NumPad2], [Keys.D3, Keys.NumPad3]];
+            Keys[][] cardKeys =
+            [
+                [Keys.D1, Keys.NumPad1],
+                [Keys.D2, Keys.NumPad2],
+                [Keys.D3, Keys.NumPad3],
+                [Keys.D4, Keys.NumPad4],
+                [Keys.D5, Keys.NumPad5],
+                [Keys.D6, Keys.NumPad6],
+                [Keys.D7, Keys.NumPad7],
+                [Keys.D8, Keys.NumPad8],
+                [Keys.D9, Keys.NumPad9],
+            ];
             for (var i = 0; i < offer.Count && i < cardKeys.Length; i++)
             {
                 if (cardKeys[i].Any(Pressed))
                     choice = i;
             }
             if (clicked)
-                choice ??= UpgradeCards.HitTest(ScreenCenter(), offer.Count, new(mouse.X, mouse.Y));
+                choice ??= UpgradeCards.HitTest(ScreenCenter(), offer.Count, new(mouse.X, mouse.Y), GraphicsDevice.Viewport.Width);
             if (choice is { } index)
                 _session.ChooseUpgrade(index);
         }
@@ -117,6 +128,10 @@ public class SurvivorsGame : Game
         else if (_session.IsFinished && Pressed(Keys.Enter))
         {
             StartSession();
+        }
+        else if (!_session.IsChoosingUpgrade && !_session.IsFinished && Pressed(Keys.Space))
+        {
+            _session.RequestBlink();
         }
 
         _previousKeyboard = keyboard;
@@ -154,6 +169,8 @@ public class SurvivorsGame : Game
             {
                 foreach (var stroke in _session.Ship.GetStrokes())
                     _batch.AddThickStroke(stroke, ShipRendering.StrokeWidth, ShipRendering.Color);
+                if (_session.ShieldPoints > 0f)
+                    _batch.AddThickStroke(CircleOutline(_session.Ship.Position, 24f), 1.5f, ToRgb(Color.LightCyan));
             }
 
             foreach (var hazard in _session.Hazards)
@@ -189,13 +206,67 @@ public class SurvivorsGame : Game
                 var enemyBlinkedOut = isHallucinationBoss && enemy.IsFlickering && (int)(enemy.FlickerSecondsLeft * 15f) % 2 == 0;
                 if (!enemyBlinkedOut)
                 {
+                    var enemyColor = enemy.IsBurning ? ToRgb(Color.OrangeRed) : EnemyRendering.Color;
                     foreach (var stroke in enemy.GetStrokes())
-                        _batch.AddThickStroke(stroke, EnemyRendering.StrokeWidth, EnemyRendering.Color);
+                        _batch.AddThickStroke(stroke, EnemyRendering.StrokeWidth, enemyColor);
                 }
             }
 
             foreach (var projectile in _session.Lasers)
                 DrawProjectile(projectile.GetShape(), Color.White);
+
+            foreach (var impact in _session.LaserExplosions)
+                _batch.AddThickStroke(CircleOutline(impact, Laser.ExplosionRadius), 2f, ToRgb(Color.White));
+
+            foreach (var segment in _session.LightningSegments)
+                _batch.AddThickStroke([segment.From, segment.To], 2f, ToRgb(Color.Cyan));
+
+            if (_session.Stats.Find(WeaponKind.Orbs)?.Orbs is { } orbs)
+            {
+                if (orbs.IsRingMode)
+                {
+                    // Level 5 solid ring at orbit radius (band: orbitRadius - orbRadius to orbitRadius + orbRadius)
+                    const int ringSegments = 32;
+                    for (var i = 0; i < ringSegments; i++)
+                    {
+                        var a1 = MathF.Tau * i / ringSegments;
+                        var a2 = MathF.Tau * (i + 1) / ringSegments;
+                        var p1 = _session.Ship.Position + new System.Numerics.Vector2(MathF.Cos(a1), MathF.Sin(a1)) * orbs.OrbitRadius;
+                        var p2 = _session.Ship.Position + new System.Numerics.Vector2(MathF.Cos(a2), MathF.Sin(a2)) * orbs.OrbitRadius;
+                        _batch.AddThickStroke([p1, p2], orbs.OrbRadius * 2f, ToRgb(Color.LightCyan));
+                    }
+                }
+                else
+                {
+                    foreach (var orbPos in orbs.GetOrbPositions(_session.Ship.Position))
+                        _batch.AddCircle(orbPos, orbs.OrbRadius, ToRgb(Color.LightCyan));
+                }
+            }
+
+            foreach (var disc in _session.Discs)
+                _batch.AddCircle(disc.Position, disc.Radius, ToRgb(Color.Gold));
+
+            foreach (var shard in _session.DiscShards)
+                _batch.AddCircle(shard.Position, DiscShard.Radius, ToRgb(Color.Gold));
+
+            foreach (var mine in _session.Mines)
+            {
+                if (mine.IsArmed)
+                {
+                    _batch.AddCircle(mine.Position, ProximityMines.MineRadius, ToRgb(Color.OrangeRed));
+                    _batch.AddCircle(mine.Position, ProximityMines.MineRadius * 0.4f, ToRgb(Color.Yellow));
+                }
+                else
+                {
+                    _batch.AddThickStroke(CircleOutline(mine.Position, ProximityMines.MineRadius), 1.5f, ToRgb(Color.DimGray));
+                }
+            }
+
+            foreach (var mini in _session.MiniMines)
+                _batch.AddCircle(mini.Position, ProximityMines.MineRadius * 0.5f, ToRgb(Color.Orange));
+
+            foreach (var blast in _session.MineExplosions)
+                _batch.AddThickStroke(CircleOutline(blast.Center, blast.Radius), 2f, ToRgb(Color.OrangeRed));
         }
 
         DrawText(GameClock.Format(_session.ElapsedSeconds), new(center.X, 40f), 32f, 3f, Color.White);
@@ -252,7 +323,45 @@ public class SurvivorsGame : Game
         if (filled > 1f)
             _batch.AddThickStroke([new(left, barTop + 5f), new(left + filled, barTop + 5f)], 8f, ShipRendering.Color);
 
-        DrawTextLeft($"HP {stats.HitPoints}/{stats.MaxHitPoints}", new(left, 96f), 16f, 2f, Color.White);
+        DrawTextLeft($"HP {stats.DisplayHitPoints}/{stats.DisplayMaxHitPoints}", new(left, 96f), 16f, 2f, Color.White);
+
+        var statusY = 120f;
+        var shieldLevel = ShipEnhancements.LevelOf(stats, ShipEnhancements.Shield);
+        if (shieldLevel > 0)
+        {
+            var shieldText = stats.ShieldPoints > 0f
+                ? $"SHIELD {(int)MathF.Ceiling(stats.ShieldPoints)}/{(int)MathF.Ceiling(stats.ShieldCapacity)}"
+                : $"SHIELD RECHARGING {(int)MathF.Ceiling(_session.ShieldRechargeSecondsLeft)}s";
+            DrawTextLeft(shieldText, new(left, statusY), 14f, 2f, Color.LightCyan);
+            statusY += 22f;
+        }
+
+        foreach (var enhancement in stats.Enhancements)
+        {
+            string enhancementText;
+            if (enhancement.Definition == ShipEnhancements.Regeneration)
+            {
+                var rate = ShipEnhancements.RegenPerReadout(enhancement.Level);
+                if (_session.RegenBoostSecondsLeft > 0f)
+                    rate *= ShipEnhancements.RegenBoostMultiplier;
+                enhancementText = $"REGEN LV {enhancement.Level} +{rate:0.##} HP/5s";
+            }
+            else
+            {
+                enhancementText = $"{enhancement.Definition.Name} LV {enhancement.Level}";
+            }
+
+            DrawTextLeft(enhancementText, new(left, statusY), 12f, 2f, Color.White);
+            statusY += 18f;
+        }
+
+        statusY += 6f;
+        foreach (var weapon in stats.Weapons)
+        {
+            var weaponText = $"{Upgrades.WeaponName(weapon.Kind)} LV {weapon.Level}";
+            DrawTextLeft(weaponText, new(left, statusY), 12f, 2f, Color.White);
+            statusY += 18f;
+        }
     }
 
     /// <summary>Each living boss's name and a health bar, under the clock.</summary>
@@ -291,10 +400,14 @@ public class SurvivorsGame : Game
 
     private void DrawUpgradeCards(System.Numerics.Vector2 center, IReadOnlyList<Upgrade> offer)
     {
-        DrawText("LEVEL UP", center + new System.Numerics.Vector2(0, -UpgradeCards.CardSize.Y / 2f - 70f), 40f, 3f, ToColor(ShipRendering.Color));
-
-        var corners = UpgradeCards.Layout(center, offer.Count);
+        var corners = UpgradeCards.Layout(center, offer.Count, GraphicsDevice.Viewport.Width);
         var size = UpgradeCards.CardSize;
+        var topY = corners.Count > 0 ? corners.Min(c => c.Y) : center.Y - size.Y / 2f;
+        var bottomY = corners.Count > 0 ? corners.Max(c => c.Y) + size.Y : center.Y + size.Y / 2f;
+
+        var title = _session.IsStartingPick ? "CHOOSE A WEAPON" : "LEVEL UP";
+        DrawText(title, new(center.X, topY - 45f), 40f, 3f, ToColor(ShipRendering.Color));
+
         for (var i = 0; i < offer.Count; i++)
         {
             var topLeft = corners[i];
@@ -307,12 +420,70 @@ public class SurvivorsGame : Game
             _batch.AddPolygon([topLeft, topRight, topLeft + size, bottomLeft, topLeft], ToRgb(Color.Black));
             _batch.AddThickStroke([topLeft, topRight, topLeft + size, bottomLeft, topLeft], 3f, ToRgb(Color.White));
 
-            DrawText($"{i + 1}", new(cardCenter.X, topLeft.Y + 34f), 28f, 3f, ToColor(ShipRendering.Color));
-            DrawText(Upgrades.Title(offer[i]), new(cardCenter.X, cardCenter.Y), 18f, 2f, Color.White);
-            DrawText(Upgrades.Describe(offer[i], _session.Stats), new(cardCenter.X, topLeft.Y + size.Y - 40f), 14f, 2f, Color.White);
+            DrawText($"{i + 1}", new(cardCenter.X, topLeft.Y + 20f), 20f, 2.5f, ToColor(ShipRendering.Color));
+
+            var titleLines = WrapText(Upgrades.Title(offer[i], _session.Stats), 265f, 14f);
+            var titleY = topLeft.Y + 44f;
+            foreach (var tLine in titleLines)
+            {
+                DrawText(tLine, new(cardCenter.X, titleY), 14f, 2f, Color.White);
+                titleY += 17f;
+            }
+
+            var descLines = WrapText(Upgrades.Describe(offer[i], _session.Stats), 265f, 10.5f);
+            var descY = descLines.Count <= 2
+                ? MathF.Max(titleY + 18f, topLeft.Y + 110f)
+                : titleY + 8f;
+            foreach (var dLine in descLines)
+            {
+                DrawText(dLine, new(cardCenter.X, descY), 10.5f, 1.5f, Color.White);
+                descY += 14f;
+            }
         }
 
-        DrawText($"PRESS {CardKeysPrompt(offer.Count)} OR CLICK A CARD", center + new System.Numerics.Vector2(0, size.Y / 2f + 50f), 16f, 2f, Color.White);
+        DrawText($"PRESS {CardKeysPrompt(offer.Count)} OR CLICK A CARD", new(center.X, bottomY + 30f), 16f, 2f, Color.White);
+    }
+
+    private static List<string> WrapText(string text, float maxWidth, float height)
+    {
+        var lines = new List<string>();
+        var paragraphs = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        foreach (var paragraph in paragraphs)
+        {
+            var words = paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var current = "";
+            foreach (var word in words)
+            {
+                var candidate = current.Length == 0 ? word : current + " " + word;
+                if (current.Length > 0 && VectorText.MeasureWidth(candidate, height) > maxWidth)
+                {
+                    lines.Add(current);
+                    current = word;
+                }
+                else
+                {
+                    current = candidate;
+                }
+            }
+
+            if (current.Length > 0)
+                lines.Add(current);
+        }
+
+        return lines;
+    }
+
+    /// <summary>A closed polyline approximating a circle, for outlines such as the laser explosion radius.</summary>
+    private static System.Numerics.Vector2[] CircleOutline(System.Numerics.Vector2 center, float radius)
+    {
+        const int segments = 32;
+        var points = new System.Numerics.Vector2[segments + 1];
+        for (var i = 0; i <= segments; i++)
+        {
+            var angle = MathF.Tau * i / segments;
+            points[i] = center + new System.Numerics.Vector2(MathF.Cos(angle), MathF.Sin(angle)) * radius;
+        }
+        return points;
     }
 
     /// <summary>"1", "1 OR 2", "1 2 OR 3": only the keys for the cards actually shown.</summary>

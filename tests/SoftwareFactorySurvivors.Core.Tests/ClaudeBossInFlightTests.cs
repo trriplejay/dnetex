@@ -137,7 +137,8 @@ public class ClaudeBossInFlightTests
     {
         var center = new Vector2(500f, 400f);
         var session = TestEnemies.QuietSession(center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
         // Held still below the ship (which fires upward), so only the ability's timing is in play.
         var boss = TestEnemies.Stationary(EnemyRoster.ClaudeBoss, new Vector2(500f, 780f));
         session.AddEnemy(boss);

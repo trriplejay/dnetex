@@ -82,6 +82,44 @@ public class ShipTests
     }
 
     [Fact]
+    public void Speed_multiplier_scales_movement_and_move_speed_levels_give_one_point_one_to_one_point_five()
+    {
+        Assert.Equal(200f, Ship.Speed);
+        var plain = new Ship(Start);
+        var fast = new Ship(Start) { SpeedMultiplier = 1.5f };
+        plain.Move(new Vector2(1, 0), 1f);
+        fast.Move(new Vector2(1, 0), 1f);
+        Assert.Equal(200f, Vector2.Distance(Start, plain.Position), precision: 3);
+        Assert.Equal(300f, Vector2.Distance(Start, fast.Position), precision: 3);
+
+        Assert.Equal(1f, ShipEnhancements.SpeedMultiplier(0));
+        Assert.Equal([1.1f, 1.2f, 1.3f, 1.4f, 1.5f],
+            Enumerable.Range(1, 5).Select(level => MathF.Round(ShipEnhancements.SpeedMultiplier(level), 4)));
+
+        // A session at Move Speed level 2 flies its ship 200 x 1.2 = 240 px in one second.
+        var session = TestEnemies.QuietSession(Start);
+        session.Stats.AddEnhancement(ShipEnhancements.MoveSpeed).RaiseLevel();
+        for (var i = 0; i < 60; i++)
+            session.Update(new Vector2(1, 0), null, 1f / 60f, 2000f, 2000f);
+        Assert.Equal(240f, Vector2.Distance(Start, session.Ship.Position), precision: 2);
+    }
+
+    [Fact]
+    public void Blink_jumps_along_forward_and_is_clamped_to_the_play_area()
+    {
+        var ship = new Ship(Start);
+        ship.AimAt(Start + new Vector2(10, 0));
+
+        ship.Blink(100f, 1000f, 800f);
+        AssertPointNear(Start + new Vector2(100, 0), ship.Position);
+
+        // Facing up from y = 240: 300 px would leave the area, so it stops at y = 0.
+        ship.AimAt(ship.Position + new Vector2(0, -10));
+        ship.Blink(300f, 1000f, 800f);
+        AssertPointNear(new Vector2(Start.X + 100, 0), ship.Position);
+    }
+
+    [Fact]
     public void Opposite_keys_cancel_and_overlong_directions_are_capped()
     {
         Assert.Equal(Vector2.Zero, ShipInput.Direction(up: true, left: true, down: true, right: true));

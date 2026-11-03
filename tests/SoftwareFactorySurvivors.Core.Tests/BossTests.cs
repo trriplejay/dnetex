@@ -89,8 +89,9 @@ public class BossTests
     [Fact]
     public void Boss_enters_at_three_minutes_and_pauses_regular_spawning_until_defeated()
     {
-        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.Gemini]);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.Gemini]).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
         var seen = new HashSet<Enemy>();
 
         RunUntil(session, () => session.ElapsedSeconds >= 179.9f);
@@ -120,22 +121,24 @@ public class BossTests
         Assert.DoesNotContain(boss, session.Enemies);
         seen.UnionWith(session.Enemies);
 
-        // Spawning resumes at the regular rate (a Gemini every 2 seconds) with no saved-up burst.
+        // Spawning resumes at the regular rate (a Gemini every 0.5 seconds at 120/min) with no saved-up burst.
         var afterFight = new List<Enemy>();
         for (var i = 0; i < 60 * 4; i++)
         {
             Step(session);
             afterFight.AddRange(session.Enemies.Where(seen.Add));
         }
-        Assert.Equal(2, afterFight.Count);
+        Assert.Equal(8, afterFight.Count);
         Assert.All(afterFight, enemy => Assert.IsType<ChasePlayer>(enemy.Movement));
     }
 
     [Fact]
     public void Autocomplete_arrives_on_schedule_at_270s_while_gemini_boss_lives_and_regular_spawning_remains_paused()
     {
-        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f));
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
+        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f)).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+        session.Stats.Laser().Damage = 0f;
 
         RunUntil(session, () => session.ElapsedSeconds >= 179.9f);
         Assert.False(session.IsBossActive);
@@ -172,14 +175,12 @@ public class BossTests
     [Fact]
     public void Boss_survives_touching_the_ship_when_the_ship_survives()
     {
-        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(0f, EnemyRoster.GeminiBoss)]);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
-
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(0f, EnemyRoster.GeminiBoss)]).WithLaser();
         Step(session);
         var boss = Assert.Single(session.Bosses);
 
-        // Drive the ship into the boss.
-        RunUntil(session, () => session.Stats.HitPoints < 3, toward: boss);
+        // Drive the ship into the boss (or its shield) until the first contact damage lands.
+        RunUntil(session, () => session.Stats.HitPoints < 100f, toward: boss);
 
         Assert.False(session.IsGameOver);
         Assert.Contains(boss, session.Enemies);
@@ -370,9 +371,10 @@ public class BossTests
     public void Boss_enters_with_its_shield_and_lasers_only_hurt_it_once_the_shield_is_gone()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
-        session.Stats.AttacksPerSecond = 6f;
-        session.Stats.Damage = 3f;
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+        session.Stats.Laser().AttacksPerSecond = 6f;
+        session.Stats.Laser().Damage = 3f;
         var boss = TestEnemies.Stationary(EnemyRoster.GeminiBoss, Center + new Vector2(0, -300));
         session.AddEnemy(boss);
 

@@ -238,7 +238,7 @@ public class AutocompleteBulletRingTests
         // its LifetimeSeconds (4.0 s for Hazard.CreateBullet), and only then is it removed.
         var shipPos = new Vector2(2900f, 500f);
         var session = new GameSession(shipPos, new Random(1), roster: [],
-            bosses: [new BossArrival(0f, EnemyRoster.Autocomplete)], rings: []);
+            bosses: [new BossArrival(0f, EnemyRoster.Autocomplete)], rings: []).WithLaser();
 
         // Initial update spawns the boss
         session.Update(Vector2.Zero, null, Dt, Width, Height);
