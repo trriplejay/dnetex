@@ -385,7 +385,7 @@ public class GameSessionTests
         // Between the first two mini-mines (thrown at 0 and 120 degrees), 43.3 px from each: inside both their
         // blasts. The mine's blast leaves it 1 HP, then the two mini-mines go off on the same frame.
         var spot = Center + 25f * new Vector2(MathF.Cos(MathF.PI / 3f), MathF.Sin(MathF.PI / 3f));
-        var victim = TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 7f, Experience = 2 }, spot);
+        var victim = TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 7f, Experience = 1 }, spot);
         session.AddEnemy(victim);
 
         IReadOnlyList<Circle> blastsThatKilled = [];
@@ -404,7 +404,7 @@ public class GameSessionTests
 
     private static (GameSession Session, Enemy Victim) ArrangeDiscOrMineKill(DiscOrMineSource source)
     {
-        var victimType = EnemyRoster.HuggingFace with { HitPoints = 1f, Experience = 2 };
+        var victimType = EnemyRoster.HuggingFace with { HitPoints = 1f, Experience = 1 };
         var tough = EnemyRoster.HuggingFace with { HitPoints = 1000f, Experience = 3 };
         switch (source)
         {

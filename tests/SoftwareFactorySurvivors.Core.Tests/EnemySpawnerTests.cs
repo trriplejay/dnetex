@@ -11,14 +11,14 @@ public class EnemySpawnerTests
     private static readonly EnemyType Square = EnemyRoster.Gemini with { Name = "Square", Radius = 10f, DefaultSpawnsPerMinute = 60f };
 
     [Fact]
-    public void Gemini_spawns_every_two_seconds_by_default_just_off_screen()
+    public void Gemini_spawns_every_half_second_by_default_just_off_screen()
     {
         var spawner = new EnemySpawner(new Random(7));
         spawner.Add(EnemyRoster.Gemini);
-        Assert.Equal(30f, spawner.GetSpawnsPerMinute(EnemyRoster.Gemini));
+        Assert.Equal(120f, spawner.GetSpawnsPerMinute(EnemyRoster.Gemini));
 
-        Assert.Empty(spawner.Update(1.5f, Width, Height));
-        var spawned = spawner.Update(0.5f, Width, Height).Concat(spawner.Update(6f, Width, Height)).ToArray();
+        Assert.Empty(spawner.Update(0.4f, Width, Height));
+        var spawned = spawner.Update(0.1f, Width, Height).Concat(spawner.Update(1.5f, Width, Height)).ToArray();
 
         Assert.Equal(4, spawned.Length);
         Assert.All(spawned, enemy =>
@@ -39,19 +39,20 @@ public class EnemySpawnerTests
 
         var spawned = spawner.Update(4f, Width, Height);
 
-        Assert.Equal(2 + 4, spawned.Count);
+        Assert.Equal(8 + 4, spawned.Count);
     }
 
     [Fact]
     public void Rate_change_applies_from_the_next_update_without_losing_progress()
     {
+        var type = EnemyRoster.Gemini with { DefaultSpawnsPerMinute = 30f };
         var spawner = new EnemySpawner(new Random(1));
-        spawner.Add(EnemyRoster.Gemini);
+        spawner.Add(type);
 
         Assert.Empty(spawner.Update(1f, Width, Height)); // half way to the next spawn at 30/min
-        spawner.SetSpawnsPerMinute(EnemyRoster.Gemini, 120f);
+        spawner.SetSpawnsPerMinute(type, 120f);
 
-        Assert.Equal(120f, spawner.GetSpawnsPerMinute(EnemyRoster.Gemini));
+        Assert.Equal(120f, spawner.GetSpawnsPerMinute(type));
         Assert.Single(spawner.Update(0.25f, Width, Height)); // 0.5 + 0.5 = one spawn
         Assert.Equal(4, spawner.Update(2f, Width, Height).Count);
     }

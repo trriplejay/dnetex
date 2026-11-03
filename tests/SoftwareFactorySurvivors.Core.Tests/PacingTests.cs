@@ -103,6 +103,153 @@ public class PacingTests
         Assert.Equal(1f, session.ElapsedSeconds);
     }
 
+    [Fact]
+    public void Required_experience_matches_new_curve_is_below_old_curve_and_is_non_decreasing()
+    {
+        int[] expectedFirstTen = [2, 5, 8, 11, 15, 19, 23, 27, 31, 36];
+        Assert.Equal(expectedFirstTen, Enumerable.Range(1, 10).Select(Leveling.Required));
+
+        for (var n = 1; n <= 30; n++)
+        {
+            var oldFormula = (int)Math.Round(3.5 * Math.Pow(n, 1.5));
+            Assert.True(Leveling.Required(n) < oldFormula, $"Level {n} should require less than old curve");
+            Assert.True(Leveling.Required(n + 1) >= Leveling.Required(n), $"Level {n + 1} should be >= level {n}");
+        }
+    }
+
+    [Fact]
+    public void Session_run_past_90s_with_no_regular_spawns_receives_exactly_32_ring_geminis()
+    {
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [], start: new StartOptions(StartSeconds: 89.9f)).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+
+        Assert.Empty(session.Enemies);
+
+        session.Update(Vector2.Zero, null, 0.2f, Width, Height);
+
+        Assert.Equal(32, session.Enemies.Count);
+        Assert.All(session.Enemies, enemy => Assert.Same(EnemyRoster.Gemini, enemy.Type));
+    }
+
+    [Fact]
+    public void Regular_enemy_cap_holds_at_300_under_long_high_rate_run()
+    {
+        var fastType = EnemyRoster.Gemini with { Name = "FastSwarm", DefaultSpawnsPerMinute = 1200f };
+        var session = new GameSession(Center, new Random(1), roster: [fastType], bosses: [], rings: []).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+        session.Stats.Laser().Damage = 0f;
+
+        for (var i = 0; i < 30 * 60; i++)
+        {
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
+            Assert.True(session.LiveRegularEnemyCount <= GameSession.MaxRegularEnemies,
+                $"Live count {session.LiveRegularEnemyCount} exceeded cap {GameSession.MaxRegularEnemies}");
+        }
+
+        Assert.Equal(GameSession.MaxRegularEnemies, session.LiveRegularEnemyCount);
+    }
+
+    [Fact]
+    public void Spawning_resumes_below_cap_on_next_update_without_burst()
+    {
+        var type = EnemyRoster.Gemini with { Name = "Controlled", DefaultSpawnsPerMinute = 60f };
+        var session = new GameSession(Center, new Random(1), roster: [type], bosses: [], rings: []).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+
+        for (var i = 0; i < GameSession.MaxRegularEnemies; i++)
+            session.AddEnemy(TestEnemies.StationaryGemini(new Vector2(-500, -500)));
+
+        Assert.Equal(GameSession.MaxRegularEnemies, session.LiveRegularEnemyCount);
+
+        // Advance 10 seconds while at cap. The spawner should be frozen, not accumulating.
+        session.Update(Vector2.Zero, null, 10f, Width, Height);
+        Assert.Equal(GameSession.MaxRegularEnemies, session.LiveRegularEnemyCount);
+
+        // Kill 10 enemies so live regular count is 290
+        for (var i = 0; i < 10; i++)
+            session.Enemies[i].TakeDamage(100f);
+
+        // Advance 1 frame to clear dead enemies and tick
+        session.Update(Vector2.Zero, null, Frame, Width, Height);
+        Assert.Equal(290, session.LiveRegularEnemyCount);
+
+        // Advance 1 second. At 60/min = 1/s, it should spawn exactly 1 enemy, not an accumulated burst
+        session.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(291, session.LiveRegularEnemyCount);
+    }
+
+    [Fact]
+    public void Scheduled_rings_are_exempt_from_the_300_regular_enemy_cap()
+    {
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [],
+            rings: [new RingSpawn(10f, EnemyRoster.Gemini, 32, 500f)],
+            start: new StartOptions(StartSeconds: 9.9f)).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+
+        for (var i = 0; i < GameSession.MaxRegularEnemies; i++)
+            session.AddEnemy(TestEnemies.StationaryGemini(new Vector2(-500, -500)));
+
+        Assert.Equal(GameSession.MaxRegularEnemies, session.LiveRegularEnemyCount);
+
+        // Advance past 10s: ring arrives despite being at cap
+        session.Update(Vector2.Zero, null, 0.2f, Width, Height);
+
+        Assert.Equal(GameSession.MaxRegularEnemies + 32, session.LiveRegularEnemyCount);
+    }
+
+    [Fact]
+    public void Combined_regular_spawn_rates_are_four_times_baseline_at_key_times_and_boss_rates_are_zero()
+    {
+        float SumArrivedBy(float seconds) =>
+            EnemyRoster.All.Where(type => type.ArrivesAtSeconds <= seconds).Sum(type => type.DefaultSpawnsPerMinute);
+
+        // At t = 0: Gemini (120) = 4 * 30
+        Assert.Equal(120f, SumArrivedBy(0f));
+        Assert.Equal(4f * 30f, SumArrivedBy(0f));
+
+        // At t = 60: Gemini (120) + Hugging Face (96) + ChatGPT (56) = 272 = 4 * 68
+        Assert.Equal(272f, SumArrivedBy(60f));
+        Assert.Equal(4f * 68f, SumArrivedBy(60f));
+
+        // At t = 180: Gemini + Hugging Face + ChatGPT + Claude + Grok + Copilot = 384 = 4 * 96
+        Assert.Equal(384f, SumArrivedBy(180f));
+        Assert.Equal(4f * 96f, SumArrivedBy(180f));
+
+        // At t = 420: all regular types = 460 = 4 * 115
+        Assert.Equal(460f, SumArrivedBy(420f));
+        Assert.Equal(4f * 115f, SumArrivedBy(420f));
+
+        // All boss types keep rate of 0
+        Assert.All(EnemyRoster.Bosses, arrival => Assert.Equal(0f, arrival.Type.DefaultSpawnsPerMinute));
+    }
+
+    [Fact]
+    public void Boss_arrives_on_schedule_while_regular_enemy_count_is_at_cap()
+    {
+        var session = new GameSession(Center, new Random(1), roster: [], rings: [],
+            start: new StartOptions(StartSeconds: 179.9f)).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+
+        for (var i = 0; i < GameSession.MaxRegularEnemies; i++)
+            session.AddEnemy(TestEnemies.StationaryGemini(new Vector2(-500, -500)));
+
+        Assert.Equal(GameSession.MaxRegularEnemies, session.LiveRegularEnemyCount);
+        Assert.False(session.IsBossActive);
+
+        // Advance 0.2s past 180s
+        session.Update(Vector2.Zero, null, 0.2f, Width, Height);
+
+        Assert.True(session.IsBossActive);
+        Assert.Single(session.Bosses);
+        Assert.Same(EnemyRoster.GeminiBoss, session.Bosses[0].Type);
+        Assert.Contains(session.Bosses[0], session.Enemies);
+    }
+
     /// <summary>Stats owning three weapons (the first three kinds), each at level 5.</summary>
     private static PlayerStats MaxedWeapons()
     {

@@ -13,14 +13,13 @@ public class ProgressionTests
     [Fact]
     public void Experience_needed_per_level_grows_faster_than_linearly()
     {
-        int[] expected = [4, 10, 18, 28, 39];
+        int[] expected = [2, 5, 8, 11, 15];
         Assert.Equal(expected, Enumerable.Range(1, 5).Select(Leveling.Required));
 
-        for (var level = 2; level < 30; level++)
+        for (var level = 1; level < 30; level++)
         {
-            var previousStep = Leveling.Required(level) - Leveling.Required(level - 1);
-            var nextStep = Leveling.Required(level + 1) - Leveling.Required(level);
-            Assert.True(nextStep >= previousStep, $"Level {level} cost grew more slowly than before");
+            Assert.True(Leveling.Required(level + 1) >= Leveling.Required(level),
+                $"Level {level + 1} cost decreased from level {level}");
         }
     }
 
@@ -29,13 +28,13 @@ public class ProgressionTests
     {
         var leveling = new Leveling();
 
-        Assert.Equal(0, leveling.Add(3));
+        Assert.Equal(0, leveling.Add(1));
         Assert.Equal(1, leveling.Level);
 
-        Assert.Equal(2, leveling.Add(4 + 10 - 3 + 3));
+        Assert.Equal(2, leveling.Add(2 + 5 - 1 + 3));
         Assert.Equal(3, leveling.Level);
         Assert.Equal(3, leveling.Experience);
-        Assert.Equal(18, leveling.ExperienceToNextLevel);
+        Assert.Equal(8, leveling.ExperienceToNextLevel);
     }
 
     [Fact]
@@ -332,7 +331,7 @@ public class ProgressionTests
     public void Killing_enough_enemies_pauses_play_until_an_upgrade_is_chosen()
     {
         var session = TestEnemies.QuietSession(Center);
-        // Gemini is worth 2 experience; level 2 needs 5, so the third kill levels up.
+        // Gemini is worth 2 experience; level 1 needs 2, so the first kill levels up.
         for (var i = 0; i < 3; i++)
             session.AddEnemy(TestEnemies.StationaryGemini(Center + new Vector2(0, -120 - 60 * i)));
         session.Stats.Laser().Damage = 10f;
@@ -365,8 +364,8 @@ public class ProgressionTests
     public void Several_levels_at_once_offer_cards_one_level_at_a_time()
     {
         var session = TestEnemies.QuietSession(Center);
-        // One kill worth 35 experience: 4 for level 2, 10 for level 3 and 18 for level 4, with 3 left over.
-        var bigPrize = EnemyRoster.Meta with { Experience = 35 };
+        // One kill worth 18 experience: 2 for level 2, 5 for level 3 and 8 for level 4, with 3 left over.
+        var bigPrize = EnemyRoster.Meta with { Experience = 18 };
         session.AddEnemy(TestEnemies.Stationary(bigPrize, Center + new Vector2(0, -150)));
         session.Stats.Laser().Damage = 100f;
 

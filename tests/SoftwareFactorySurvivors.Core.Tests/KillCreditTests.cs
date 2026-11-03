@@ -146,7 +146,7 @@ public class KillCreditTests
     }
 
     private static Enemy Victim(Vector2 position) =>
-        TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 1f, Experience = 2 }, position);
+        TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 1f, Experience = 1 }, position);
 
     private static Enemy Tough(Vector2 position) =>
         TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 1000f, Experience = 3 }, position);

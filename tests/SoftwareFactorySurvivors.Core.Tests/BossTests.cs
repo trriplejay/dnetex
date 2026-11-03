@@ -121,14 +121,14 @@ public class BossTests
         Assert.DoesNotContain(boss, session.Enemies);
         seen.UnionWith(session.Enemies);
 
-        // Spawning resumes at the regular rate (a Gemini every 2 seconds) with no saved-up burst.
+        // Spawning resumes at the regular rate (a Gemini every 0.5 seconds at 120/min) with no saved-up burst.
         var afterFight = new List<Enemy>();
         for (var i = 0; i < 60 * 4; i++)
         {
             Step(session);
             afterFight.AddRange(session.Enemies.Where(seen.Add));
         }
-        Assert.Equal(2, afterFight.Count);
+        Assert.Equal(8, afterFight.Count);
         Assert.All(afterFight, enemy => Assert.IsType<ChasePlayer>(enemy.Movement));
     }
 
@@ -138,6 +138,7 @@ public class BossTests
         var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f)).WithLaser();
         session.Stats.MaxHitPoints = 1_000_000f;
         session.Stats.HitPoints = 1_000_000f;
+        session.Stats.Laser().Damage = 0f;
 
         RunUntil(session, () => session.ElapsedSeconds >= 179.9f);
         Assert.False(session.IsBossActive);

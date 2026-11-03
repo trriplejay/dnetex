@@ -64,12 +64,12 @@ public class EnhancementDamageTests
 
         // An attacker with 3 HP dies from the 4 reflected, and the kill gives score and experience.
         session = SessionWith(ShipEnhancements.Armor, 5);
-        var weak = TestEnemies.Stationary(EnemyRoster.Gemini, Center);
+        var weak = TestEnemies.Stationary(EnemyRoster.Gemini with { Experience = 1 }, Center);
         session.AddEnemy(weak);
         Step(session);
         Assert.True(weak.IsDead);
         Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(EnemyRoster.Gemini.Experience, session.Leveling.Experience);
+        Assert.Equal(weak.Experience, session.Leveling.Experience);
     }
 
     [Fact]
@@ -125,13 +125,13 @@ public class EnhancementDamageTests
     public void A_level_5_shield_blast_kills_are_credited_and_a_level_4_break_damages_nothing()
     {
         var session = SessionWith(ShipEnhancements.Shield, 5);
-        var near = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 20f }, Center + new Vector2(200, 0));
+        var near = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 20f, Experience = 1 }, Center + new Vector2(200, 0));
         session.AddEnemy(near);
         session.AddEnemy(TestEnemies.Stationary(Toucher with { ContactDamage = 30f }, Center));
         Step(session);
         Assert.True(near.IsDead);
         Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(EnemyRoster.Gemini.Experience, session.Leveling.Experience);
+        Assert.Equal(near.Experience, session.Leveling.Experience);
 
         session = SessionWith(ShipEnhancements.Shield, 4);
         var near4 = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 30f }, Center + new Vector2(200, 0));

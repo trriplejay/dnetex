@@ -28,6 +28,9 @@ public sealed class GameSession
     /// <summary>While a source stays in contact with the ship, it deals its damage again after each this many seconds.</summary>
     public const float ContactTickSeconds = 0.5f;
 
+    /// <summary>Maximum number of live regular (non-boss) enemies in play at once.</summary>
+    public const int MaxRegularEnemies = 300;
+
     // The ship's outline reaches 24 px from its centre; the slack absorbs float rounding in the transformed strokes.
     private const float ShipContactRadius = 24.5f;
 
@@ -145,6 +148,9 @@ public sealed class GameSession
 
     public bool IsBossActive => _bosses.Count > 0;
 
+    /// <summary>Number of live regular (non-boss) enemies currently in play.</summary>
+    public int LiveRegularEnemyCount => _enemies.Count(enemy => !enemy.IsDead && !_bosses.Contains(enemy));
+
     /// <summary>True during a scheduled lull, when regular spawning stops.</summary>
     public bool IsSpawningPaused => _spawnPauses.Any(pause => pause.Covers(ElapsedSeconds));
 
@@ -261,8 +267,8 @@ public sealed class GameSession
 
         AddArrivedBosses(width, height);
         AddArrivedRings();
-        // Regular spawns wait while a boss is alive or during a lull; the spawner's timing is frozen, not saved up.
-        if (!IsBossActive && !IsSpawningPaused)
+        // Regular spawns wait while a boss is alive, during a lull, or while live regular enemies are at or above the cap; the spawner's timing is frozen, not saved up.
+        if (!IsBossActive && !IsSpawningPaused && LiveRegularEnemyCount < MaxRegularEnemies)
             AddEnemies(Spawner.Update(elapsedSeconds, width, height));
 
         // Existing hazards age and expire before any newly produced hazards this frame are added.
