@@ -21,14 +21,14 @@ public class OrbitingOrbsTests
     }
 
     [Fact]
-    public void Level_1_is_three_orbs_120_degrees_apart_at_80_px_with_radius_8()
+    public void Level_1_is_three_orbs_120_degrees_apart_at_80_px_with_radius_11()
     {
         var orbs = new OrbitingOrbs();
 
         var positions = orbs.GetOrbPositions(Ship);
 
         Assert.Equal(3, positions.Count);
-        Assert.Equal(8f, orbs.OrbRadius);
+        Assert.Equal(11f, orbs.OrbRadius);
         for (var i = 0; i < 3; i++)
         {
             Assert.Equal(80f, Vector2.Distance(Ship, positions[i]), Eps);
@@ -95,26 +95,39 @@ public class OrbitingOrbsTests
         var orbs = new OrbitingOrbs();
 
         orbs.AddOrb();
-        Assert.Equal((4, 90f, 80f, 8f, 1f), Stats(orbs));
+        Assert.Equal((4, 90f, 80f, 11f, 1f), Stats(orbs));
         orbs.AddSpeedAndOrbit();
-        Assert.Equal((4, 120f, 95f, 8f, 1f), Stats(orbs));
-        orbs.AddOrbRadius();
         Assert.Equal((4, 120f, 95f, 11f, 1f), Stats(orbs));
+        orbs.AddOrbRadius();
+        Assert.Equal((4, 120f, 95f, 14f, 1f), Stats(orbs));
         orbs.AddDamage();
-        Assert.Equal((4, 120f, 95f, 11f, 1.5f), Stats(orbs));
+        Assert.Equal((4, 120f, 95f, 14f, 1.5f), Stats(orbs));
         Assert.Equal(4, orbs.GetOrbPositions(Ship).Count);
+    }
+
+    [Fact]
+    public void Base_radius_hits_at_90_px_and_misses_at_92_px()
+    {
+        // Orbit radius is 80 px, base orb radius is 11 px -> reach is 91 px.
+        // A half-10 px square centred at 100 px has its nearest edge at 90 px (within 91 px reach -> hit).
+        var nearEnemy = BigSquare(Ship + new Vector2(100f, 0f), half: 10f);
+        Assert.Single(new OrbitingOrbs().Update(0f, Ship, [nearEnemy]));
+
+        // A half-10 px square centred at 102 px has its nearest edge at 92 px (beyond 91 px reach -> miss).
+        var farEnemy = BigSquare(Ship + new Vector2(102f, 0f), half: 10f);
+        Assert.Empty(new OrbitingOrbs().Update(0f, Ship, [farEnemy]));
     }
 
     [Fact]
     public void A_bigger_orb_radius_reaches_enemies_a_smaller_one_misses()
     {
-        // A 10 px square centred 100 px out has its nearest edge at 90 px: past radius 8's reach (88), within radius 17's (97).
-        var enemy = BigSquare(Ship + new Vector2(100f, 0f), half: 10f);
+        // Orbit radius 80 px, base orb radius 11 px -> reach is 91 px.
+        // A half-10 px square centred at 103 px out has its nearest edge at 93 px:
+        // past base radius 11's reach (91), within one AddOrbRadius (14 px -> reach 94).
+        var enemy = BigSquare(Ship + new Vector2(103f, 0f), half: 10f);
         Assert.Empty(new OrbitingOrbs().Update(0f, Ship, [enemy]));
 
         var bigger = new OrbitingOrbs();
-        bigger.AddOrbRadius();
-        bigger.AddOrbRadius();
         bigger.AddOrbRadius();
         Assert.Single(bigger.Update(0f, Ship, [enemy]));
     }
@@ -130,72 +143,54 @@ public class OrbitingOrbsTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(6)]
-    public void Levels_outside_1_to_5_are_rejected(int level)
+    [InlineData(21)]
+    public void Levels_outside_1_to_20_are_rejected(int level)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new OrbitingOrbs(level));
+        var orbs = new OrbitingOrbs(1);
+        Assert.Throws<ArgumentOutOfRangeException>(() => orbs.SetLevel(level));
     }
 
-    [Fact]
-    public void Level_4_still_has_discrete_orbs_and_level_5_has_none()
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(20)]
+    public void Levels_1_to_20_are_accepted(int level)
     {
-        Assert.False(new OrbitingOrbs(4).IsRingMode);
-        Assert.Equal(3, new OrbitingOrbs(4).GetOrbPositions(Ship).Count);
+        var orbs = new OrbitingOrbs(level);
+        Assert.Equal(level, orbs.Level);
 
-        var ring = new OrbitingOrbs(5);
-        Assert.True(ring.IsRingMode);
-        Assert.Empty(ring.GetOrbPositions(Ship));
+        var existing = new OrbitingOrbs(1);
+        existing.SetLevel(level);
+        Assert.Equal(level, existing.Level);
     }
 
-    [Fact]
-    public void An_enemy_on_the_ring_band_for_2_and_a_half_seconds_takes_two_hits()
+    [Theory]
+    [InlineData(5)]
+    [InlineData(20)]
+    public void At_levels_5_and_20_the_orbs_stay_discrete_and_an_enemy_in_the_gap_between_two_orbs_is_never_hit(int level)
     {
-        var ring = new OrbitingOrbs(5);
-        var enemy = Gemini(new Vector2(80f, 0f));
+        var orbs = new OrbitingOrbs(level);
+
+        var positions = orbs.GetOrbPositions(Ship);
+        Assert.Equal(orbs.OrbCount, positions.Count);
+        Assert.All(positions, orb => Assert.Equal(orbs.OrbitRadius, Vector2.Distance(Ship, orb), Eps));
+
+        // The enemy sits on the orbit circle midway between the first two orbs. The ship is moved each frame so
+        // the gap stays on the enemy while the orbs turn: a continuous band would touch it the whole 3 s.
+        var enemy = Gemini(new Vector2(orbs.OrbitRadius, 0f));
+        var gapOffset = MathF.Tau / orbs.OrbCount / 2f;
         var hits = new List<(Enemy Enemy, float Damage)>();
-
-        for (var i = 0; i < 5; i++)
-            hits.AddRange(ring.Update(0.5f, Ship, [enemy]));
-
-        Assert.Equal(2, hits.Count);
-        Assert.All(hits, hit => Assert.Equal(1f, hit.Damage));
-    }
-
-    [Fact]
-    public void The_ring_hit_is_the_orb_damage_after_upgrades()
-    {
-        var ring = new OrbitingOrbs(5);
-        ring.AddDamage();
-        var enemy = Gemini(new Vector2(80f, 0f));
-
-        var hits = ring.Update(1f, Ship, [enemy]);
-
-        Assert.Equal(1.5f, Assert.Single(hits).Damage);
-    }
-
-    [Fact]
-    public void The_ring_does_not_touch_enemies_at_its_centre_or_at_twice_its_radius()
-    {
-        var ring = new OrbitingOrbs(5);
-        var centre = Gemini(Vector2.Zero);
-        var outside = Gemini(new Vector2(160f, 0f));
-
-        var hits = ring.Update(5f, Ship, [centre, outside]);
+        for (var i = 0; i < 3 * 60; i++)
+        {
+            var gap = orbs.Angle + gapOffset;
+            var ship = enemy.Position - new Vector2(MathF.Cos(gap), MathF.Sin(gap)) * orbs.OrbitRadius;
+            hits.AddRange(orbs.Update(1f / 60f, ship, [enemy]));
+        }
 
         Assert.Empty(hits);
-    }
-
-    [Fact]
-    public void Leaving_the_band_restarts_the_ring_second()
-    {
-        var ring = new OrbitingOrbs(5);
-        var enemy = Gemini(new Vector2(80f, 0f));
-        var away = Gemini(new Vector2(300f, 0f));
-
-        Assert.Empty(ring.Update(0.75f, Ship, [enemy]));
-        Assert.Empty(ring.Update(0.5f, Ship, [away]));
-        Assert.Empty(ring.Update(0.75f, Ship, [enemy]));
-        Assert.Single(ring.Update(0.25f, Ship, [enemy]));
+        Assert.Equal(EnemyRoster.Gemini.HitPoints, enemy.HitPoints);
     }
 
     private static (int Count, float Speed, float Orbit, float Radius, float Damage) Stats(OrbitingOrbs orbs) =>

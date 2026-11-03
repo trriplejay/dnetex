@@ -11,7 +11,7 @@ public sealed record Enhancement(string Name, string Effect);
 /// <summary>An enhancement the ship owns and its level.</summary>
 public sealed class OwnedEnhancement
 {
-    public const int MaxLevel = 5;
+    public const int MaxLevel = 20;
 
     public OwnedEnhancement(Enhancement definition) => Definition = definition;
 

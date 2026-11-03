@@ -63,16 +63,6 @@ public class Ship
         Position += direction * (Speed * SpeedMultiplier) * elapsedSeconds;
     }
 
-    /// <summary>
-    /// Jumps distance pixels along Forward at once, then clamps the position into the play area
-    /// [0, width] × [0, height], so a blink toward an edge stops at that edge.
-    /// </summary>
-    public void Blink(float distance, float width, float height)
-    {
-        var target = Position + Forward * distance;
-        Position = new Vector2(Math.Clamp(target.X, 0f, width), Math.Clamp(target.Y, 0f, height));
-    }
-
     /// <summary>Turns instantly to face target. Aiming at the ship's own position keeps the current heading.</summary>
     public void AimAt(Vector2 target)
     {

@@ -6,8 +6,8 @@ using SoftwareFactorySurvivors.Core;
 namespace SoftwareFactorySurvivors.Core.Tests;
 
 /// <summary>
-/// How the ship's enhancements change a hit: armor and its level-5 reflection, the level-5 shield's blast,
-/// Health's Second Wind, plus the regeneration card text and ShipEnhancements owning every number.
+/// How the ship's enhancements change a hit (armor, shield breaking, lethal hits at any Health level), plus the
+/// card text and ShipEnhancements owning every number.
 /// </summary>
 public class EnhancementDamageTests
 {
@@ -51,25 +51,21 @@ public class EnhancementDamageTests
         Assert.Equal(hitPointsAfter, session.Stats.HitPoints);
     }
 
-    [Fact]
-    public void Level_5_armor_deals_what_it_blocked_to_the_attacker_and_a_kill_by_it_is_credited()
+    [Theory]
+    [InlineData(5)]
+    [InlineData(20)]
+    public void Armor_at_level_5_or_20_blocks_a_contact_hit_but_deals_nothing_back_to_the_attacker(int level)
     {
-        // Raw 5, armor blocks 4: an attacker with 10 HP loses 4.
-        var session = SessionWith(ShipEnhancements.Armor, 5);
+        var session = SessionWith(ShipEnhancements.Armor, level);
         var attacker = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center);
         session.AddEnemy(attacker);
-        Step(session);
-        Assert.Equal(6f, attacker.HitPoints);
-        Assert.Equal(99f, session.Stats.HitPoints);
 
-        // An attacker with 3 HP dies from the 4 reflected, and the kill gives score and experience.
-        session = SessionWith(ShipEnhancements.Armor, 5);
-        var weak = TestEnemies.Stationary(EnemyRoster.Gemini with { Experience = 1 }, Center);
-        session.AddEnemy(weak);
         Step(session);
-        Assert.True(weak.IsDead);
-        Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(weak.Experience, session.Leveling.Experience);
+
+        // Raw 5 is floored at 1 by the armor; the 4 blocked go nowhere.
+        Assert.Equal(99f, session.Stats.HitPoints);
+        Assert.Equal(10f, attacker.HitPoints);
+        Assert.Equal(0, session.Score);
     }
 
     [Fact]
@@ -95,102 +91,44 @@ public class EnhancementDamageTests
         Assert.Equal(99f, session.Stats.HitPoints);
     }
 
-    // ---- Level-5 shield blast (CLM-9) ----
+    // ---- Shield breaking ----
 
     [Fact]
-    public void Breaking_a_level_5_shield_deals_25_to_every_enemy_within_300_px_once()
+    public void Breaking_a_level_20_shield_damages_no_enemy_and_credits_no_kill()
     {
-        var session = SessionWith(ShipEnhancements.Shield, 5);
-        var near = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 30f }, Center + new Vector2(200, 0));
-        var far = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 30f }, Center + new Vector2(400, 0));
+        var session = SessionWith(ShipEnhancements.Shield, 20);
+        Assert.Equal(100f, session.ShieldCapacity);
+        var near = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1f, Experience = 1 }, Center + new Vector2(100, 0));
         session.AddEnemy(near);
-        session.AddEnemy(far);
-        // A 30-damage hit empties the 25-point shield.
-        session.AddEnemy(TestEnemies.Stationary(Toucher with { ContactDamage = 30f }, Center));
+        // A 150-damage hit empties the 100-point shield.
+        session.AddEnemy(TestEnemies.Stationary(Toucher with { ContactDamage = 150f }, Center));
 
         Step(session);
 
         Assert.Equal(0f, session.ShieldPoints);
-        Assert.Equal(95f, session.Stats.HitPoints);
-        Assert.Equal(5f, near.HitPoints);
-        Assert.Equal(30f, far.HitPoints);
+        Assert.True(session.Stats.HitPoints < 100f);
+        Assert.Equal(1f, near.HitPoints);
+        Assert.False(near.IsDead);
         Assert.Equal(0, session.Score);
-
-        // The broken shield blasts no more on later hits.
-        Step(session, 40);
-        Assert.Equal(5f, near.HitPoints);
+        Assert.Equal(0, session.Leveling.Experience);
     }
 
-    [Fact]
-    public void A_level_5_shield_blast_kills_are_credited_and_a_level_4_break_damages_nothing()
-    {
-        var session = SessionWith(ShipEnhancements.Shield, 5);
-        var near = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 20f, Experience = 1 }, Center + new Vector2(200, 0));
-        session.AddEnemy(near);
-        session.AddEnemy(TestEnemies.Stationary(Toucher with { ContactDamage = 30f }, Center));
-        Step(session);
-        Assert.True(near.IsDead);
-        Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(near.Experience, session.Leveling.Experience);
+    // ---- Lethal hits ----
 
-        session = SessionWith(ShipEnhancements.Shield, 4);
-        var near4 = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 30f }, Center + new Vector2(200, 0));
-        var far4 = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 30f }, Center + new Vector2(400, 0));
-        session.AddEnemy(near4);
-        session.AddEnemy(far4);
-        session.AddEnemy(TestEnemies.Stationary(Toucher with { ContactDamage = 30f }, Center));
+    [Fact]
+    public void With_health_at_level_20_a_lethal_hit_ends_the_run_at_once_at_0_hp()
+    {
+        var session = SessionWith(ShipEnhancements.Health, 20);
+        session.Stats.HitPoints = 3f;
+        session.AddEnemy(TestEnemies.Stationary(Toucher, Center));
+
         Step(session);
-        Assert.Equal(0f, session.ShieldPoints);
-        Assert.Equal(90f, session.Stats.HitPoints);
-        Assert.Equal(30f, near4.HitPoints);
-        Assert.Equal(30f, far4.HitPoints);
+
+        Assert.True(session.IsGameOver);
+        Assert.Equal(0f, session.Stats.HitPoints);
     }
 
     // ---- Second Wind (CLM-6) ----
-
-    [Fact]
-    public void Second_wind_leaves_1_hp_and_2_s_of_immunity_once_then_a_lethal_hit_ends_the_game()
-    {
-        var session = SessionWith(ShipEnhancements.Health, 5);
-        session.Stats.HitPoints = 3f;
-        session.AddEnemy(TestEnemies.Stationary(Toucher, Center));
-
-        Step(session);
-        Assert.Equal(1f, session.Stats.HitPoints);
-        Assert.False(session.IsGameOver);
-        Assert.Equal(2f, session.InvulnerableSecondsLeft, precision: 3);
-
-        // Still touching through the 2 s of immunity: nothing lands.
-        var frames = 0;
-        while (session.InvulnerableSecondsLeft > 0f && frames < 200)
-        {
-            Step(session);
-            frames++;
-            if (session.InvulnerableSecondsLeft > 0f)
-                Assert.Equal(1f, session.Stats.HitPoints);
-        }
-        Assert.InRange(frames * Frame, 1.95f, 2.05f);
-
-        // Once it runs out, the next lethal tick ends the run: Second Wind is used up.
-        for (var i = 0; i < 60 && !session.IsGameOver; i++)
-            Step(session);
-        Assert.True(session.IsGameOver);
-        Assert.Equal(0f, session.Stats.HitPoints);
-    }
-
-    [Fact]
-    public void Below_health_level_5_a_lethal_hit_ends_the_game_at_once()
-    {
-        var session = SessionWith(ShipEnhancements.Health, 4);
-        session.Stats.HitPoints = 3f;
-        session.AddEnemy(TestEnemies.Stationary(Toucher, Center));
-
-        Step(session);
-
-        Assert.True(session.IsGameOver);
-        Assert.Equal(0f, session.Stats.HitPoints);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
-    }
 
     // ---- Card text (CLM-11) ----
 
@@ -199,48 +137,66 @@ public class EnhancementDamageTests
     {
         Assert.Equal("+3 HP PER 5 SECONDS", ShipEnhancements.CardDescription(ShipEnhancements.Regeneration, 3));
         Assert.Equal("+1 HP PER 5 SECONDS", ShipEnhancements.CardDescription(ShipEnhancements.Regeneration, 1));
-        Assert.StartsWith("+5 HP PER 5 SECONDS", ShipEnhancements.CardDescription(ShipEnhancements.Regeneration, 5));
+        Assert.Equal("+5 HP PER 5 SECONDS", ShipEnhancements.CardDescription(ShipEnhancements.Regeneration, 5));
         Assert.Equal(0.6f, ShipEnhancements.RegenPerTick(3), precision: 4);
     }
 
     [Fact]
-    public void Every_enhancement_card_names_its_level_values_and_only_the_level_5_card_names_the_bonus()
+    public void Every_enhancement_card_names_its_level_values_and_no_card_from_level_1_to_20_names_a_level_5_bonus()
     {
         Assert.Equal("+20% MOVE SPEED", ShipEnhancements.CardDescription(ShipEnhancements.MoveSpeed, 2));
         Assert.Equal("+60 MAX HP", ShipEnhancements.CardDescription(ShipEnhancements.Health, 3));
-        Assert.Equal("20 SHIELD, REFILLS 7 S AFTER BREAKING", ShipEnhancements.CardDescription(ShipEnhancements.Shield, 4));
+        Assert.Equal("20 SHIELD, REFILLS 8.5 S AFTER BREAKING", ShipEnhancements.CardDescription(ShipEnhancements.Shield, 4));
         Assert.Equal("-2 DAMAGE PER HIT, NEVER BELOW 1", ShipEnhancements.CardDescription(ShipEnhancements.Armor, 2));
+        Assert.Equal("+50% MOVE SPEED", ShipEnhancements.CardDescription(ShipEnhancements.MoveSpeed, 5));
+        Assert.Equal("+100 MAX HP", ShipEnhancements.CardDescription(ShipEnhancements.Health, 5));
+        Assert.Equal("25 SHIELD, REFILLS 8 S AFTER BREAKING", ShipEnhancements.CardDescription(ShipEnhancements.Shield, 5));
+        Assert.Equal("-5 DAMAGE PER HIT, NEVER BELOW 1", ShipEnhancements.CardDescription(ShipEnhancements.Armor, 5));
         foreach (var enhancement in ShipEnhancements.All)
         {
-            Assert.DoesNotContain("LV5", ShipEnhancements.CardDescription(enhancement, 4));
-            var top = ShipEnhancements.CardDescription(enhancement, 5);
-            Assert.Contains("LV5", top);
-            // Every character is one the vector font can draw.
-            VectorText.GetStrokes(top, Vector2.Zero, 10f);
+            for (var level = 1; level <= OwnedEnhancement.MaxLevel; level++)
+            {
+                var card = ShipEnhancements.CardDescription(enhancement, level);
+                Assert.DoesNotContain("LV5", card);
+                Assert.DoesNotContain("LV 5", card);
+                Assert.DoesNotContain("BLINK", card);
+                Assert.DoesNotContain("SECOND WIND", card);
+                Assert.DoesNotContain("REFLECT", card);
+                Assert.DoesNotContain("DOUBLED", card);
+                Assert.DoesNotContain("BREAKING DEALS", card);
+                // Every character is one the vector font can draw.
+                VectorText.GetStrokes(card, Vector2.Zero, 10f);
+            }
         }
-        Assert.Throws<ArgumentOutOfRangeException>(() => ShipEnhancements.CardDescription(ShipEnhancements.Armor, 6));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ShipEnhancements.CardDescription(ShipEnhancements.Armor, 21));
         Assert.Throws<ArgumentException>(() => ShipEnhancements.CardDescription(new Enhancement("OTHER", "X"), 1));
     }
 
     // ---- One owner of the numbers (CLM-13) ----
 
     [Fact]
-    public void ShipEnhancements_owns_the_bonus_numbers_and_the_session_holds_no_copies()
+    public void ShipEnhancements_owns_the_numbers_and_the_session_holds_no_copies()
     {
-        Assert.Equal(250f, ShipEnhancements.BlinkDistance);
-        Assert.Equal(3f, ShipEnhancements.BlinkCooldownSeconds);
-        Assert.Equal(300f, ShipEnhancements.ShieldExplosionRadius);
-        Assert.Equal(25f, ShipEnhancements.ShieldExplosionDamage);
-        Assert.Equal(2f, ShipEnhancements.SecondWindSeconds);
-        Assert.Equal(5f, ShipEnhancements.RegenBoostSeconds);
-        Assert.Equal([10f, 9f, 8f, 7f, 5f], Enumerable.Range(1, 5).Select(ShipEnhancements.ShieldRechargeSeconds));
+        // The shield wait has one owner with 20 entries, 10 - 0.5*(level-1), and no extra drop at level 5.
+        var expectedDelays = Enumerable.Range(1, 20).Select(l => 10f - 0.5f * (l - 1)).ToArray();
+        Assert.Equal(expectedDelays, Enumerable.Range(1, 20).Select(ShipEnhancements.ShieldRechargeSeconds));
+        Assert.Equal(8f, ShipEnhancements.ShieldRechargeSeconds(5));
+        Assert.Equal(0.5f, ShipEnhancements.ShieldRechargeSeconds(20));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ShipEnhancements.ShieldRechargeSeconds(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ShipEnhancements.ShieldRechargeSeconds(21));
+        // The shield card reads its wait from that owner at every level.
+        for (var level = 1; level <= OwnedEnhancement.MaxLevel; level++)
+        {
+            var wait = ShipEnhancements.ShieldRechargeSeconds(level).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture);
+            Assert.Contains($"REFILLS {wait} S AFTER BREAKING", ShipEnhancements.CardDescription(ShipEnhancements.Shield, level));
+        }
         Assert.Equal([5f, 10f, 15f, 20f, 25f], Enumerable.Range(1, 5).Select(ShipEnhancements.ShieldCapacity));
         Assert.Equal([20f, 40f, 60f, 80f, 100f], Enumerable.Range(1, 5).Select(ShipEnhancements.HealthBonus));
         Assert.Equal([1f, 2f, 3f, 4f, 5f], Enumerable.Range(1, 5).Select(ShipEnhancements.ArmorReduction));
 
         // Any line of the session or the stats that touches an enhancement carries no number but 0: each value is
         // read from ShipEnhancements by name.
-        var enhancementLine = new Regex(@"ShipEnhancements|Shield|Armor|SecondWind|Regen|Blink|SpeedMultiplier");
+        var enhancementLine = new Regex(@"ShipEnhancements|Shield|Armor|Regen|SpeedMultiplier");
         var numberOtherThanZero = new Regex(@"(?<![\w.])(?!0(\.0+)?f?\b)\d+(\.\d+)?f?\b");
         foreach (var file in new[] { "GameSession.cs", "PlayerStats.cs" })
         {
@@ -250,9 +206,9 @@ public class EnhancementDamageTests
                 .ToArray();
             Assert.True(offending.Length == 0, $"{file} holds enhancement numbers: {string.Join(" | ", offending)}");
         }
-        // The session reads the bonus numbers it uses from ShipEnhancements.
+        // The session reads the numbers it uses from ShipEnhancements.
         var session = File.ReadAllText(Path.Combine(CoreDirectory(), "GameSession.cs"));
-        foreach (var member in new[] { "ShieldExplosionRadius", "ShieldExplosionDamage", "SecondWindSeconds", "SecondWindHitPoints", "ArmoredDamage", "SpeedMultiplier(" })
+        foreach (var member in new[] { "ShieldRechargeSeconds(", "RegenPerTick(", "ArmoredDamage", "SpeedMultiplier(" })
             Assert.Contains("ShipEnhancements." + member, session);
     }
 

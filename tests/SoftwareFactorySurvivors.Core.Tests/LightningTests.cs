@@ -63,7 +63,7 @@ public class LightningTests
         for (var seed = 0; seed < 40; seed++)
         {
             var struck = new List<Enemy>();
-            Lightning.Strike(new Vector2(0, -10), 0f, 6, 1, enemies, new Random(seed), (enemy, _) => struck.Add(enemy), []);
+            Lightning.Strike(new Vector2(0, -10), 0f, 6, enemies, new Random(seed), (enemy, _) => struck.Add(enemy), []);
 
             Assert.Equal(7, struck.Count);
             Assert.Same(a, struck[0]);
@@ -103,8 +103,97 @@ public class LightningTests
         var segments = RunUntilStrike(session);
 
         Assert.Single(segments);
+        Assert.Equal(new LightningSegment(session.Ship.Position, lone.Position), segments[0]);
         Assert.Equal(10f - 0.8f, lone.HitPoints, precision: 4);
         Assert.Equal(10f, outOfRange.HitPoints);
+    }
+
+    [Fact]
+    public void Strike_with_no_live_enemy_leaves_segments_empty_and_damages_nobody()
+    {
+        var deadEnemy = Target(new Vector2(100, 100));
+        deadEnemy.TakeDamage(100f);
+        Assert.True(deadEnemy.IsDead);
+
+        var segments = new List<LightningSegment>();
+        var damaged = new List<(Enemy, float)>();
+        Lightning.Strike(
+            origin: Vector2.Zero,
+            damage: 10f,
+            hops: 3,
+            enemies: [deadEnemy],
+            random: new Random(42),
+            dealDamage: (enemy, dmg) => damaged.Add((enemy, dmg)),
+            segments: segments);
+
+        Assert.Empty(segments);
+        Assert.Empty(damaged);
+
+        var session = LightningSession();
+        var sessionDead = Target(Center + new Vector2(0, -150));
+        sessionDead.TakeDamage(100f);
+        session.AddEnemy(sessionDead);
+
+        for (var i = 0; i < 120; i++)
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
+
+        Assert.Empty(session.LightningSegments);
+    }
+
+    [Fact]
+    public void When_chain_runs_out_of_range_reports_only_hops_made_with_endpoints_at_ship_or_struck_enemies()
+    {
+        var origin = new Vector2(0, 0);
+        var first = Target(new Vector2(0, 50), hitPoints: 1f);
+        var second = Target(new Vector2(0, 150), hitPoints: 100f); // 100 px from first: within ChainRange (150 px)
+        var third = Target(new Vector2(0, 350), hitPoints: 100f);  // 200 px from second: out of ChainRange
+        var enemies = new List<Enemy> { first, second, third };
+
+        var segments = new List<LightningSegment>();
+        var struck = new List<Enemy>();
+        // 5 hops allowed, but only 1 hop can be made before chain runs out of range (first is dead, third is 200 px away)
+        Lightning.Strike(
+            origin: origin,
+            damage: 10f,
+            hops: 5,
+            enemies: enemies,
+            random: new Random(1),
+            dealDamage: (e, dmg) =>
+            {
+                struck.Add(e);
+                e.TakeDamage(dmg);
+            },
+            segments: segments);
+
+        // 1 initial hit + 1 hop = 2 segments
+        Assert.Equal(2, segments.Count);
+        Assert.Equal([first, second], struck);
+        Assert.True(first.IsDead);
+        Assert.False(second.IsDead);
+        Assert.Equal(new LightningSegment(origin, first.Position), segments[0]);
+        Assert.Equal(new LightningSegment(first.Position, second.Position), segments[1]);
+        Assert.Equal(100f, third.HitPoints);
+
+        var session = LightningSession();
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningChain), session.Stats);
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningChain), session.Stats);
+        // Stats has lightning count = 3 (first hit + 2 hops allowed)
+        // Make sFirst have very low HP (0.1f) so the first hit (0.8f) kills it.
+        var sFirst = Target(Center + new Vector2(0, -100), hitPoints: 0.1f);
+        var sSecond = Target(Center + new Vector2(0, -200), hitPoints: 10f);
+        var sFar = Target(Center + new Vector2(0, -400), hitPoints: 10f);
+        session.AddEnemy(sFirst);
+        session.AddEnemy(sSecond);
+        session.AddEnemy(sFar);
+
+        var sessionSegments = RunUntilStrike(session);
+        // Only 1 hop made because sFirst died and sFar is out of range (>150 px)
+        Assert.Equal(2, sessionSegments.Count);
+        Assert.Equal(new LightningSegment(session.Ship.Position, sFirst.Position), sessionSegments[0]);
+        Assert.Equal(new LightningSegment(sFirst.Position, sSecond.Position), sessionSegments[1]);
+        Assert.True(sFirst.IsDead);
+        Assert.False(sSecond.IsDead);
+        Assert.Equal(10f, sFar.HitPoints);
     }
 
     [Fact]
@@ -134,52 +223,24 @@ public class LightningTests
     }
 
     [Fact]
-    public void Level_5_strike_burns_and_the_burn_kill_scores_and_grants_experience()
+    public void A_level_20_strike_deals_only_its_hit_and_the_struck_enemy_takes_no_damage_over_the_next_6_s()
     {
         var session = LightningSession();
-        for (var i = 0; i < 4; i++)
-            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningChain), session.Stats);
-        Assert.Equal(5, session.Stats.Find(WeaponKind.Lightning)!.Level);
-        var victim = Target(Center + new Vector2(0, -150), hitPoints: 1.5f);
+        for (var i = 1; i < OwnedWeapon.MaxLevel; i++)
+            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningDamage), session.Stats);
+        Assert.Equal(20, session.Stats.Find(WeaponKind.Lightning)!.Level);
+        var victim = Target(Center + new Vector2(0, -150), hitPoints: 100f);
         session.AddEnemy(victim);
 
         RunUntilStrike(session);
-        Assert.True(victim.IsBurning);
-        Assert.Equal(0, session.Score);
+        var afterStrike = victim.HitPoints;
+        Assert.True(afterStrike < 100f);
 
-        // 0.7 HP left burns away at 1/s, before the next strike is due (1/1.2 s after the first).
-        for (var i = 0; i < 45 && !victim.IsDead; i++)
-        {
-            session.Update(Vector2.Zero, null, Frame, Width, Height);
-            Assert.Empty(session.LightningSegments);
-        }
+        // With no further strikes, six seconds of the enemy's own updates take nothing more.
+        for (var i = 0; i < 6 * 60; i++)
+            victim.Update(victim.Position, Frame);
 
-        Assert.True(victim.IsDead);
-        Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(victim.Experience, session.Leveling.Experience);
-        Assert.DoesNotContain(victim, session.Enemies);
-
-        // Credited once: later frames add nothing.
-        session.Update(Vector2.Zero, null, 2f, Width, Height);
-        Assert.Equal(GameSession.PointsPerKill, session.Score);
-        Assert.Equal(victim.Experience, session.Leveling.Experience);
-    }
-
-    [Fact]
-    public void Below_level_5_a_strike_does_not_burn()
-    {
-        var session = LightningSession();
-        for (var i = 0; i < 3; i++)
-            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Lightning, WeaponOption.LightningChain), session.Stats);
-        var victim = Target(Center + new Vector2(0, -150), hitPoints: 1.5f);
-        session.AddEnemy(victim);
-
-        RunUntilStrike(session);
-        session.Update(Vector2.Zero, null, 0.5f, Width, Height);
-
-        Assert.False(victim.IsBurning);
-        Assert.Equal(0.7f, victim.HitPoints, precision: 4);
-        Assert.Equal(0, session.Score);
+        Assert.Equal(afterStrike, victim.HitPoints);
     }
 
     internal static GameSession LightningSession() => KillCreditTests.SessionWith(WeaponKind.Lightning);

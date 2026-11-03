@@ -18,9 +18,6 @@ public static class Lightning
     /// <summary>Each hop deals this fraction of the hit before it.</summary>
     public const float HopDamageFactor = 0.8f;
 
-    /// <summary>From this weapon level every enemy struck also burns (see Enemy.ApplyBurn).</summary>
-    public const int BurnLevel = 5;
-
     /// <summary>True when there is a live enemy to strike.</summary>
     public static bool HasTarget(IReadOnlyList<Enemy> enemies)
     {
@@ -38,10 +35,9 @@ public static class Lightning
     /// </summary>
     /// <param name="damage">Damage of the first hit.</param>
     /// <param name="hops">How many times the strike may chain after its first hit.</param>
-    /// <param name="level">The weapon's level; at BurnLevel every enemy struck burns.</param>
     /// <param name="random">Picks each hop's target among those in range.</param>
     /// <param name="dealDamage">Deals one hit's damage to one enemy (the session's damage-and-credit helper).</param>
-    public static void Strike(Vector2 origin, float damage, int hops, int level, IReadOnlyList<Enemy> enemies,
+    public static void Strike(Vector2 origin, float damage, int hops, IReadOnlyList<Enemy> enemies,
         Random random, Action<Enemy, float> dealDamage, List<LightningSegment> segments)
     {
         var target = Nearest(origin, enemies);
@@ -49,7 +45,7 @@ public static class Lightning
             return;
 
         segments.Add(new LightningSegment(origin, target.Position));
-        Hit(target, damage, level, dealDamage);
+        dealDamage(target, damage);
 
         var inRange = new List<Enemy>();
         for (var hop = 0; hop < hops; hop++)
@@ -67,16 +63,9 @@ public static class Lightning
             var next = inRange[random.Next(inRange.Count)];
             damage *= HopDamageFactor;
             segments.Add(new LightningSegment(target.Position, next.Position));
-            Hit(next, damage, level, dealDamage);
+            dealDamage(next, damage);
             target = next;
         }
-    }
-
-    private static void Hit(Enemy enemy, float damage, int level, Action<Enemy, float> dealDamage)
-    {
-        dealDamage(enemy, damage);
-        if (level >= BurnLevel)
-            enemy.ApplyBurn();
     }
 
     private static Enemy? Nearest(Vector2 point, IReadOnlyList<Enemy> enemies)

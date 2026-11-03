@@ -105,21 +105,6 @@ public class ShipTests
     }
 
     [Fact]
-    public void Blink_jumps_along_forward_and_is_clamped_to_the_play_area()
-    {
-        var ship = new Ship(Start);
-        ship.AimAt(Start + new Vector2(10, 0));
-
-        ship.Blink(100f, 1000f, 800f);
-        AssertPointNear(Start + new Vector2(100, 0), ship.Position);
-
-        // Facing up from y = 240: 300 px would leave the area, so it stops at y = 0.
-        ship.AimAt(ship.Position + new Vector2(0, -10));
-        ship.Blink(300f, 1000f, 800f);
-        AssertPointNear(new Vector2(Start.X + 100, 0), ship.Position);
-    }
-
-    [Fact]
     public void Opposite_keys_cancel_and_overlong_directions_are_capped()
     {
         Assert.Equal(Vector2.Zero, ShipInput.Direction(up: true, left: true, down: true, right: true));

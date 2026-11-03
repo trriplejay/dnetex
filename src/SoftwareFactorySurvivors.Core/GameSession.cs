@@ -8,7 +8,7 @@ namespace SoftwareFactorySurvivors.Core;
 /// deals its contact damage the moment it first touches and again every ContactTickSeconds while it stays in
 /// contact, each source on its own timer; enemies and bosses survive the contact, and an armed bullet deals its
 /// damage once and is gone. Contact damage grows with the clock (EnemyRoster.ScaledContactDamage).
-/// Each hit then passes through the ship's enhancements in order: shield, armor, Second Wind (see DamageShip).
+/// Each hit then passes through the ship's enhancements in order: shield, then armor (see DamageShip).
 /// It ends in defeat when the ship's hit points reach 0, or in victory when the Claude Boss is killed.
 /// It opens paused on the starting-weapon pick; each level gained then pauses play until the
 /// player picks one of up to three offered cards (a level with no card left to offer doesn't pause).
@@ -50,9 +50,7 @@ public sealed class GameSession
     private readonly List<Hazard> _hazards = [];
     private readonly List<Enemy> _enemySnapshot = [];
     private readonly List<LightningSegment> _lightningSegments = [];
-    private readonly List<Vector2> _laserExplosions = [];
     private readonly List<RicochetDisc> _discs = [];
-    private readonly List<DiscShard> _discShards = [];
     private readonly ProximityMines _mines = new();
     private readonly Action<Enemy, float> _damageEnemy;
     // Seconds until each touching source (enemy or hazard) deals its next tick; a source not touching has no entry.
@@ -64,12 +62,7 @@ public sealed class GameSession
     private int _shieldLevelFilled;
     // Seconds until a broken shield refills; runs only while the shield is broken.
     private float _shieldRechargeTimer;
-    private bool _secondWindUsed;
     private float _regenTimer;
-    private float _regenBoostSecondsLeft;
-    // A blink asked for since the last played frame; the next Update accepts or drops it.
-    private bool _blinkRequested;
-    private float _blinkCooldownLeft;
 
     /// <param name="roster">Enemy types that join the spawner at their arrival times; defaults to EnemyRoster.All.</param>
     /// <param name="bosses">Bosses and when they enter; defaults to EnemyRoster.Bosses.</param>
@@ -122,22 +115,13 @@ public sealed class GameSession
     /// <summary>The lightning drawn this frame: ship to first target, then each hop; cleared at the start of every played frame.</summary>
     public IReadOnlyList<LightningSegment> LightningSegments => _lightningSegments;
 
-    /// <summary>Impact points of level-5 laser explosions this frame (radius is <see cref="Laser.ExplosionRadius"/>); cleared at the start of every played frame.</summary>
-    public IReadOnlyList<Vector2> LaserExplosions => _laserExplosions;
-
     /// <summary>Ricochet Discs in flight, out or back (position, radius, leg).</summary>
     public IReadOnlyList<RicochetDisc> Discs => _discs;
-
-    /// <summary>Shards from level-5 discs (SHATTER) still flying.</summary>
-    public IReadOnlyList<DiscShard> DiscShards => _discShards;
 
     /// <summary>Proximity Mines lying in play, oldest first (position, armed).</summary>
     public IReadOnlyList<Mine> Mines => _mines.Mines;
 
-    /// <summary>Level-5 mini-mines (CLUSTER) waiting for their fuse.</summary>
-    public IReadOnlyList<MiniMine> MiniMines => _mines.MiniMines;
-
-    /// <summary>Mine and mini-mine explosions this frame (centre, blast radius); cleared at the start of every played frame's hit pass.</summary>
+    /// <summary>Mine explosions this frame (centre, blast radius); cleared at the start of every played frame's hit pass.</summary>
     public IReadOnlyList<Circle> MineExplosions => _mines.Explosions;
 
     /// <summary>Bosses currently alive. While there are any, the regular spawner is paused.</summary>
@@ -161,12 +145,6 @@ public sealed class GameSession
     public bool IsGameOver { get; private set; }
     public bool IsVictory { get; private set; }
     public bool IsFinished => IsGameOver || IsVictory;
-
-    /// <summary>
-    /// Seconds of immunity left, during which no contact damages the ship. Only Second Wind grants it
-    /// (ShipEnhancements.SecondWindSeconds); ordinary contact damage grants none, so it stays 0 after a hit.
-    /// </summary>
-    public float InvulnerableSecondsLeft { get; private set; }
 
     /// <summary>Shield points left (read from Stats.ShieldPoints, their one owner); a hit takes from these first.</summary>
     public float ShieldPoints => Stats.ShieldPoints;
@@ -193,20 +171,6 @@ public sealed class GameSession
 
     /// <summary>Adds multiple hazards directly to the session.</summary>
     public void AddHazards(IEnumerable<Hazard> hazards) => _hazards.AddRange(hazards);
-
-    /// <summary>Seconds until the next blink is accepted; 0 when one can go now.</summary>
-    public float BlinkCooldownSecondsLeft => _blinkCooldownLeft;
-
-    /// <summary>Seconds left on the level-5 regeneration boost after a hit; 0 when inactive.</summary>
-    public float RegenBoostSecondsLeft => _regenBoostSecondsLeft;
-
-    /// <summary>
-    /// Asks for one blink (e.g. on a Space press). The next Update moves the ship ShipEnhancements.BlinkDistance
-    /// along Forward, clamped to the play area, but only at Move Speed level 5 and once
-    /// ShipEnhancements.BlinkCooldownSeconds of game time have passed since the last blink; otherwise the request
-    /// is dropped and the ship stays put.
-    /// </summary>
-    public void RequestBlink() => _blinkRequested = true;
 
     /// <summary>Applies the chosen card, then offers the next level-up's cards or resumes play.</summary>
     /// <exception cref="InvalidOperationException">No card is on offer.</exception>
@@ -235,33 +199,22 @@ public sealed class GameSession
     public void Update(Vector2 moveDirection, Vector2? aimTarget, float elapsedSeconds, float width, float height)
     {
         if (IsFinished || IsChoosingUpgrade)
-        {
-            // A request made while play is stopped is not saved for later.
-            _blinkRequested = false;
             return;
-        }
 
         ElapsedSeconds = MathF.Min(ElapsedSeconds + elapsedSeconds, SurvivalSeconds);
-        InvulnerableSecondsLeft = MathF.Max(0f, InvulnerableSecondsLeft - elapsedSeconds);
         AddArrivedEnemyTypes();
 
         UpdateShieldRecharge(elapsedSeconds);
         UpdateRegeneration(elapsedSeconds);
 
-        var moveSpeedLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.MoveSpeed);
-        UpdateBlink(moveSpeedLevel, elapsedSeconds, width, height);
-        Ship.SpeedMultiplier = ShipEnhancements.SpeedMultiplier(moveSpeedLevel);
+        Ship.SpeedMultiplier = ShipEnhancements.SpeedMultiplier(ShipEnhancements.LevelOf(Stats, ShipEnhancements.MoveSpeed));
         Ship.Update(moveDirection, aimTarget, elapsedSeconds);
 
         foreach (var laser in _lasers)
             laser.Update(elapsedSeconds);
-        // Shards burst this frame start flying next frame, like a freshly fired laser.
-        foreach (var shard in _discShards)
-            shard.Update(elapsedSeconds);
         foreach (var disc in _discs)
-            disc.Update(elapsedSeconds, Ship.Position, _discShards);
+            disc.Update(elapsedSeconds, Ship.Position);
         _lightningSegments.Clear();
-        _laserExplosions.Clear();
         foreach (var weapon in Stats.Weapons)
             FireWeapon(weapon, elapsedSeconds);
 
@@ -281,10 +234,7 @@ public sealed class GameSession
         foreach (var enemy in _enemies)
         {
             var prevChargeSeg = (enemy.Movement as ChargeAlongLine)?.LastChargeSegment;
-            // An enemy's update ticks its burn, the only damage it deals itself, so a burn kill is credited here.
-            var wasAlive = !enemy.IsDead;
             enemy.Update(Ship.Position, elapsedSeconds);
-            CreditKill(enemy, wasAlive);
             if (enemy.Movement is ChargeAlongLine charge)
             {
                 var seg = charge.LastChargeSegment;
@@ -388,7 +338,7 @@ public sealed class GameSession
                     break;
                 }
                 foreach (var _ in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
-                    Lightning.Strike(Ship.Position, weapon.Damage, weapon.Count, weapon.Level, _enemies, _random, _damageEnemy, _lightningSegments);
+                    Lightning.Strike(Ship.Position, weapon.Damage, weapon.Count, _enemies, _random, _damageEnemy, _lightningSegments);
                 break;
             case WeaponKind.Orbs:
                 foreach (var (enemy, damage) in weapon.Orbs!.Update(elapsedSeconds, Ship.Position, _enemies))
@@ -419,8 +369,6 @@ public sealed class GameSession
 
     private void ResolveWeaponHits(float elapsedSeconds)
     {
-        // The laser's level-5 impact explosion follows its current level.
-        var laserLevel = Stats.Find(WeaponKind.Laser)?.Level ?? 0;
         _lasers.RemoveAll(laser =>
         {
             var shape = laser.GetShape();
@@ -433,10 +381,6 @@ public sealed class GameSession
 
                 // Each projectile deals its own damage, fixed when it was fired.
                 DamageEnemy(enemy, laser.Damage);
-                if (laserLevel >= Laser.ExplosionLevel)
-                    _laserExplosions.Add(enemy.Position);
-                foreach (var splashed in Laser.GetExplosionTargets(enemy.Position, _enemies, laserLevel, enemy))
-                    DamageEnemy(splashed, laser.Damage);
                 if (laser.RegisterHit(enemy))
                     return true;
             }
@@ -447,17 +391,14 @@ public sealed class GameSession
     }
 
     /// <summary>
-    /// Disc, shard, mine and mini-mine damage, all dealt through DamageEnemy so each kill is credited once; each
-    /// skips enemies already dead, so overlapping blasts never credit a kill twice.
+    /// Disc and mine damage, all dealt through DamageEnemy so each kill is credited once; each skips enemies
+    /// already dead, so overlapping blasts never credit a kill twice.
     /// </summary>
     private void ResolveDiscAndMineHits(float elapsedSeconds)
     {
         foreach (var disc in _discs)
             disc.Strike(_enemies, _damageEnemy);
         _discs.RemoveAll(disc => disc.IsCaught);
-        foreach (var shard in _discShards)
-            shard.Strike(_enemies, _damageEnemy);
-        _discShards.RemoveAll(shard => shard.IsGone);
         _mines.Update(elapsedSeconds, _enemies, _damageEnemy);
     }
 
@@ -470,8 +411,8 @@ public sealed class GameSession
     }
 
     /// <summary>
-    /// The one place a kill is credited, for every kind of weapon damage (hits, explosions, strikes, hops, orbs,
-    /// the ring and burn): adds the kill's points and experience when the enemy was alive before the damage and is
+    /// The one place a kill is credited, for every kind of weapon damage (hits, strikes, hops, orbs, discs and
+    /// mine blasts): adds the kill's points and experience when the enemy was alive before the damage and is
     /// dead after it, so damage to an enemy already dead earns nothing and a kill is credited once.
     /// </summary>
     private void CreditKill(Enemy enemy, bool wasAlive)
@@ -509,7 +450,7 @@ public sealed class GameSession
 
             var damage = EnemyRoster.ScaledContactDamage(enemy.Type.ContactDamage, ElapsedSeconds);
             for (var tick = ContactTicksDue(enemy, elapsedSeconds); tick > 0 && !IsGameOver; tick--)
-                DamageShip(damage, enemy);
+                DamageShip(damage);
         }
 
         foreach (var hazard in _hazards)
@@ -522,13 +463,13 @@ public sealed class GameSession
             var damage = EnemyRoster.ScaledContactDamage(hazard.ContactDamage, ElapsedSeconds);
             if (hazard.ExpireOnContact)
             {
-                // A bullet hurts once and is gone; it keeps no timer. Hazards have no enemy to reflect armor onto.
-                DamageShip(damage, attacker: null);
+                // A bullet hurts once and is gone; it keeps no timer.
+                DamageShip(damage);
                 hazard.MarkSpent();
                 continue;
             }
             for (var tick = ContactTicksDue(hazard, elapsedSeconds); tick > 0 && !IsGameOver; tick--)
-                DamageShip(damage, attacker: null);
+                DamageShip(damage);
         }
 
         // Leave whatever landed the final blow on screen behind the GAME OVER text.
@@ -562,43 +503,17 @@ public sealed class GameSession
 
     /// <summary>
     /// The one place the ship loses hit points, for every source (enemy, boss, bullet, trail, ring). Takes damage
-    /// already scaled for the clock and applies it in order: nothing during Second Wind's immunity; the shield
-    /// absorbs first (a level-5 shield blasts nearby enemies as it breaks); armor takes its reduction off what is
-    /// left, never below its minimum, and at level 5 deals what it blocked to the attacker; then a hit that would
-    /// leave 0 hit points triggers Second Wind once per run at Health level 5. Otherwise at 0 hit points the run is lost.
+    /// already scaled for the clock and applies it in order: the shield absorbs first, then armor takes its
+    /// reduction off what is left, never below its minimum. At 0 hit points the run is lost.
     /// </summary>
-    /// <param name="attacker">The enemy or boss dealing the hit; null for a hazard, which takes no reflected damage.</param>
-    private void DamageShip(float damage, Enemy? attacker)
+    private void DamageShip(float damage)
     {
-        if (InvulnerableSecondsLeft > 0f)
-            return;
-
         damage = AbsorbWithShield(damage);
         if (damage <= 0f)
             return;
 
         var armorLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.Armor);
-        var armored = ShipEnhancements.ArmoredDamage(damage, armorLevel);
-        if (ShipEnhancements.HasBonus(armorLevel) && attacker is not null)
-            DamageEnemy(attacker, damage - armored);
-
-        var hitPointsLeft = Stats.HitPoints - armored;
-        // Below half a hundredth, hit points are stored as 0: that hit is lethal.
-        var isLethal = hitPointsLeft < 0.005f;
-        if (isLethal && !_secondWindUsed
-            && ShipEnhancements.HasBonus(ShipEnhancements.LevelOf(Stats, ShipEnhancements.Health)))
-        {
-            _secondWindUsed = true;
-            hitPointsLeft = ShipEnhancements.SecondWindHitPoints;
-            InvulnerableSecondsLeft = ShipEnhancements.SecondWindSeconds;
-        }
-        var hpBefore = Stats.HitPoints;
-        Stats.HitPoints = hitPointsLeft;
-        if (Stats.HitPoints < hpBefore
-            && ShipEnhancements.HasBonus(ShipEnhancements.LevelOf(Stats, ShipEnhancements.Regeneration)))
-        {
-            _regenBoostSecondsLeft = ShipEnhancements.RegenBoostSeconds;
-        }
+        Stats.HitPoints -= ShipEnhancements.ArmoredDamage(damage, armorLevel);
         if (Stats.HitPoints <= 0f)
             IsGameOver = true;
     }
@@ -611,20 +526,13 @@ public sealed class GameSession
             _regenTimer = MathF.Max(0f, _regenTimer - ShipEnhancements.RegenTickSeconds);
             var regenLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.Regeneration);
             if (regenLevel != 0 && Stats.HitPoints > 0f)
-            {
-                var heal = ShipEnhancements.RegenPerTick(regenLevel);
-                if (_regenBoostSecondsLeft > 0f)
-                    heal *= ShipEnhancements.RegenBoostMultiplier;
-                Stats.HitPoints += heal;
-            }
+                Stats.HitPoints += ShipEnhancements.RegenPerTick(regenLevel);
         }
-        _regenBoostSecondsLeft = MathF.Max(0f, _regenBoostSecondsLeft - elapsedSeconds);
     }
 
     /// <summary>
-    /// Takes the damage out of the shield first and returns what gets through. When the hit empties a level-5
-    /// shield, it deals ShipEnhancements.ShieldExplosionDamage once to every enemy (bosses included) whose centre
-    /// is within ShipEnhancements.ShieldExplosionRadius of the ship, crediting kills.
+    /// Takes the damage out of the shield first and returns what gets through. A hit that empties the shield
+    /// starts its recharge wait (ShipEnhancements.ShieldRechargeSeconds at the owned level).
     /// </summary>
     private float AbsorbWithShield(float damage)
     {
@@ -641,11 +549,7 @@ public sealed class GameSession
         var absorbed = MathF.Min(Stats.ShieldPoints, damage);
         Stats.ShieldPoints -= absorbed;
         if (Stats.ShieldPoints <= 0f)
-        {
             _shieldRechargeTimer = ShipEnhancements.ShieldRechargeSeconds(shieldLevel);
-            if (ShipEnhancements.HasBonus(shieldLevel))
-                ShieldExplosion();
-        }
         return damage - absorbed;
     }
 
@@ -674,29 +578,6 @@ public sealed class GameSession
             return;
         _shieldRechargeTimer = 0f;
         Stats.ShieldPoints = Stats.ShieldCapacity;
-    }
-
-    private void ShieldExplosion()
-    {
-        const float radiusSquared = ShipEnhancements.ShieldExplosionRadius * ShipEnhancements.ShieldExplosionRadius;
-        foreach (var enemy in _enemies)
-        {
-            if (!enemy.IsDead && Vector2.DistanceSquared(enemy.Position, Ship.Position) <= radiusSquared)
-                DamageEnemy(enemy, ShipEnhancements.ShieldExplosionDamage);
-        }
-    }
-
-    private void UpdateBlink(int moveSpeedLevel, float elapsedSeconds, float width, float height)
-    {
-        _blinkCooldownLeft = MathF.Max(0f, _blinkCooldownLeft - elapsedSeconds);
-        var requested = _blinkRequested;
-        _blinkRequested = false;
-        // The slack keeps a request made exactly BlinkCooldownSeconds later from missing by float drift.
-        if (!requested || !ShipEnhancements.HasBonus(moveSpeedLevel) || _blinkCooldownLeft > ContactTimerSlack)
-            return;
-
-        Ship.Blink(ShipEnhancements.BlinkDistance, width, height);
-        _blinkCooldownLeft = ShipEnhancements.BlinkCooldownSeconds;
     }
 
     private void OfferNextUpgrade()

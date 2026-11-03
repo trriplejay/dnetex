@@ -18,7 +18,7 @@ public enum WeaponKind
 /// </summary>
 public sealed class OwnedWeapon
 {
-    public const int MaxLevel = 5;
+    public const int MaxLevel = 20;
 
     private readonly FiringTimer _timer = new();
 
@@ -88,11 +88,6 @@ public sealed class OwnedWeapon
 
     /// <summary>Mine blast radius in pixels; 0 for any weapon but Proximity Mines.</summary>
     public float BlastRadius { get; set; }
-
-    /// <summary>
-    /// True at MaxLevel: the weapon's level-5 bonus is on (the disc's SHATTER, the mines' CLUSTER, and so on).
-    /// </summary>
-    public bool IsFinale => Level >= MaxLevel;
 
     /// <summary>Fraction of the way to this weapon's next shot.</summary>
     public double TimerProgress => _timer.Progress;

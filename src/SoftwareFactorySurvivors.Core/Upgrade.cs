@@ -64,7 +64,7 @@ public sealed record Upgrade(UpgradeKind Kind, WeaponKind? Weapon = null, Weapon
 /// <summary>
 /// Which cards a level-up can offer, how each is described, and what it does. The ship has PlayerStats.MaxWeapons
 /// weapon slots and PlayerStats.MaxEnhancements enhancement slots: new-weapon and new-enhancement cards appear only
-/// while a slot of their kind is free, and upgrade cards only for owned weapons and enhancements below level 5.
+/// while a slot of their kind is free, and upgrade cards only for owned weapons and enhancements below level 20.
 /// </summary>
 public static class Upgrades
 {
@@ -113,12 +113,12 @@ public static class Upgrades
 
     /// <summary>
     /// The second line of a weapon's new-weapon card: "NEW WEAPON", or for a weapon with its own description what it
-    /// does and what its level-5 bonus is.
+    /// does.
     /// </summary>
     public static string NewWeaponDescription(WeaponKind weapon) => weapon switch
     {
-        WeaponKind.RicochetDisc => "Throws a disc that flies out and back, cutting through every enemy. LV5 SHATTER: bursts into 4 shards at its far point.",
-        WeaponKind.ProximityMines => "Drops mines that explode when enemies touch them. LV5 CLUSTER: each blast throws 3 mini-mines.",
+        WeaponKind.RicochetDisc => "Throws a disc that flies out and back, cutting through every enemy.",
+        WeaponKind.ProximityMines => "Drops mines that explode when enemies touch them.",
         _ => "NEW WEAPON",
     };
 
@@ -171,7 +171,7 @@ public static class Upgrades
 
     /// <summary>
     /// Every card the ship could take now: a new-weapon card per unowned weapon while a weapon slot is free, one
-    /// card per option of each owned weapon below level 5, and the same slot and level rules for enhancements.
+    /// card per option of each owned weapon below level 20, and the same slot and level rules for enhancements.
     /// </summary>
     public static IReadOnlyList<Upgrade> Eligible(PlayerStats stats, IReadOnlyList<Enhancement>? enhancements = null)
     {
@@ -194,7 +194,7 @@ public static class Upgrades
         Eligible(stats, enhancements).OrderBy(_ => random.Next()).Take(count).ToArray();
 
     /// <summary>Gives what the card gives: a new weapon or enhancement at level 1, or one option and one level.</summary>
-    /// <exception cref="InvalidOperationException">The card isn't eligible: its slot is full, it's already owned, or its target is missing or at level 5.</exception>
+    /// <exception cref="InvalidOperationException">The card isn't eligible: its slot is full, it's already owned, or its target is missing or at level 20.</exception>
     public static void Apply(Upgrade upgrade, PlayerStats stats)
     {
         switch (upgrade.Kind)
@@ -208,7 +208,7 @@ public static class Upgrades
                     throw new InvalidOperationException($"{weapon.Kind} is already at level {OwnedWeapon.MaxLevel}.");
                 ApplyOption(OptionOf(upgrade), weapon);
                 weapon.RaiseLevel();
-                // Level 5 turns the orbs into their ring.
+                // The orbs keep their own level in step with the weapon's.
                 weapon.Orbs?.SetLevel(weapon.Level);
                 break;
             case UpgradeKind.NewEnhancement:

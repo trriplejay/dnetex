@@ -82,10 +82,25 @@ public class ShipEnhancementTests
 
     [Theory]
     [InlineData(1, 5f, 10f)]
-    [InlineData(2, 10f, 9f)]
-    [InlineData(3, 15f, 8f)]
-    [InlineData(4, 20f, 7f)]
-    [InlineData(5, 25f, 5f)]
+    [InlineData(2, 10f, 9.5f)]
+    [InlineData(3, 15f, 9.0f)]
+    [InlineData(4, 20f, 8.5f)]
+    [InlineData(5, 25f, 8.0f)]
+    [InlineData(6, 30f, 7.5f)]
+    [InlineData(7, 35f, 7.0f)]
+    [InlineData(8, 40f, 6.5f)]
+    [InlineData(9, 45f, 6.0f)]
+    [InlineData(10, 50f, 5.5f)]
+    [InlineData(11, 55f, 5.0f)]
+    [InlineData(12, 60f, 4.5f)]
+    [InlineData(13, 65f, 4.0f)]
+    [InlineData(14, 70f, 3.5f)]
+    [InlineData(15, 75f, 3.0f)]
+    [InlineData(16, 80f, 2.5f)]
+    [InlineData(17, 85f, 2.0f)]
+    [InlineData(18, 90f, 1.5f)]
+    [InlineData(19, 95f, 1.0f)]
+    [InlineData(20, 100f, 0.5f)]
     public void A_shield_starts_full_at_5_per_level_and_waits_its_level_delay_after_breaking(int level, float capacity, float delay)
     {
         var session = QuietSessionWith((ShipEnhancements.Shield, level));
@@ -94,7 +109,7 @@ public class ShipEnhancementTests
         Assert.Equal(capacity, session.Stats.ShieldPoints);
         Assert.Equal(0f, session.ShieldRechargeSecondsLeft);
 
-        var toucher = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 30f }, Center);
+        var toucher = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 300f }, Center);
         session.AddEnemy(toucher);
         Step(session);
 
@@ -184,35 +199,6 @@ public class ShipEnhancementTests
 
     // ---- HP stays in [0, Max]; 0 ends the run (CLM-12) ----
 
-    [Fact]
-    public void A_lethal_hit_with_second_wind_spent_ends_the_run_at_0_hp_and_freezes_it_despite_regen_and_armor()
-    {
-        var session = QuietSessionWith((ShipEnhancements.Health, 5), (ShipEnhancements.Regeneration, 5), (ShipEnhancements.Armor, 5));
-        // Spend Second Wind: a lethal hit leaves 1 HP and 2 s of immunity.
-        session.Stats.HitPoints = 0.5f;
-        var first = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 30f }, Center);
-        session.AddEnemy(first);
-        Step(session);
-        Assert.Equal(1f, session.Stats.HitPoints);
-        Assert.False(session.IsGameOver);
-        first.TakeDamage(float.MaxValue);
-        Step(session, 2.1f);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
-
-        // 30 less armor's 5 is far more than regen gave back: lethal, and Second Wind is gone.
-        session.AddEnemy(TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 30f }, Center));
-        Step(session);
-        Assert.True(session.IsGameOver);
-        Assert.Equal(0f, session.Stats.HitPoints);
-
-        var clock = session.ElapsedSeconds;
-        for (var i = 0; i < 120; i++)
-            Step(session, 0.5f);
-        Assert.Equal(0f, session.Stats.HitPoints);
-        Assert.Equal(clock, session.ElapsedSeconds);
-        Assert.True(session.IsGameOver);
-    }
-
     public static TheoryData<int, int, int> MaxedEnhancementTriples()
     {
         var data = new TheoryData<int, int, int>();
@@ -267,7 +253,7 @@ public class ShipEnhancementTests
         }
     }
 
-    // ---- Enhancement cards: 3 slots, level-5 cap (CLM-1) ----
+    // ---- Enhancement cards: 3 slots, level-20 cap (CLM-1) ----
 
     private static void Own(PlayerStats stats, Enhancement enhancement, int level)
     {
@@ -277,7 +263,7 @@ public class ShipEnhancementTests
     }
 
     [Fact]
-    public void Production_offers_hold_new_enhancement_cards_only_while_a_slot_is_free_and_never_a_level_5_enhancement()
+    public void Production_offers_hold_new_enhancement_cards_only_while_a_slot_is_free_and_never_a_level_20_enhancement()
     {
         Assert.Equal(ShipEnhancements.All, Upgrades.Enhancements);
         var sawNew = new HashSet<Enhancement>();
@@ -292,20 +278,20 @@ public class ShipEnhancementTests
                 if (card.Kind == UpgradeKind.NewEnhancement)
                     sawNew.Add(card.Enhancement!);
 
-            // Two owned, Move Speed at level 5: new cards only for the three unowned; Move Speed never.
+            // Two owned, Move Speed at level 20: new cards only for the three unowned; Move Speed never.
             var two = new PlayerStats();
             two.AddWeapon(WeaponKind.Laser);
-            Own(two, ShipEnhancements.MoveSpeed, 5);
+            Own(two, ShipEnhancements.MoveSpeed, 20);
             Own(two, ShipEnhancements.Armor, 2);
             var twoOffer = Upgrades.Offer(two, new Random(seed), GameSession.UpgradeChoices);
             Assert.DoesNotContain(twoOffer, card => card.Enhancement == ShipEnhancements.MoveSpeed);
             Assert.DoesNotContain(Upgrade.NewEnhancement(ShipEnhancements.Armor), twoOffer);
             sawNewWithTwo |= twoOffer.Any(card => card.Kind == UpgradeKind.NewEnhancement);
 
-            // Three owned, Shield at level 5: no new-enhancement card at all, and no Shield card.
+            // Three owned, Shield at level 20: no new-enhancement card at all, and no Shield card.
             var three = new PlayerStats();
             three.AddWeapon(WeaponKind.Laser);
-            Own(three, ShipEnhancements.Shield, 5);
+            Own(three, ShipEnhancements.Shield, 20);
             Own(three, ShipEnhancements.Health, 1);
             Own(three, ShipEnhancements.Regeneration, 3);
             var threeOffer = Upgrades.Offer(three, new Random(seed), GameSession.UpgradeChoices);
@@ -332,11 +318,89 @@ public class ShipEnhancementTests
         var toFive = Upgrade.ForEnhancement(ShipEnhancements.MoveSpeed);
         Assert.Equal("MOVE SPEED LV 4 > 5", Upgrades.Title(toFive, stats));
         Assert.Equal(ShipEnhancements.CardDescription(ShipEnhancements.MoveSpeed, 5), Upgrades.Describe(toFive, stats));
+
+        Upgrades.Apply(toFive, stats); // now at 5
+        var toSix = Upgrade.ForEnhancement(ShipEnhancements.MoveSpeed);
+        Assert.Equal("MOVE SPEED LV 5 > 6", Upgrades.Title(toSix, stats));
+        Assert.Equal(ShipEnhancements.CardDescription(ShipEnhancements.MoveSpeed, 6), Upgrades.Describe(toSix, stats));
+
+        while (stats.Find(ShipEnhancements.MoveSpeed)!.Level < 19)
+            Upgrades.Apply(Upgrade.ForEnhancement(ShipEnhancements.MoveSpeed), stats);
+        Assert.Equal(19, stats.Find(ShipEnhancements.MoveSpeed)!.Level);
+
+        var toTwenty = Upgrade.ForEnhancement(ShipEnhancements.MoveSpeed);
+        Assert.Equal("MOVE SPEED LV 19 > 20", Upgrades.Title(toTwenty, stats));
+        Assert.Equal(ShipEnhancements.CardDescription(ShipEnhancements.MoveSpeed, 20), Upgrades.Describe(toTwenty, stats));
+
         foreach (var enhancement in ShipEnhancements.All)
         {
             var card = Upgrade.NewEnhancement(enhancement);
             Assert.NotEmpty(VectorText.GetStrokes($"{Upgrades.Title(card, new PlayerStats())} {Upgrades.Describe(card, new PlayerStats())}", Vector2.Zero, 10f));
         }
+    }
+
+    [Theory]
+    [InlineData(0)] // MoveSpeed
+    [InlineData(1)] // Health
+    [InlineData(2)] // Shield
+    [InlineData(3)] // Armor
+    [InlineData(4)] // Regeneration
+    public void For_each_enhancement_levels_1_to_20_are_offered_and_applied_with_standard_stat_and_card_description(int enhancementIndex)
+    {
+        var enhancement = ShipEnhancements.All[enhancementIndex];
+        var stats = new PlayerStats();
+        stats.AddWeapon(WeaponKind.Laser);
+        Upgrades.Apply(Upgrade.NewEnhancement(enhancement), stats);
+
+        var owned = stats.Find(enhancement)!;
+        Assert.Equal(1, owned.Level);
+
+        for (var l = 1; l < OwnedEnhancement.MaxLevel; l++)
+        {
+            // Below 20, assert the card is offered
+            var eligible = Upgrades.Eligible(stats);
+            var card = Upgrade.ForEnhancement(enhancement);
+            Assert.Contains(card, eligible);
+
+            // Apply it and assert stat equals per-level formula at L+1 and CardDescription contains L+1 value
+            Upgrades.Apply(card, stats);
+            Assert.Equal(l + 1, owned.Level);
+
+            var nextLevel = l + 1;
+            var desc = ShipEnhancements.CardDescription(enhancement, nextLevel);
+            switch (enhancementIndex)
+            {
+                case 0: // MoveSpeed: 1 + 0.1 * level
+                    Assert.Equal(ShipEnhancements.SpeedMultiplier(nextLevel), 1f + ShipEnhancements.MoveSpeedStep * nextLevel, precision: 3);
+                    break;
+                case 1: // Health: 20 * level
+                    Assert.Equal(ShipEnhancements.HealthBonus(nextLevel), ShipEnhancements.HealthPerLevel * nextLevel);
+                    break;
+                case 2: // Shield: 5 * level, delay 10 - 0.5 * (level - 1)
+                    Assert.Equal(ShipEnhancements.ShieldCapacity(nextLevel), ShipEnhancements.ShieldCapacityPerLevel * nextLevel);
+                    Assert.Equal(ShipEnhancements.ShieldRechargeSeconds(nextLevel), 10f - 0.5f * (nextLevel - 1));
+                    break;
+                case 3: // Armor: 1 * level
+                    Assert.Equal(ShipEnhancements.ArmorReduction(nextLevel), ShipEnhancements.ArmorPerLevel * nextLevel);
+                    break;
+                case 4: // Regeneration: 0.2 * level
+                    Assert.Equal(ShipEnhancements.RegenPerTick(nextLevel), ShipEnhancements.RegenPerTickPerLevel * nextLevel, precision: 4);
+                    break;
+            }
+        }
+
+        // At level 20, maxed and cap tests: no card is offered, Apply throws with message containing '20'
+        Assert.Equal(OwnedEnhancement.MaxLevel, owned.Level);
+        Assert.Equal(20, owned.Level);
+
+        var eligibleAt20 = Upgrades.Eligible(stats);
+        Assert.DoesNotContain(Upgrade.ForEnhancement(enhancement), eligibleAt20);
+
+        var ex = Assert.Throws<InvalidOperationException>(() => Upgrades.Apply(Upgrade.ForEnhancement(enhancement), stats));
+        Assert.Contains("20", ex.Message);
+
+        // level and stats are unchanged after the throw
+        Assert.Equal(20, owned.Level);
     }
 
     [Fact]
@@ -348,7 +412,7 @@ public class ShipEnhancementTests
 
     // ---- Nothing left to offer (CLM-2) ----
 
-    /// <summary>A quiet session owning three level-5 weapons and the given enhancements; the laser kills anything.</summary>
+    /// <summary>A quiet session owning three level-20 weapons and the given enhancements; the laser kills anything.</summary>
     private static GameSession SessionWithMaxedWeapons(params (Enhancement Enhancement, int Level)[] enhancements)
     {
         var session = QuietSessionWith(enhancements);
@@ -371,14 +435,14 @@ public class ShipEnhancementTests
         Assert.Equal(level + 1, session.Leveling.Level);
     }
 
-    // With 3 level-5 weapons and 3 level-5 enhancements, PacingTests'
+    // With 3 level-20 weapons and 3 level-20 enhancements, PacingTests'
     // Levels_with_no_eligible_card_are_used_up_without_pausing_and_the_queue_keeps_draining proves no card screen shows.
 
     [Fact]
     public void With_one_upgradable_item_left_a_level_up_offers_exactly_that_card()
     {
         var session = SessionWithMaxedWeapons(
-            (ShipEnhancements.MoveSpeed, 5), (ShipEnhancements.Armor, 4), (ShipEnhancements.Regeneration, 5));
+            (ShipEnhancements.MoveSpeed, 20), (ShipEnhancements.Armor, 19), (ShipEnhancements.Regeneration, 20));
 
         EarnOneLevel(session);
 
@@ -386,114 +450,29 @@ public class ShipEnhancementTests
         Assert.Equal([Upgrade.ForEnhancement(ShipEnhancements.Armor)], session.UpgradeOffer!);
     }
 
-    // ---- Blink (CLM-4) ----
+    // ---- An enhancement not owned gives nothing ----
 
     [Fact]
-    public void A_level_5_blink_jumps_250_px_along_forward_then_waits_3_s_for_the_next()
+    public void A_ship_with_no_enhancements_takes_the_full_contact_hit_has_no_shield_and_regains_nothing()
     {
-        var session = TestEnemies.QuietSession(new Vector2(Center.X, 700));
-        Own(session.Stats, ShipEnhancements.MoveSpeed, 5);
-        var start = session.Ship.Position;
+        var session = QuietSessionWith();
+        Assert.Empty(session.Stats.Enhancements);
+        Assert.Equal(0f, session.ShieldCapacity);
+        Assert.Equal(0f, session.ShieldPoints);
 
-        session.RequestBlink();
+        // The first hit is not absorbed and not reduced: the whole clock-scaled 8 comes off HP.
+        var toucher = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 8f }, Center);
+        session.AddEnemy(toucher);
         Step(session);
-        Assert.Equal(ShipEnhancements.BlinkDistance, Vector2.Distance(start, session.Ship.Position), precision: 3);
-        Assert.Equal(start + session.Ship.Forward * ShipEnhancements.BlinkDistance, session.Ship.Position);
+        Assert.Equal(100f - EnemyRoster.ScaledContactDamage(8f, session.ElapsedSeconds), session.Stats.HitPoints, precision: 2);
+        Assert.Equal(0f, session.ShieldPoints);
+        Assert.Equal(0f, session.ShieldRechargeSecondsLeft);
 
-        // Within the cooldown: the request is dropped.
-        var afterFirst = session.Ship.Position;
+        // Two idle seconds heal nothing.
+        toucher.TakeDamage(float.MaxValue);
+        var afterHit = session.Stats.HitPoints;
         for (var i = 0; i < 2 * 60; i++)
             Step(session);
-        session.RequestBlink();
-        Step(session);
-        Assert.Equal(afterFirst, session.Ship.Position);
-
-        // Just short of 3 s since the first blink: still dropped.
-        var sinceFirst = (2 * 60 + 1) * Frame;
-        Step(session, ShipEnhancements.BlinkCooldownSeconds - sinceFirst - 0.05f);
-        session.RequestBlink();
-        Step(session, 0.01f);
-        Assert.Equal(afterFirst, session.Ship.Position);
-
-        // Past 3 s: accepted.
-        Step(session, 0.05f);
-        session.RequestBlink();
-        Step(session);
-        Assert.Equal(ShipEnhancements.BlinkDistance, Vector2.Distance(afterFirst, session.Ship.Position), precision: 3);
-    }
-
-    [Fact]
-    public void Below_level_5_a_blink_request_leaves_the_ship_in_place()
-    {
-        var session = QuietSessionWith((ShipEnhancements.MoveSpeed, 4));
-        var start = session.Ship.Position;
-
-        session.RequestBlink();
-        Step(session);
-
-        Assert.Equal(start, session.Ship.Position);
-        Assert.Equal(0f, session.BlinkCooldownSecondsLeft);
-    }
-
-    [Fact]
-    public void A_blink_toward_an_edge_stops_at_the_edge()
-    {
-        var session = QuietSessionWith((ShipEnhancements.MoveSpeed, 5));
-        // Face right from 100 px short of the right edge.
-        session.Update(new Vector2(1, 0), new Vector2(Width + 500, Center.Y), (Width - 100 - Center.X) / (Ship.Speed * ShipEnhancements.SpeedMultiplier(5)), Width, Height);
-        var before = session.Ship.Position;
-        Assert.Equal(Width - 100, before.X, precision: 2);
-
-        session.RequestBlink();
-        session.Update(Vector2.Zero, null, Frame, Width, Height);
-
-        Assert.Equal(Width, session.Ship.Position.X, precision: 3);
-        Assert.Equal(before.Y, session.Ship.Position.Y, precision: 3);
-    }
-
-    // ---- Armor level-5 reflect (CLM-1) ----
-
-    [Fact]
-    public void Armor_level_5_reflects_blocked_contact_damage_to_touching_enemy_while_boss_bullet_reflects_nothing_and_changes_no_enemy_hp()
-    {
-        // (a) Touching enemy loses exactly the amount armor blocked from its contact tick.
-        var session = QuietSessionWith((ShipEnhancements.Armor, 5));
-        var touchingEnemy = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center);
-        var bystander = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center + new Vector2(200, 0));
-        session.AddEnemy(touchingEnemy);
-        session.AddEnemy(bystander);
-
-        Step(session);
-
-        // Raw 5, armor level 5 blocks 4 (minimum 1 dealt to ship): touching enemy takes 4 reflected damage.
-        Assert.Equal(6f, touchingEnemy.HitPoints);
-        Assert.Equal(10f, bystander.HitPoints);
-        Assert.Equal(99f, session.Stats.HitPoints);
-
-        // (b) Boss bullet hit changes no enemy HP: bystander and touching enemy are not damaged further.
-        var bullet = Hazard.CreateBullet(Center, radius: 10f);
-        bullet.Update(bullet.ArmSeconds);
-        session.AddHazard(bullet);
-
-        Step(session);
-
-        // Bullet deals 8 raw - 5 armor = 3 damage to ship. Attacker is null, so nothing is reflected.
-        Assert.Equal(6f, touchingEnemy.HitPoints);
-        Assert.Equal(10f, bystander.HitPoints);
-        Assert.Equal(96f, session.Stats.HitPoints);
-
-        // (c) Hazard-only hit (no touching enemy) changes no enemy HP at all.
-        var hazardOnlySession = QuietSessionWith((ShipEnhancements.Armor, 5));
-        var loneEnemy = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 10f }, Center + new Vector2(200, 0));
-        hazardOnlySession.AddEnemy(loneEnemy);
-
-        var soloBullet = Hazard.CreateBullet(Center, radius: 10f);
-        soloBullet.Update(soloBullet.ArmSeconds);
-        hazardOnlySession.AddHazard(soloBullet);
-
-        Step(hazardOnlySession);
-
-        Assert.Equal(10f, loneEnemy.HitPoints);
-        Assert.Equal(97f, hazardOnlySession.Stats.HitPoints);
+        Assert.Equal(afterHit, session.Stats.HitPoints);
     }
 }

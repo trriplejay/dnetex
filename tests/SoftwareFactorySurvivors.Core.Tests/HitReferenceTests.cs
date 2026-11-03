@@ -295,9 +295,9 @@ public class HitReferenceTests
     }
 
     [Theory]
-    [InlineData(4, 100f)]
-    [InlineData(5, 95f)]
-    public void Level_5_laser_impact_damages_other_enemies_within_40_px_and_credits_their_kills(int level, float neighbourHp)
+    [InlineData(5)]
+    [InlineData(20)]
+    public void A_level_5_or_20_laser_damages_only_the_enemy_it_hits_and_reports_no_explosion(int level)
     {
         var session = QuietSession();
         for (var raised = 1; raised < level; raised++)
@@ -305,23 +305,19 @@ public class HitReferenceTests
         Assert.Equal(level, session.Stats.Laser().Level);
         var damage = session.Stats.Laser().Damage;
 
-        var tough = Speck(0.5f) with { HitPoints = 100f };
-        var struck = TestEnemies.Stationary(tough, Nose - new Vector2(0, 6));
-        // Out of the laser's path but 30 px from the impact; another 60 px away stays out of the blast.
-        var neighbour = TestEnemies.Stationary(tough, struck.Position + new Vector2(30, 0));
-        var far = TestEnemies.Stationary(tough, struck.Position + new Vector2(60, 0));
-        // A 1-HP enemy in the blast is killed by it and scores.
-        var weak = TestEnemies.Stationary(Speck(0.5f) with { HitPoints = 1f }, struck.Position + new Vector2(-30, 0));
-        foreach (var enemy in new[] { struck, neighbour, far, weak })
-            session.AddEnemy(enemy);
+        var struck = TestEnemies.Stationary(Speck(0.5f) with { HitPoints = 1_000f }, Nose - new Vector2(0, 6));
+        // Out of the laser's path, 20 px from the impact: a 1-HP enemy any splash would kill.
+        var neighbour = TestEnemies.Stationary(Speck(0.5f) with { HitPoints = 1f }, struck.Position + new Vector2(20, 0));
+        session.AddEnemy(struck);
+        session.AddEnemy(neighbour);
 
         session.Update(Vector2.Zero, null, 1f, Width, Height);
 
-        Assert.Equal(100f - damage, struck.HitPoints);
-        Assert.Equal(neighbourHp, neighbour.HitPoints);
-        Assert.Equal(100f, far.HitPoints);
-        Assert.Equal(level == 5, weak.IsDead);
-        Assert.Equal(level == 5 ? GameSession.PointsPerKill : 0, session.Score);
+        Assert.Equal(1_000f - damage, struck.HitPoints);
+        Assert.Equal(1f, neighbour.HitPoints);
+        Assert.False(neighbour.IsDead);
+        Assert.Equal(0, session.Score);
+        Assert.Empty(session.MineExplosions);
     }
 
     // ---- Helpers ----

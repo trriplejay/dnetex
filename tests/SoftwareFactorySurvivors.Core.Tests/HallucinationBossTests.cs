@@ -161,7 +161,6 @@ public class HallucinationBossTests
         Assert.Equal(100f - tick, session.Stats.HitPoints, precision: 2);
         Assert.Contains(copy, session.Enemies);
         Assert.False(copy.IsDead);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
 
         // Half a second later it has ticked again and is still there.
         for (var i = 0; i < 30; i++)

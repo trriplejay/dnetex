@@ -118,7 +118,6 @@ public class BulletBurstsTests
         Assert.True(bullet.IsArmed);
         Assert.Equal(100f - 16f, session.Stats.HitPoints);
         Assert.DoesNotContain(bullet, session.Hazards);
-        Assert.Equal(0f, session.InvulnerableSecondsLeft);
 
         // Staying put costs nothing more.
         session.Update(Vector2.Zero, null, 1f, Width, Height);
