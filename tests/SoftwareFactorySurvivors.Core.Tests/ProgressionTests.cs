@@ -661,8 +661,113 @@ public class ProgressionTests
         Assert.Null(UpgradeCards.HitTest(Center, 3, corners[0] + new Vector2(UpgradeCards.CardSize.X + 5, 5)));
     }
 
-    private static (int, int, float, int, float, float) Snapshot(PlayerStats stats) =>
-        (stats.Weapons.Count, stats.Laser().Level, stats.Laser().Damage, stats.Laser().Count, stats.Laser().AttacksPerSecond, stats.MaxHitPoints);
+    [Fact]
+    public void Each_health_level_applied_raises_max_and_current_hit_points_by_20()
+    {
+        // From 100/100, Health level 1 gives 120/120.
+        var full = new PlayerStats();
+        Upgrades.Apply(Upgrade.NewEnhancement(ShipEnhancements.Health), full);
+        Assert.Equal(120f, full.MaxHitPoints);
+        Assert.Equal(120f, full.HitPoints);
+
+        // From 50/100, Health level 1 gives 70/120.
+        var damaged = new PlayerStats();
+        damaged.HitPoints = 50f;
+        Upgrades.Apply(Upgrade.NewEnhancement(ShipEnhancements.Health), damaged);
+        Assert.Equal(120f, damaged.MaxHitPoints);
+        Assert.Equal(70f, damaged.HitPoints);
+
+        // Five levels from 100/100 give 200/200.
+        var maxed = new PlayerStats();
+        Upgrades.Apply(Upgrade.NewEnhancement(ShipEnhancements.Health), maxed);
+        for (var i = 0; i < 4; i++)
+            Upgrades.Apply(Upgrade.ForEnhancement(ShipEnhancements.Health), maxed);
+        Assert.Equal(200f, maxed.MaxHitPoints);
+        Assert.Equal(200f, maxed.HitPoints);
+        Assert.Equal(5, maxed.Find(ShipEnhancements.Health)!.Level);
+    }
+
+    [Fact]
+    public void Regeneration_heals_every_second_and_doubles_for_five_seconds_after_a_hit_at_level_5()
+    {
+        // Level 1 at 50/100 gives 50.20 after 1 s and 51.00 after 5 s.
+        var session = TestEnemies.QuietSession(Center);
+        session.Stats.AddEnhancement(ShipEnhancements.Regeneration);
+        session.Stats.HitPoints = 50f;
+
+        session.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(50.20f, session.Stats.HitPoints, precision: 2);
+
+        for (var i = 0; i < 4; i++)
+            session.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(51.00f, session.Stats.HitPoints, precision: 2);
+
+        // Level 5 gives +1 per s.
+        var lvl5 = TestEnemies.QuietSession(Center);
+        var regen = lvl5.Stats.AddEnhancement(ShipEnhancements.Regeneration);
+        while (regen.Level < 5)
+            regen.RaiseLevel();
+        lvl5.Stats.HitPoints = 50f;
+
+        lvl5.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(51.00f, lvl5.Stats.HitPoints, precision: 2);
+
+        // At 99.5/100, after 1 s HP is 100.
+        lvl5.Stats.HitPoints = 99.5f;
+        lvl5.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(100f, lvl5.Stats.HitPoints, precision: 2);
+
+        // At level 5 after a hit, the next second gives +2, and 6 s after the hit it is +1/s again.
+        var hitSession = TestEnemies.QuietSession(Center);
+        var hitRegen = hitSession.Stats.AddEnhancement(ShipEnhancements.Regeneration);
+        while (hitRegen.Level < 5)
+            hitRegen.RaiseLevel();
+        hitSession.Stats.HitPoints = 50f;
+
+        // Deal a hit that reduces HP
+        var toucher = EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 10f };
+        var enemy = TestEnemies.Stationary(toucher, Center);
+        hitSession.AddEnemy(enemy);
+        hitSession.Update(Vector2.Zero, null, Frame, Width, Height);
+        enemy.TakeDamage(enemy.HitPoints);
+        var hpAfterHit = hitSession.Stats.HitPoints;
+        Assert.True(hpAfterHit < 50f);
+
+        // Next second gives +2
+        hitSession.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(hpAfterHit + 2.00f, hitSession.Stats.HitPoints, precision: 2);
+
+        // 6 s after the hit it is +1/s again:
+        // Seconds 2, 3, 4, 5 after the hit are still boosted (+2/s)
+        for (var i = 0; i < 4; i++)
+            hitSession.Update(Vector2.Zero, null, 1f, Width, Height);
+        var hpAt5s = hitSession.Stats.HitPoints;
+        Assert.Equal(hpAfterHit + 10.00f, hpAt5s, precision: 2);
+
+        // The 6th second after the hit is standard (+1/s)
+        hitSession.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(hpAt5s + 1.00f, hitSession.Stats.HitPoints, precision: 2);
+
+        // Paused seconds heal nothing.
+        var pausedSession = new GameSession(Center, new Random(1));
+        Assert.True(pausedSession.IsChoosingUpgrade);
+        pausedSession.Stats.AddEnhancement(ShipEnhancements.Regeneration);
+        pausedSession.Stats.HitPoints = 50f;
+        for (var i = 0; i < 5; i++)
+            pausedSession.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(50f, pausedSession.Stats.HitPoints);
+
+        // No healing after game over (0 HP)
+        var deadSession = TestEnemies.QuietSession(Center);
+        deadSession.Stats.AddEnhancement(ShipEnhancements.Regeneration);
+        deadSession.Stats.HitPoints = 0f;
+        deadSession.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Equal(0f, deadSession.Stats.HitPoints);
+    }
+
+    private static (int, int, float, int, float, float, int) Snapshot(PlayerStats stats) =>
+        (stats.Weapons.Count, stats.Laser().Level, stats.Laser().Damage, stats.Laser().Count, stats.Laser().AttacksPerSecond, stats.MaxHitPoints,
+            stats.Enhancements.Sum(enhancement => enhancement.Level));
 
     private static (WeaponKind Kind, int Level, float Damage, float AttacksPerSecond, int Count, int Pierce, double Progress) WeaponSnapshot(OwnedWeapon weapon) =>
         (weapon.Kind, weapon.Level, weapon.Damage, weapon.AttacksPerSecond, weapon.Count, weapon.Pierce, weapon.TimerProgress);

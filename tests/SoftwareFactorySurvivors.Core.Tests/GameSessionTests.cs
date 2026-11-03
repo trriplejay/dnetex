@@ -246,7 +246,7 @@ public class GameSessionTests
         var sawNewWeapon = false;
         for (var seed = 0; seed < 200; seed++)
         {
-            // One weapon owned: new-weapon cards for the four others may appear; every card is eligible.
+            // One weapon owned: new-weapon cards for the four others (and new-enhancement cards) may appear; every card is eligible.
             var one = new PlayerStats();
             one.AddWeapon(WeaponKind.Laser);
             var offer = Upgrades.Offer(one, new Random(seed), GameSession.UpgradeChoices);
@@ -254,7 +254,8 @@ public class GameSessionTests
             Assert.Equal(offer.Count, offer.Distinct().Count());
             Assert.All(offer, card => Assert.True(
                 card.Kind == UpgradeKind.WeaponUpgrade && card.Weapon == WeaponKind.Laser
-                || card.Kind == UpgradeKind.NewWeapon && card.Weapon != WeaponKind.Laser,
+                || card.Kind == UpgradeKind.NewWeapon && card.Weapon != WeaponKind.Laser
+                || card.Kind == UpgradeKind.NewEnhancement,
                 $"Ineligible card {card}"));
             sawNewWeapon |= offer.Any(card => card.Kind == UpgradeKind.NewWeapon);
 
@@ -267,7 +268,8 @@ public class GameSessionTests
                 Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage), full);
             Assert.Equal(OwnedWeapon.MaxLevel, laser.Level);
             var random = new Random(seed);
-            var fullOffer = Upgrades.Offer(full, random, GameSession.UpgradeChoices);
+            // Weapon cards only here (no enhancement list), so every pick below names a weapon.
+            var fullOffer = Upgrades.Offer(full, random, GameSession.UpgradeChoices, enhancements: []);
             Assert.Equal(GameSession.UpgradeChoices, fullOffer.Distinct().Count());
             Assert.DoesNotContain(fullOffer, card => card.Kind == UpgradeKind.NewWeapon);
             Assert.DoesNotContain(fullOffer, card => card.Weapon == WeaponKind.Laser);
@@ -280,7 +282,7 @@ public class GameSessionTests
             Assert.Equal(before + 1, target.Level);
             for (var round = 0; round < 20; round++)
             {
-                var next = Upgrades.Offer(full, random, GameSession.UpgradeChoices);
+                var next = Upgrades.Offer(full, random, GameSession.UpgradeChoices, enhancements: []);
                 if (next.Count == 0)
                     break;
                 Upgrades.Apply(next[0], full);
@@ -322,14 +324,15 @@ public class GameSessionTests
         Assert.Throws<InvalidOperationException>(() => Upgrades.Apply(Upgrade.NewEnhancement(stubs[3]), stats));
         Assert.Throws<InvalidOperationException>(() => Upgrades.Apply(Upgrade.ForEnhancement(stubs[0]), stats));
 
-        // With the production list (none defined yet), offers hold weapon cards only.
-        Assert.Empty(Upgrades.Enhancements);
+        // The production list is the ship's five; an offer only ever holds weapon cards and those five.
+        Assert.Equal(ShipEnhancements.All, Upgrades.Enhancements);
         for (var seed = 0; seed < 200; seed++)
         {
             var fresh = new PlayerStats();
             fresh.AddWeapon(WeaponKind.Laser);
             Assert.All(Upgrades.Offer(fresh, new Random(seed), GameSession.UpgradeChoices),
-                card => Assert.True(card.Kind is UpgradeKind.NewWeapon or UpgradeKind.WeaponUpgrade));
+                card => Assert.True(card.Kind is UpgradeKind.NewWeapon or UpgradeKind.WeaponUpgrade
+                    || ShipEnhancements.All.Contains(card.Enhancement!)));
         }
     }
 

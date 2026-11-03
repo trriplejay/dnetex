@@ -39,6 +39,21 @@ public sealed class PlayerStats
         set => _hitPoints = Math.Clamp(RoundToHundredths(value), 0f, _maxHitPoints);
     }
 
+    private float _shieldPoints;
+
+    /// <summary>
+    /// Shield points left, for the HUD; a hit takes from these before hit points. The one stored copy: the session
+    /// fills, drains and refills it. Always within [0, ShieldCapacity]; 0 without the Shield enhancement.
+    /// </summary>
+    public float ShieldPoints
+    {
+        get => _shieldPoints;
+        internal set => _shieldPoints = Math.Clamp(value, 0f, ShieldCapacity);
+    }
+
+    /// <summary>Shield points a full shield holds at the owned Shield level (ShipEnhancements.ShieldCapacity); 0 when not owned.</summary>
+    public float ShieldCapacity => ShipEnhancements.ShieldCapacity(ShipEnhancements.LevelOf(this, ShipEnhancements.Shield));
+
     /// <summary>
     /// HitPoints as the HUD shows it, a whole number rounded up: a living ship never shows 0, and only a dead one
     /// (exactly 0) does.
@@ -90,5 +105,12 @@ public sealed class PlayerStats
         var owned = new OwnedEnhancement(definition);
         _enhancements.Add(owned);
         return owned;
+    }
+
+    /// <summary>Applying a Health enhancement level raises MaxHitPoints and HitPoints by ShipEnhancements.HealthPerLevel.</summary>
+    public void ApplyHealthUpgrade()
+    {
+        MaxHitPoints += ShipEnhancements.HealthPerLevel;
+        HitPoints += ShipEnhancements.HealthPerLevel;
     }
 }

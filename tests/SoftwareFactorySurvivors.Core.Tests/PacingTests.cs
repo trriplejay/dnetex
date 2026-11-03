@@ -38,6 +38,12 @@ public class PacingTests
             while (weapon.Level < OwnedWeapon.MaxLevel)
                 Upgrades.Apply(Upgrade.ForWeapon(weapon.Kind, Upgrades.OptionsFor(weapon.Kind)[0]), session.Stats);
         }
+        foreach (var enhancement in Upgrades.Enhancements.Take(PlayerStats.MaxEnhancements))
+        {
+            Upgrades.Apply(Upgrade.NewEnhancement(enhancement), session.Stats);
+            while (session.Stats.Find(enhancement)!.Level < OwnedEnhancement.MaxLevel)
+                Upgrades.Apply(Upgrade.ForEnhancement(enhancement), session.Stats);
+        }
         Assert.Empty(Upgrades.Eligible(session.Stats));
         session.Stats.Laser().Damage = 1000f;
 
@@ -91,8 +97,8 @@ public class PacingTests
         }
 
         Assert.False(session.IsChoosingUpgrade);
-        // The pick gave one weapon level and each of the two rounds exactly one more.
-        Assert.Equal(3, session.Stats.Weapons.Sum(weapon => weapon.Level));
+        // The pick gave one weapon level and each of the two rounds exactly one more (weapon or enhancement).
+        Assert.Equal(3, session.Stats.Weapons.Sum(weapon => weapon.Level) + session.Stats.Enhancements.Sum(enhancement => enhancement.Level));
         session.Update(Vector2.Zero, null, 1f, Width, Height);
         Assert.Equal(1f, session.ElapsedSeconds);
     }

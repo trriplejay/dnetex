@@ -24,7 +24,7 @@ public class ShipDamageSourceTests
 
         // The site sits inside DamageShip, and ResolveContact hands every source to it.
         var session = File.ReadAllText(Path.Combine(CoreDirectory(), "GameSession.cs"));
-        var damageShip = session.IndexOf("private void DamageShip(float damage)", StringComparison.Ordinal);
+        var damageShip = session.IndexOf("private void DamageShip(float damage, Enemy? attacker)", StringComparison.Ordinal);
         Assert.True(damageShip >= 0, "GameSession has no DamageShip method");
         var nextMember = session.IndexOf("\n    }", damageShip, StringComparison.Ordinal);
         Assert.InRange(session.IndexOf(site.Line.Trim(), damageShip, StringComparison.Ordinal), damageShip, nextMember);

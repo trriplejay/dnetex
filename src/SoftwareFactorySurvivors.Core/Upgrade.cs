@@ -86,10 +86,10 @@ public static class Upgrades
     public static IReadOnlyList<Upgrade> StartingWeapons { get; } = AllWeapons.Select(Upgrade.NewWeapon).ToArray();
 
     /// <summary>
-    /// The enhancements cards can offer in production. Empty until the enhancements are defined; Offer takes
+    /// The enhancements cards can offer in production: the ship's five (ShipEnhancements.All). Offer takes
     /// another list for tests.
     /// </summary>
-    public static IReadOnlyList<Enhancement> Enhancements { get; } = [];
+    public static IReadOnlyList<Enhancement> Enhancements => ShipEnhancements.All;
 
     public static IReadOnlyList<WeaponOption> OptionsFor(WeaponKind weapon) => weapon switch
     {
@@ -156,13 +156,16 @@ public static class Upgrades
         _ => throw new ArgumentOutOfRangeException(nameof(upgrade)),
     };
 
-    /// <summary>The card's second line: the new weapon's description (see NewWeaponDescription), NEW ENHANCEMENT, or the effect.</summary>
+    /// <summary>
+    /// The card's second line: the new weapon's description (see NewWeaponDescription), the weapon option's effect,
+    /// or for an enhancement what it gives at the level the card brings it to (ShipEnhancements.CardDescription).
+    /// </summary>
     public static string Describe(Upgrade upgrade, PlayerStats stats) => upgrade.Kind switch
     {
         UpgradeKind.NewWeapon => NewWeaponDescription(WeaponOf(upgrade)),
         UpgradeKind.WeaponUpgrade => Effect(OptionOf(upgrade)),
-        UpgradeKind.NewEnhancement => "NEW ENHANCEMENT",
-        UpgradeKind.EnhancementUpgrade => EnhancementOf(upgrade).Effect,
+        UpgradeKind.NewEnhancement => ShipEnhancements.CardDescription(EnhancementOf(upgrade), 1),
+        UpgradeKind.EnhancementUpgrade => ShipEnhancements.CardDescription(EnhancementOf(upgrade), OwnedEnhancementOf(upgrade, stats).Level + 1),
         _ => throw new ArgumentOutOfRangeException(nameof(upgrade)),
     };
 
@@ -209,13 +212,18 @@ public static class Upgrades
                 weapon.Orbs?.SetLevel(weapon.Level);
                 break;
             case UpgradeKind.NewEnhancement:
-                stats.AddEnhancement(EnhancementOf(upgrade));
+                var newEnhancement = EnhancementOf(upgrade);
+                stats.AddEnhancement(newEnhancement);
+                if (newEnhancement == ShipEnhancements.Health)
+                    stats.ApplyHealthUpgrade();
                 break;
             case UpgradeKind.EnhancementUpgrade:
                 var owned = OwnedEnhancementOf(upgrade, stats);
                 if (owned.Level >= OwnedEnhancement.MaxLevel)
                     throw new InvalidOperationException($"{owned.Definition.Name} is already at level {OwnedEnhancement.MaxLevel}.");
                 owned.RaiseLevel();
+                if (owned.Definition == ShipEnhancements.Health)
+                    stats.ApplyHealthUpgrade();
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(upgrade));
