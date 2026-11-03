@@ -22,7 +22,7 @@ public class FinalBossesTests
     public void Killing_gemini_boss_in_session_adds_60_to_leveling_progress()
     {
         // Setup session with GeminiBoss and no other enemies
-        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(0f, EnemyRoster.GeminiBoss)]);
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(0f, EnemyRoster.GeminiBoss)]).WithLaser();
         session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
 
         var boss = Assert.Single(session.Bosses);
@@ -36,7 +36,7 @@ public class FinalBossesTests
         }
 
         // Set high laser damage to kill in one hit
-        session.Stats.Damage = 1000f;
+        session.Stats.Laser().Damage = 1000f;
 
         // Position boss directly in front of the ship's firing line
         // Ship starts at Center facing right (heading 0). Boss placed right in front of ship.
@@ -48,7 +48,7 @@ public class FinalBossesTests
         var expectedLevelsGained = expectedLeveling.Add(60);
 
         // Advance a frame aiming at boss
-        session.Stats.AttacksPerSecond = 60f;
+        session.Stats.Laser().AttacksPerSecond = 60f;
         session.Update(Vector2.Zero, boss.Position, 1f / 60f, Width, Height);
 
         // Wait until laser resolves hit and kills boss. The boss arrives off the top edge ~540 px away and
@@ -613,7 +613,7 @@ public class FinalBossesTests
             new Random(1),
             roster: [],
             bosses: [new BossArrival(0f, EnemyRoster.Hallucination)],
-            rings: []);
+            rings: []).WithLaser();
         session.Stats.MaxHitPoints = session.Stats.HitPoints = 50;
 
         // Advance 1 frame so boss arrives
@@ -624,7 +624,7 @@ public class FinalBossesTests
 
         // Hold fire while waiting for the split. FiringTimer rejects a rate of 0 and any hit kills a copy,
         // so use a positive rate too slow to fire a single shot within the wait.
-        session.Stats.AttacksPerSecond = 1e-6f;
+        session.Stats.Laser().AttacksPerSecond = 1e-6f;
 
         // Advance past split interval (5.0s, e.g. 5.5s) to allow it to spawn copies
         for (var i = 0; i < 55; i++)
@@ -645,8 +645,8 @@ public class FinalBossesTests
         var expectedLevelsGained = expectedLeveling.Add(180);
 
         // Turn on high weapon damage to kill with weapon hits
-        session.Stats.Damage = 1000f;
-        session.Stats.AttacksPerSecond = 60f;
+        session.Stats.Laser().Damage = 1000f;
+        session.Stats.Laser().AttacksPerSecond = 60f;
 
         var copiesAliveBeforeBossDeath = 0;
         for (var i = 0; i < 60 && !boss.IsDead; i++)

@@ -18,26 +18,6 @@ public class HitReferenceTests
 
     // ---- Enclosure and grazes ----
 
-    [Fact]
-    public void Ballista_arrowhead_wholly_enclosing_an_enemy_hits_it()
-    {
-        // The head spans y 312..324 above the nose's x, 3 pixels either side at y 318; the shaft's capsule
-        // stops at y 322, so the speck touches nothing but lies inside the triangle.
-        var speck = TestEnemies.Stationary(Speck(0.3f), new Vector2(Nose.X, Nose.Y - 58f));
-        var ballista = new Ballista(Nose, 0f);
-        var strokes = speck.GetStrokes();
-        var shaft = ballista.GetShaft();
-        Assert.False(Collision.ThickSegmentTouches(shaft[0], shaft[1], ballista.ShaftWidth / 2f, strokes));
-        var head = ballista.GetArrowhead();
-        for (var i = 0; i < head.Length - 1; i++)
-            Assert.False(Collision.SegmentsIntersect(head[i], head[i + 1], strokes[0][0], strokes[0][1]));
-        Assert.True(ballista.GetShape().Touches(strokes));
-
-        FireOnce(WeaponPath.Ballista, speck);
-
-        Assert.Equal(2f, speck.HitPoints);
-    }
-
     [Theory]
     [InlineData(1.9f, true)]
     [InlineData(2.1f, false)]
@@ -47,38 +27,9 @@ public class HitReferenceTests
         // `gap` pixels to its right.
         var speck = TestEnemies.Stationary(Speck(0.5f), new Vector2(Nose.X + gap + 0.5f, Nose.Y - 6f));
 
-        FireOnce(WeaponPath.None, speck);
+        FireOnce(speck);
 
         Assert.Equal(hit ? 2f : 3f, speck.HitPoints);
-    }
-
-    [Theory]
-    [InlineData(5.8f, true)]
-    [InlineData(6.2f, false)]
-    public void Bola_ball_graze_within_its_radius_hits(float below, bool hit)
-    {
-        // A fresh bola fired straight up lies across the flight path: ball B (radius 6) sits 26 right of the nose.
-        // `below` pixels under its centre is beyond the line's 2-pixel half-width.
-        var ballB = Nose + new Vector2(26f, 0);
-        var speck = TestEnemies.Stationary(Speck(0.2f), ballB + new Vector2(0, below));
-
-        FireOnce(WeaponPath.Bola, speck);
-
-        Assert.Equal(hit ? 2f : 3f, speck.HitPoints);
-    }
-
-    [Fact]
-    public void Bola_ball_radius_and_span_match_scale()
-    {
-        var small = new Bola(Nose, 0f, scale: 1f);
-        var large = new Bola(Nose, 0f, scale: 2f);
-
-        Assert.Equal(6f, small.BallRadius);
-        Assert.Equal(12f, large.BallRadius);
-        Assert.Equal(52f, small.Span);
-        Assert.Equal(104f, large.Span);
-        Assert.Equal(52f, Vector2.Distance(small.BallA, small.BallB), precision: 3);
-        Assert.Equal(104f, Vector2.Distance(large.BallA, large.BallB), precision: 3);
     }
 
     // ---- Who takes part in the pass ----
@@ -121,7 +72,7 @@ public class HitReferenceTests
             HitPoints = 4f,
             Phases = [new BossPhase(0.75f, Shield: new EnemyShield(inner, 2, 200f, 1f))],
         };
-        var session = QuietSession(WeaponPath.None);
+        var session = QuietSession();
         var boss = TestEnemies.Stationary(bossType, Nose - new Vector2(0, 6));
         session.AddEnemy(boss);
 
@@ -137,7 +88,7 @@ public class HitReferenceTests
     {
         var calls = new List<int>();
         var parent = TestEnemies.Stationary(Breeder(0, calls), new Vector2(100, 100));
-        var session = QuietSession(WeaponPath.None);
+        var session = QuietSession();
         session.AddEnemy(parent);
 
         session.Update(Vector2.Zero, null, 0.01f, Width, Height);
@@ -158,7 +109,7 @@ public class HitReferenceTests
         var thrower = TestEnemies.Stationary(
             Speck(0.2f) with { CreateAbility = () => new DropOnce(minion, Nose - new Vector2(0, 6)) },
             new Vector2(100, 100));
-        var session = QuietSession(WeaponPath.None);
+        var session = QuietSession();
         session.AddEnemy(thrower);
 
         session.Update(Vector2.Zero, null, 1f, Width, Height);
@@ -172,8 +123,8 @@ public class HitReferenceTests
     {
         // Two lasers, two tough enemies both lasers cross. Projectiles-first: laser 1 takes enemy 1 and is used
         // up, then laser 2 starts again from enemy 1 and takes it too, leaving enemy 2 untouched.
-        var session = QuietSession(WeaponPath.None);
-        session.Stats.ProjectileCount = 2;
+        var session = QuietSession();
+        session.Stats.Laser().Count = 2;
         var first = TestEnemies.Stationary(Wide(30f), Nose - new Vector2(0, 6));
         var second = TestEnemies.Stationary(Wide(30f), Nose - new Vector2(0, 8));
         session.AddEnemy(first);
@@ -191,8 +142,8 @@ public class HitReferenceTests
     {
         // Two lasers, two enemies both lasers cross; the first enemy dies to one hit. Laser 1 takes the earliest
         // enemy in the list and kills it; laser 2 then sees it dead, skips it and takes the second enemy.
-        var session = QuietSession(WeaponPath.None);
-        session.Stats.ProjectileCount = 2;
+        var session = QuietSession();
+        session.Stats.Laser().Count = 2;
         var first = TestEnemies.Stationary(Wide(30f) with { HitPoints = 1f }, Nose - new Vector2(0, 6));
         var second = TestEnemies.Stationary(Wide(30f), Nose - new Vector2(0, 8));
         session.AddEnemy(first);
@@ -214,8 +165,8 @@ public class HitReferenceTests
     {
         // Ship near the top edge: its nose is at y = -4, so the laser (-4 up to -17) is wholly off screen the
         // moment it spawns. With pierce it isn't used up by the hit; expiry alone removes it.
-        var session = new GameSession(new Vector2(500, 20), new Random(1), roster: [], bosses: [], rings: []);
-        session.Stats.Pierce = 5;
+        var session = new GameSession(new Vector2(500, 20), new Random(1), roster: [], bosses: [], rings: []).WithLaser();
+        session.Stats.Laser().Pierce = 5;
         var target = TestEnemies.Stationary(Speck(5f), new Vector2(500, -10));
         session.AddEnemy(target);
 
@@ -229,7 +180,7 @@ public class HitReferenceTests
     public void Expiry_fires_on_the_frame_the_exact_screen_overlap_test_says_it_is_gone()
     {
         // Nose at y = 26; the laser climbs 6 pixels per 0.01 s frame and is gone once its tail passes y = 0.
-        var session = new GameSession(new Vector2(50, 50), new Random(1), roster: [], bosses: [], rings: []);
+        var session = new GameSession(new Vector2(50, 50), new Random(1), roster: [], bosses: [], rings: []).WithLaser();
         session.Update(Vector2.Zero, null, 1f, Width, Height);
         var laser = Assert.Single(session.Lasers);
 
@@ -252,7 +203,7 @@ public class HitReferenceTests
     {
         // One contact hit makes the ship briefly immune, so the contact pass (which builds outlines) is skipped
         // and what's left of the frame shouldn't grow with the enemy count.
-        var session = QuietSession(WeaponPath.None);
+        var session = QuietSession();
         session.AddEnemy(TestEnemies.Stationary(Speck(5f), Center));
         session.Update(Vector2.Zero, null, 0.001f, Width, Height);
         Assert.True(session.InvulnerableSecondsLeft > 0f);
@@ -271,19 +222,133 @@ public class HitReferenceTests
         Assert.True(allocated < count * IntPtr.Size / 2, $"Frame allocated {allocated} bytes");
     }
 
+    // ---- The laser weapon's own stats (CLM-7) ----
+
+    [Fact]
+    public void Laser_fires_toward_the_aim_point_with_its_level_1_stats_and_its_three_exact_options()
+    {
+        var right = Center + new Vector2(200, 0);
+
+        // Level 1: 1 laser, 1 damage, 1.00 attacks/s, pierce 0; its options are exactly these three.
+        var stats = QuietSession().Stats.Laser();
+        Assert.Equal((1, 1f, 1f, 1, 0), (stats.Level, stats.Damage, stats.AttacksPerSecond, stats.Count, stats.Pierce));
+        Assert.Equal([WeaponOption.LaserProjectile, WeaponOption.LaserDamage, WeaponOption.LaserAttackSpeed],
+            Upgrades.OptionsFor(WeaponKind.Laser));
+
+        // Aimed at +x, one volley a second, each a single projectile heading +x that carries 1 damage.
+        var aimed = QuietSession();
+        var volleys = new List<IReadOnlyList<Projectile>>();
+        // 3 s plus a few frames' slack for float accumulation: volleys at 1, 2 and 3 s.
+        for (var i = 0; i < 3 * 60 + 5; i++)
+        {
+            var before = aimed.Lasers.ToHashSet();
+            aimed.Update(Vector2.Zero, right, 1f / 60f, Width, Height);
+            var fresh = aimed.Lasers.Where(laser => !before.Contains(laser)).ToArray();
+            if (fresh.Length > 0)
+                volleys.Add(fresh);
+        }
+        Assert.Equal(3, volleys.Count);
+        Assert.All(volleys, volley =>
+        {
+            var shot = Assert.Single(volley);
+            Assert.Equal(MathF.PI / 2f, shot.Heading, precision: 4);
+            Assert.Equal(1f, shot.Damage);
+        });
+
+        // A 3-HP enemy in the shot's path drops to 2.
+        Assert.Equal(2f, HitPointsAfterOneAimedShot(right, _ => { }));
+
+        // +1 damage: the hit removes 2.
+        Assert.Equal(1f, HitPointsAfterOneAimedShot(right,
+            s => Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage), s)));
+
+        // +1 projectile: the volley fans 2 lasers either side of +x.
+        var fanned = QuietSession();
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserProjectile), fanned.Stats);
+        fanned.Update(Vector2.Zero, right, 1f, Width, Height);
+        var headings = fanned.Lasers.Select(laser => laser.Heading).OrderBy(h => h).ToArray();
+        Assert.Equal(2, headings.Length);
+        Assert.Equal(MathF.PI / 2f - GameSession.VolleySpreadRadians / 2f, headings[0], precision: 4);
+        Assert.Equal(MathF.PI / 2f + GameSession.VolleySpreadRadians / 2f, headings[1], precision: 4);
+
+        // +0.25 attacks/s.
+        var faster = QuietSession();
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserAttackSpeed), faster.Stats);
+        Assert.Equal(1.25f, faster.Stats.Laser().AttacksPerSecond);
+    }
+
+    [Fact]
+    public void A_hit_deals_the_damage_its_laser_was_fired_with_not_the_weapons_current_damage()
+    {
+        var session = QuietSession();
+        // Fired at 1 damage, far from the target; the laser is upgraded to 3 damage while the shot is in flight.
+        var tough = Speck(0.5f) with { HitPoints = 10f };
+        var target = TestEnemies.Stationary(tough, Nose - new Vector2(0, 200));
+        session.Update(Vector2.Zero, null, 1f, Width, Height);
+        var shot = Assert.Single(session.Lasers);
+        Assert.Equal(1f, shot.Damage);
+        session.AddEnemy(target);
+        session.Stats.Laser().Damage = 3f;
+
+        for (var i = 0; i < 30 && session.Lasers.Contains(shot); i++)
+            session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
+
+        Assert.Equal(9f, target.HitPoints);
+    }
+
+    [Theory]
+    [InlineData(4, 100f)]
+    [InlineData(5, 95f)]
+    public void Level_5_laser_impact_damages_other_enemies_within_40_px_and_credits_their_kills(int level, float neighbourHp)
+    {
+        var session = QuietSession();
+        for (var raised = 1; raised < level; raised++)
+            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage), session.Stats);
+        Assert.Equal(level, session.Stats.Laser().Level);
+        var damage = session.Stats.Laser().Damage;
+
+        var tough = Speck(0.5f) with { HitPoints = 100f };
+        var struck = TestEnemies.Stationary(tough, Nose - new Vector2(0, 6));
+        // Out of the laser's path but 30 px from the impact; another 60 px away stays out of the blast.
+        var neighbour = TestEnemies.Stationary(tough, struck.Position + new Vector2(30, 0));
+        var far = TestEnemies.Stationary(tough, struck.Position + new Vector2(60, 0));
+        // A 1-HP enemy in the blast is killed by it and scores.
+        var weak = TestEnemies.Stationary(Speck(0.5f) with { HitPoints = 1f }, struck.Position + new Vector2(-30, 0));
+        foreach (var enemy in new[] { struck, neighbour, far, weak })
+            session.AddEnemy(enemy);
+
+        session.Update(Vector2.Zero, null, 1f, Width, Height);
+
+        Assert.Equal(100f - damage, struck.HitPoints);
+        Assert.Equal(neighbourHp, neighbour.HitPoints);
+        Assert.Equal(100f, far.HitPoints);
+        Assert.Equal(level == 5, weak.IsDead);
+        Assert.Equal(level == 5 ? GameSession.PointsPerKill : 0, session.Score);
+    }
+
     // ---- Helpers ----
 
-    private static GameSession QuietSession(WeaponPath path)
+    private static float HitPointsAfterOneAimedShot(Vector2 aim, Action<PlayerStats> upgrade)
+    {
+        var session = QuietSession();
+        upgrade(session.Stats);
+        // Facing +x the nose is 24 px right of the ship; the speck sits 6 px along the 13 px laser.
+        var speck = TestEnemies.Stationary(Speck(0.5f), Center + new Vector2(24 + 6, 0));
+        session.AddEnemy(speck);
+        session.Update(Vector2.Zero, aim, 1f, Width, Height);
+        return speck.HitPoints;
+    }
+
+    private static GameSession QuietSession()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.WeaponPath = path;
         session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000;
         return session;
     }
 
-    private static GameSession FireOnce(WeaponPath path, Enemy enemy)
+    private static GameSession FireOnce(Enemy enemy)
     {
-        var session = QuietSession(path);
+        var session = QuietSession();
         session.AddEnemy(enemy);
         session.Update(Vector2.Zero, null, 1f, Width, Height);
         return session;
@@ -298,9 +363,9 @@ public class HitReferenceTests
             HitPoints = 4f,
             Phases = [new BossPhase(0.75f, Shield: new EnemyShield(Wide(30f), 1, 1f, 1f))],
         };
-        var session = QuietSession(WeaponPath.None);
-        session.Stats.ProjectileCount = 2;
-        session.Stats.Pierce = 1;
+        var session = QuietSession();
+        session.Stats.Laser().Count = 2;
+        session.Stats.Laser().Pierce = 1;
         var boss = TestEnemies.Stationary(bossType, Nose - new Vector2(0, 6));
         session.AddEnemy(boss);
 

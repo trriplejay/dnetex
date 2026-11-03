@@ -20,7 +20,7 @@ public class SpawnScheduleTests
     [Fact]
     public void Regular_spawning_halts_during_the_lull_then_resumes_at_its_normal_rate()
     {
-        var session = new GameSession(Center, new Random(1), roster: [EnemyRoster.Gemini], bosses: [], rings: []);
+        var session = new GameSession(Center, new Random(1), roster: [EnemyRoster.Gemini], bosses: [], rings: []).WithLaser();
         session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
         var seen = new HashSet<Enemy>();
 
@@ -43,7 +43,7 @@ public class SpawnScheduleTests
     public void Ring_surrounds_the_ship_evenly_when_its_time_comes()
     {
         var session = new GameSession(Center, new Random(1), roster: [], bosses: [], spawnPauses: [],
-            rings: [new RingSpawn(60f, EnemyRoster.Gemini, 16, 400f)], start: new StartOptions(StartSeconds: 59f));
+            rings: [new RingSpawn(60f, EnemyRoster.Gemini, 16, 400f)], start: new StartOptions(StartSeconds: 59f)).WithLaser();
 
         var seen = new HashSet<Enemy>();
         Assert.Empty(RunUntil(session, seen, 59.9f));
@@ -71,7 +71,7 @@ public class SpawnScheduleTests
     public void Starting_after_the_ring_skips_it()
     {
         var session = new GameSession(Center, new Random(1), roster: [], bosses: [], spawnPauses: [],
-            rings: [new RingSpawn(60f, EnemyRoster.Gemini, 16, 400f)], start: new StartOptions(StartSeconds: 61f));
+            rings: [new RingSpawn(60f, EnemyRoster.Gemini, 16, 400f)], start: new StartOptions(StartSeconds: 61f)).WithLaser();
 
         Assert.Empty(RunUntil(session, [], 62f));
     }

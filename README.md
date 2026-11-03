@@ -25,14 +25,13 @@ Enemies are white line-art logos of AI companies, each with its own hit points, 
 
 Kills give experience; level *n* needs 3.5 × *n*^1.5 experience (4, 10, 18, 28, 39 …). Each level pauses the game and offers three random upgrade cards; the one you pick lasts for the rest of the game:
 
-| Upgrade | Effect per pick |
+Each weapon the ship owns (up to 3) has its own level, damage, attack speed and count, and fires on its own timer; an upgrade to one weapon leaves the others unchanged. Every game opens on a pick of the starting weapon (Laser, Lightning or Orbs). After that, a level-up offers up to three different cards: a new weapon (while a weapon slot is free), or one option for a weapon you own below level 5, which raises that weapon one level (shown as `LV n > n+1`). A level with no card left to offer is used up without pausing.
+
+| Weapon | Options per upgrade card |
 |---|---|
-| Attack speed | +0.25 volleys per second (starts at 1) |
-| Projectile size | Lasers +100% wider and longer |
-| Projectiles | +1 laser per volley, fanned out (max 9) |
-| Damage | +1 damage per hit |
-| Piercing | Lasers pass through +1 more enemy |
-| Max HP | +1 max hit point (and heals 1) |
+| Laser | +1 projectile, +1 damage, +0.25 attacks/s |
+| Lightning | +0.4 damage, +0.2 attacks/s, +1 chain |
+| Orbs | +1 orb, +30 deg/s and +15 px orbit, +3 px orb size, +0.5 damage |
 
 The ship starts with 1 hit point, so the first touch is fatal. With extra hit points, a touch costs 1 hit point, destroys the enemy, and makes the ship blink and ignore contact for 1 second.
 
@@ -129,7 +128,7 @@ dotnet run --project src/SoftwareFactorySurvivors.Desktop -- --time 3:00 --level
 ```
 
 - `--time MM:SS` (or whole seconds) starts the clock there, with every enemy type that has arrived by then. A boss due at exactly that time enters straight away; bosses due earlier are skipped.
-- `--level N` starts the ship at level N, offering the upgrade cards for each skipped level before play begins.
+- `--level N` starts the ship at level N. The starting-weapon pick comes first, then the upgrade cards for each of the N-1 skipped levels, oldest first, all before the clock starts.
 
 Both apply again when you restart with Enter.
 

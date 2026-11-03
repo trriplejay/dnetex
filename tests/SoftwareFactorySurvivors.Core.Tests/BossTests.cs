@@ -89,7 +89,7 @@ public class BossTests
     [Fact]
     public void Boss_enters_at_three_minutes_and_pauses_regular_spawning_until_defeated()
     {
-        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.Gemini]);
+        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.Gemini]).WithLaser();
         session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
         var seen = new HashSet<Enemy>();
 
@@ -134,7 +134,7 @@ public class BossTests
     [Fact]
     public void Autocomplete_arrives_on_schedule_at_270s_while_gemini_boss_lives_and_regular_spawning_remains_paused()
     {
-        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f));
+        var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f)).WithLaser();
         session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
 
         RunUntil(session, () => session.ElapsedSeconds >= 179.9f);
@@ -172,7 +172,7 @@ public class BossTests
     [Fact]
     public void Boss_survives_touching_the_ship_when_the_ship_survives()
     {
-        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(0f, EnemyRoster.GeminiBoss)]);
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(0f, EnemyRoster.GeminiBoss)]).WithLaser();
         session.Stats.MaxHitPoints = session.Stats.HitPoints = 3;
 
         Step(session);
@@ -371,8 +371,8 @@ public class BossTests
     {
         var session = TestEnemies.QuietSession(Center);
         session.Stats.MaxHitPoints = session.Stats.HitPoints = 1_000_000;
-        session.Stats.AttacksPerSecond = 6f;
-        session.Stats.Damage = 3f;
+        session.Stats.Laser().AttacksPerSecond = 6f;
+        session.Stats.Laser().Damage = 3f;
         var boss = TestEnemies.Stationary(EnemyRoster.GeminiBoss, Center + new Vector2(0, -300));
         session.AddEnemy(boss);
 

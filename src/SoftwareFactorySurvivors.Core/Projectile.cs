@@ -13,13 +13,17 @@ public abstract class Projectile
 
     /// <param name="scale">Multiplies every dimension of the shape (the projectile size upgrade).</param>
     /// <param name="pierce">How many extra enemies it passes through before it's used up.</param>
-    protected Projectile(Vector2 position, float heading, float speed, float scale = 1f, int pierce = 0)
+    /// <param name="damage">Damage each hit deals, fixed when the projectile is fired.</param>
+    protected Projectile(Vector2 position, float heading, float speed, float scale = 1f, int pierce = 0, float damage = 1f)
     {
+        if (!float.IsFinite(damage) || damage < 0f)
+            throw new ArgumentOutOfRangeException(nameof(damage));
         Position = position;
         Heading = heading;
         Speed = speed;
         Scale = scale;
         PierceRemaining = pierce;
+        Damage = damage;
     }
 
     public Vector2 Position { get; private set; }
@@ -27,6 +31,9 @@ public abstract class Projectile
     public float Speed { get; }
     public float Scale { get; }
     public int PierceRemaining { get; private set; }
+
+    /// <summary>Damage each hit deals: the firing weapon's damage when this projectile was fired.</summary>
+    public float Damage { get; }
 
     protected Vector2 Forward => new(MathF.Sin(Heading), -MathF.Cos(Heading));
 

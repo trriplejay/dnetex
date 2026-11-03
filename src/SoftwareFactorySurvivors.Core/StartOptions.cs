@@ -3,8 +3,9 @@ using System.Globalization;
 namespace SoftwareFactorySurvivors.Core;
 
 /// <summary>
-/// Where a new game starts, for debugging: the clock time and the ship's level. Starting above level 1
-/// offers the upgrade cards for every level skipped before play begins.
+/// Where a new game starts, for debugging: the clock time and the ship's level. Every game opens on the
+/// starting-weapon pick; starting above level 1 then offers the upgrade cards for every level skipped, oldest
+/// first, before play begins.
 /// </summary>
 public sealed record StartOptions(float StartSeconds = 0f, int StartLevel = 1)
 {

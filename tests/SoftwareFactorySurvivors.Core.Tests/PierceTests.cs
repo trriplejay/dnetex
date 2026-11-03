@@ -12,8 +12,11 @@ public class PierceTests
     [Fact]
     public void Projectile_ctor_sets_pierce_remaining_and_spends_per_distinct_hit()
     {
-        var projectile = new Laser(Vector2.Zero, 0f, scale: 1f, pierce: 2);
+        var projectile = new Laser(Vector2.Zero, 0f, scale: 1f, pierce: 2, damage: 2.5f);
         Assert.Equal(2, projectile.PierceRemaining);
+        Assert.Equal(2.5f, projectile.Damage);
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Laser(Vector2.Zero, 0f, damage: -1f));
+        Assert.Throws<ArgumentOutOfRangeException>(() => new Laser(Vector2.Zero, 0f, damage: float.NaN));
 
         var e1 = TestEnemies.StationaryGemini(new Vector2(0, -10));
         var e2 = TestEnemies.StationaryGemini(new Vector2(0, -20));
@@ -42,8 +45,8 @@ public class PierceTests
     public void Projectile_with_pierce_damages_at_most_p_plus_1_of_4_lined_up_enemies(int pierce, int expectedDamaged)
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.Pierce = pierce;
-        session.Stats.Damage = 2f;
+        session.Stats.Laser().Pierce = pierce;
+        session.Stats.Laser().Damage = 2f;
 
         var tough = EnemyRoster.Gemini with { HitPoints = 10f };
         var nose = session.Ship.Nose;

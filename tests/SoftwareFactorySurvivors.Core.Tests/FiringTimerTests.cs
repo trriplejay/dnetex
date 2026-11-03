@@ -68,7 +68,26 @@ public class FiringTimerTests
         Assert.Equal(ship.Heading, second.Heading);
         AssertPointNear(new Vector2(444, 240), first.Position);
         Assert.Equal(MathF.PI / 2f, first.Heading);
-        Assert.NotSame(first, second);
+        Assert.NotEqual(first, second);
+    }
+
+    [Fact]
+    public void Shot_poses_carry_over_progress_across_a_rate_change()
+    {
+        var timer = new FiringTimer();
+
+        Assert.Empty(timer.Update(0.5f, new Vector2(1, 2), 0.1f, shotsPerSecond: 1f));
+        Assert.Equal(0.5d, timer.Progress, precision: 6);
+
+        // Half the way there already; at 2 shots/s another 0.25 s finishes this shot, posed at this frame's nose.
+        var shot = Assert.Single(timer.Update(0.25f, new Vector2(3, 4), 0.2f, shotsPerSecond: 2f));
+        Assert.Equal(new ShotPose(new Vector2(3, 4), 0.2f), shot);
+        Assert.Equal(0d, timer.Progress, precision: 6);
+
+        // Two whole shots in one frame both take the same frame's pose, and the remainder carries on.
+        var shots = timer.Update(1.25f, new Vector2(5, 6), 0.3f, shotsPerSecond: 2f);
+        Assert.Equal([new ShotPose(new Vector2(5, 6), 0.3f), new ShotPose(new Vector2(5, 6), 0.3f)], shots);
+        Assert.Equal(0.5d, timer.Progress, precision: 6);
     }
 
     [Theory]

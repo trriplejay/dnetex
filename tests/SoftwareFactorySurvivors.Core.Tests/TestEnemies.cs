@@ -11,9 +11,20 @@ internal static class TestEnemies
 
     public static Enemy Stationary(EnemyType type, Vector2 position) => new(type, position, new Stay());
 
-    /// <summary>A session with no enemy spawns, bosses or rings, so only what a test adds is in play.</summary>
+    /// <summary>
+    /// A session with no enemy spawns, bosses or rings, so only what a test adds is in play. The starting pick is
+    /// already made (the laser), so the session starts unpaused.
+    /// </summary>
     public static GameSession QuietSession(Vector2 shipPosition) =>
-        new(shipPosition, new Random(1), roster: [], bosses: [], rings: []);
+        new GameSession(shipPosition, new Random(1), roster: [], bosses: [], rings: []).WithLaser();
+
+    /// <summary>Makes the session's starting pick, the laser, and returns the session.</summary>
+    public static GameSession WithLaser(this GameSession session)
+    {
+        var laser = Upgrade.NewWeapon(WeaponKind.Laser);
+        session.ChooseUpgrade(session.UpgradeOffer!.ToList().IndexOf(laser));
+        return session;
+    }
 
     private sealed class Stay : IMovementPattern
     {

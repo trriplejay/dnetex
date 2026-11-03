@@ -78,41 +78,83 @@ public sealed class Enemy
 
     public bool IsDead => HitPoints <= 0f;
 
-    /// <summary>
-    /// Seconds of game time left on a Bola slow. It lives on the enemy rather than its movement pattern, so it
-    /// carries over when a phase replaces the movement.
-    /// </summary>
-    public float SlowSecondsLeft { get; private set; }
+    /// <summary>Duration of burn in seconds.</summary>
+    public const float BurnDuration = 5f;
 
-    /// <summary>True while a Bola slow holds the enemy to a quarter of its normal movement.</summary>
-    public bool IsSlowed => SlowSecondsLeft > 0f;
+    /// <summary>Damage dealt per second of burn.</summary>
+    public const float BurnDamagePerSecond = 1f;
+
+    /// <summary>Seconds of game time left on burn.</summary>
+    public float BurnSecondsLeft { get; private set; }
+
+    /// <summary>True while this enemy is burning.</summary>
+    public bool IsBurning => BurnSecondsLeft > 0f;
+
+    /// <summary>Damage dealt by burn during the most recent update or burn tick.</summary>
+    public float LastBurnDamage { get; private set; }
+
+    /// <summary>
+    /// Applies 5 seconds of burn dealing 1 damage per second. If the enemy is already burning,
+    /// refreshes the duration to 5 seconds without stacking. Ignored while the enemy is shielded or dead.
+    /// </summary>
+    public void ApplyBurn(float duration = BurnDuration)
+    {
+        if (IsShielded || IsDead)
+            return;
+
+        BurnSecondsLeft = duration;
+    }
+
+    /// <summary>
+    /// Ticks burn by elapsedSeconds, dealing 1 damage per second burned and recording it in LastBurnDamage.
+    /// </summary>
+    public float TickBurn(float elapsedSeconds)
+    {
+        if (IsDead || BurnSecondsLeft <= 0f || elapsedSeconds <= 0f)
+        {
+            LastBurnDamage = 0f;
+            return 0f;
+        }
+
+        var burnTime = MathF.Min(elapsedSeconds, BurnSecondsLeft);
+        BurnSecondsLeft = MathF.Max(0f, BurnSecondsLeft - elapsedSeconds);
+        var damage = burnTime * BurnDamagePerSecond;
+
+        if (damage > 0f)
+        {
+            if (IsCopy)
+            {
+                HitPoints = 0f;
+            }
+            else
+            {
+                HitPoints = MathF.Max(0f, HitPoints - damage);
+                EnterReachedPhases();
+            }
+        }
+
+        LastBurnDamage = damage;
+        return damage;
+    }
 
     public void Update(Vector2 playerPosition, float elapsedSeconds)
     {
-        // A slowed enemy covers a quarter of its normal distance; its pattern's own timers and ramps still see the
-        // real elapsed time, so it moves exactly as normal once the slow ends.
-        Position = Movement.Move(Position, playerPosition, elapsedSeconds, IsSlowed ? 0.25f : 1f);
+        Position = Movement.Move(Position, playerPosition, elapsedSeconds);
         Rotation += Type.SpinSpeed * elapsedSeconds;
-        if (IsSlowed)
-            SlowSecondsLeft = MathF.Max(0f, SlowSecondsLeft - elapsedSeconds);
         if (IsFlickering)
             FlickerSecondsLeft = MathF.Max(0f, FlickerSecondsLeft - elapsedSeconds);
+
+        TickBurn(elapsedSeconds);
     }
 
     /// <summary>Runs the enemy's special ability, if it has one, and returns any enemies it created.</summary>
     public IReadOnlyList<Enemy> UseAbility(Vector2 playerPosition, float elapsedSeconds, Random random) =>
         Ability?.Update(this, playerPosition, elapsedSeconds, random) ?? [];
 
-    /// <param name="slow">
-    /// True for a Bola hit: it also slows the enemy for 2 seconds, restarting (not stacking) any slow already on it.
-    /// A hit the shield blocks neither damages nor slows.
-    /// </param>
-    public void TakeDamage(float damage, bool slow = false)
+    public void TakeDamage(float damage)
     {
         if (IsShielded)
             return;
-        if (slow)
-            SlowSecondsLeft = 2f;
         if (IsCopy)
         {
             HitPoints = 0f;

@@ -39,62 +39,99 @@ public class ProgressionTests
     }
 
     [Fact]
-    public void Offer_is_three_different_upgrades_and_skips_maxed_ones()
+    public void Each_owned_weapon_fires_on_its_own_timer_and_an_upgrade_leaves_the_others_unchanged()
     {
-        var stats = new PlayerStats();
-
-        for (var seed = 0; seed < 20; seed++)
+        // Laser at 1.0/s and Lightning at 1.2/s, each on its own timer: 10 s gives 10 volleys and 12 strikes.
+        var laser = new OwnedWeapon(WeaponKind.Laser);
+        var lightning = new OwnedWeapon(WeaponKind.Lightning);
+        var (volleys, strikes) = (0, 0);
+        for (var i = 0; i < 600; i++)
         {
-            var offer = Upgrades.Offer(stats, new Random(seed));
-            Assert.Equal(3, offer.Count);
-            Assert.Equal(3, offer.Distinct().Count());
+            volleys += laser.Fire(Frame, Vector2.Zero, 0f).Count;
+            strikes += lightning.Fire(Frame, Vector2.Zero, 0f).Count;
         }
+        Assert.InRange(volleys, 9, 10);
+        Assert.InRange(strikes, 11, 12);
 
-        for (var seed = 0; seed < 200; seed++)
-        {
-            var offer = Upgrades.Offer(stats, new Random(seed), count: 100);
-            Assert.DoesNotContain(Upgrade.Ballista, offer);
-            Assert.DoesNotContain(Upgrade.Bola, offer);
-        }
-        Assert.DoesNotContain(Upgrade.Ballista, Upgrades.All);
-        Assert.DoesNotContain(Upgrade.Bola, Upgrades.All);
+        // In a session, laser upgrades change only the laser: the lightning keeps every stat and its timer progress.
+        var session = TestEnemies.QuietSession(Center);
+        var owned = session.Stats.AddWeapon(WeaponKind.Lightning);
+        session.Update(Vector2.Zero, null, 0.5f, Width, Height);
+        var before = WeaponSnapshot(owned);
+        Assert.Equal(0.6d, before.Progress, precision: 5);
 
-        stats.ProjectileCount = Upgrades.MaxProjectileCount;
-        for (var seed = 0; seed < 20; seed++)
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserAttackSpeed), session.Stats);
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage), session.Stats);
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserProjectile), session.Stats);
+
+        Assert.Equal(before, WeaponSnapshot(owned));
+        var upgraded = session.Stats.Laser();
+        Assert.Equal(1.25f, upgraded.AttacksPerSecond);
+        Assert.Equal(2f, upgraded.Damage);
+        Assert.Equal(2, upgraded.Count);
+        Assert.Equal(4, upgraded.Level);
+
+        // The raised laser rate shows in play: 1.25 volleys per second.
+        var fired = 0;
+        for (var i = 0; i < 240; i++)
         {
-            var offer = Upgrades.Offer(stats, new Random(seed));
-            Assert.DoesNotContain(Upgrade.ProjectileCount, offer);
+            var count = session.Lasers.Count;
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
+            if (session.Lasers.Count > count)
+                fired++;
         }
+        Assert.InRange(fired, 4, 5);
     }
 
     [Fact]
-    public void Each_upgrade_changes_its_attribute_and_describes_the_change()
+    public void An_upgrade_card_carries_one_option_and_two_cards_for_one_weapon_always_differ()
+    {
+        var sawTwoLaserCards = false;
+        for (var seed = 0; seed < 200; seed++)
+        {
+            var stats = new PlayerStats();
+            stats.AddWeapon(WeaponKind.Laser);
+            var offer = Upgrades.Offer(stats, new Random(seed), GameSession.UpgradeChoices);
+            var laserCards = offer.Where(card => card.Kind == UpgradeKind.WeaponUpgrade).ToArray();
+            Assert.All(laserCards, card => Assert.Contains(card.Option!.Value, Upgrades.OptionsFor(WeaponKind.Laser)));
+            Assert.Equal(laserCards.Length, laserCards.Select(card => card.Option).Distinct().Count());
+            sawTwoLaserCards |= laserCards.Length >= 2;
+        }
+        Assert.True(sawTwoLaserCards, "No offer held two laser cards");
+    }
+
+    [Fact]
+    public void Card_text_names_the_weapon_the_effect_and_the_level_change()
     {
         var stats = new PlayerStats();
+        stats.AddWeapon(WeaponKind.Laser);
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage), stats);
+        Assert.Equal(2, stats.Laser().Level);
 
-        Assert.Equal("1.00/S > 1.25/S", Upgrades.Describe(Upgrade.AttackSpeed, stats));
-        Upgrades.Apply(Upgrade.AttackSpeed, stats);
-        Assert.Equal(1.25f, stats.AttacksPerSecond);
+        var damage = Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage);
+        var text = $"{Upgrades.Title(damage, stats)} {Upgrades.Describe(damage, stats)}";
+        Assert.Contains("LASER", text);
+        Assert.Contains("+1 DAMAGE", text);
+        Assert.Contains("LV 2 > 3", text);
 
-        Assert.Equal("100% > 200%", Upgrades.Describe(Upgrade.ProjectileSize, stats));
-        Upgrades.Apply(Upgrade.ProjectileSize, stats);
-        Assert.Equal(2f, stats.ProjectileScale);
+        Assert.Equal("+1 PROJECTILE", Upgrades.Describe(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserProjectile), stats));
+        Assert.Equal("+0.25 ATTACKS/S", Upgrades.Describe(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserAttackSpeed), stats));
 
-        Upgrades.Apply(Upgrade.ProjectileCount, stats);
-        Assert.Equal(2, stats.ProjectileCount);
+        var lightning = Upgrade.NewWeapon(WeaponKind.Lightning);
+        Assert.Equal("LIGHTNING", Upgrades.Title(lightning, stats));
+        Assert.Contains("NEW", Upgrades.Describe(lightning, stats));
 
-        Upgrades.Apply(Upgrade.Damage, stats);
-        Assert.Equal(2f, stats.Damage);
-
-        Upgrades.Apply(Upgrade.Piercing, stats);
-        Assert.Equal(1, stats.Pierce);
-
-        Assert.Equal("1/1 > 2/2", Upgrades.Describe(Upgrade.MaxHitPoints, stats));
-        Upgrades.Apply(Upgrade.MaxHitPoints, stats);
-        Assert.Equal((2, 2), (stats.HitPoints, stats.MaxHitPoints));
-
-        foreach (var upgrade in Upgrades.All.Concat(Upgrades.WeaponPaths))
-            Assert.NotEmpty(VectorText.GetStrokes(Upgrades.Title(upgrade) + " " + Upgrades.Describe(upgrade, stats), Vector2.Zero, 10f));
+        // Every option of every weapon has card text the vector font can draw.
+        var all = new PlayerStats();
+        foreach (var kind in Upgrades.AllWeapons)
+            all.AddWeapon(kind);
+        foreach (var card in Upgrades.Eligible(all))
+        {
+            var cardText = $"{Upgrades.Title(card, all)} {Upgrades.Describe(card, all)}";
+            Assert.Contains(Upgrades.WeaponName(card.Weapon!.Value), cardText);
+            Assert.Contains("LV 1 > 2", cardText);
+            Assert.NotEmpty(VectorText.GetStrokes(cardText, Vector2.Zero, 10f));
+        }
     }
 
     [Fact]
@@ -104,8 +141,8 @@ public class ProgressionTests
         // Gemini is worth 2 experience; level 2 needs 5, so the third kill levels up.
         for (var i = 0; i < 3; i++)
             session.AddEnemy(TestEnemies.StationaryGemini(Center + new Vector2(0, -120 - 60 * i)));
-        session.Stats.Damage = 10f;
-        session.Stats.Pierce = 5;
+        session.Stats.Laser().Damage = 10f;
+        session.Stats.Laser().Pierce = 5;
 
         for (var i = 0; i < 60 * 3 && !session.IsChoosingUpgrade; i++)
             session.Update(Vector2.Zero, null, Frame, Width, Height);
@@ -134,22 +171,29 @@ public class ProgressionTests
     public void Several_levels_at_once_offer_cards_one_level_at_a_time()
     {
         var session = TestEnemies.QuietSession(Center);
-        // One kill worth 20 experience: 4 for level 2 plus 10 for level 3, with 6 left over.
-        var bigPrize = EnemyRoster.Meta with { Experience = 20 };
+        // One kill worth 35 experience: 4 for level 2, 10 for level 3 and 18 for level 4, with 3 left over.
+        var bigPrize = EnemyRoster.Meta with { Experience = 35 };
         session.AddEnemy(TestEnemies.Stationary(bigPrize, Center + new Vector2(0, -150)));
-        session.Stats.Damage = 100f;
+        session.Stats.Laser().Damage = 100f;
 
         for (var i = 0; i < 60 * 2 && !session.IsChoosingUpgrade; i++)
             session.Update(Vector2.Zero, null, Frame, Width, Height);
 
-        Assert.Equal(3, session.Leveling.Level);
-        Assert.Equal(6, session.Leveling.Experience);
-        Assert.Equal(GameSession.UpgradeChoices, session.UpgradeOffer!.Count);
-        session.ChooseUpgrade(1);
-        Assert.True(session.IsChoosingUpgrade);
-        // The second round grants level 3: the two weapon paths.
-        Assert.Equal(Upgrades.WeaponPaths, session.UpgradeOffer);
-        session.ChooseUpgrade(1);
+        Assert.Equal(4, session.Leveling.Level);
+        Assert.Equal(3, session.Leveling.Experience);
+        var clock = session.ElapsedSeconds;
+
+        // Three regular rounds in a row, one per level gained, with play frozen between them.
+        for (var round = 0; round < 3; round++)
+        {
+            Assert.True(session.IsChoosingUpgrade, $"Round {round + 1} wasn't offered");
+            Assert.False(session.IsStartingPick);
+            Assert.Equal(GameSession.UpgradeChoices, session.UpgradeOffer!.Count);
+            session.Update(Vector2.Zero, null, 1f, Width, Height);
+            Assert.Equal(clock, session.ElapsedSeconds);
+            session.ChooseUpgrade(1);
+        }
+
         Assert.False(session.IsChoosingUpgrade);
         Assert.Throws<InvalidOperationException>(() => session.ChooseUpgrade(0));
     }
@@ -158,7 +202,7 @@ public class ProgressionTests
     public void Attack_speed_fires_volleys_more_often()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.AttacksPerSecond = 2.5f;
+        session.Stats.Laser().AttacksPerSecond = 2.5f;
         var volleys = 0;
 
         // Count volleys over 2 seconds; lasers fly up and stay on screen long enough to count.
@@ -187,7 +231,7 @@ public class ProgressionTests
     public void Volley_fans_lasers_evenly_around_the_heading()
     {
         var session = TestEnemies.QuietSession(Center);
-        session.Stats.ProjectileCount = 3;
+        session.Stats.Laser().Count = 3;
 
         session.Update(Vector2.Zero, null, 1f, Width, Height);
 
@@ -225,7 +269,7 @@ public class ProgressionTests
         var back = TestEnemies.StationaryGemini(Center + new Vector2(0, -200));
         session.AddEnemy(front);
         session.AddEnemy(back);
-        session.Stats.Pierce = 1;
+        session.Stats.Laser().Pierce = 1;
 
         for (var i = 0; i < 90 && back.HitPoints == 3f; i++)
             session.Update(Vector2.Zero, null, Frame, Width, Height);
@@ -265,7 +309,7 @@ public class ProgressionTests
     [Fact]
     public void Enemy_types_join_the_spawner_at_their_arrival_times()
     {
-        var session = new GameSession(Center, new Random(1));
+        var session = new GameSession(Center, new Random(1)).WithLaser();
         Assert.Equal([EnemyRoster.Gemini], session.Spawner.Types);
 
         session.Spawner.SetSpawnsPerMinute(EnemyRoster.Gemini, 0f);
@@ -294,6 +338,9 @@ public class ProgressionTests
         Assert.Null(UpgradeCards.HitTest(Center, 3, corners[0] + new Vector2(UpgradeCards.CardSize.X + 5, 5)));
     }
 
-    private static (float, int, float, int, int, float) Snapshot(PlayerStats stats) =>
-        (stats.ProjectileScale, stats.ProjectileCount, stats.Damage, stats.Pierce, stats.MaxHitPoints, stats.AttacksPerSecond);
+    private static (int, int, float, int, float, int) Snapshot(PlayerStats stats) =>
+        (stats.Weapons.Count, stats.Laser().Level, stats.Laser().Damage, stats.Laser().Count, stats.Laser().AttacksPerSecond, stats.MaxHitPoints);
+
+    private static (WeaponKind Kind, int Level, float Damage, float AttacksPerSecond, int Count, int Pierce, double Progress) WeaponSnapshot(OwnedWeapon weapon) =>
+        (weapon.Kind, weapon.Level, weapon.Damage, weapon.AttacksPerSecond, weapon.Count, weapon.Pierce, weapon.TimerProgress);
 }

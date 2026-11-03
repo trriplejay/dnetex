@@ -5,8 +5,9 @@ namespace SoftwareFactorySurvivors.Core;
 /// <summary>
 /// One play-through: the ship, its lasers and the enemies, plus the player's level and upgrades.
 /// It ends in defeat when the ship runs out of hit points, or in victory when it is still alive after
-/// SurvivalSeconds. Each level gained pauses play until the player picks one of three offered upgrades;
-/// the round for level 3 instead offers the two weapon paths, Ballista and Bola, and the pick lasts all game.
+/// SurvivalSeconds. It opens paused on the starting-weapon pick; each level gained then pauses play until the
+/// player picks one of up to three offered cards (a level with no card left to offer doesn't pause).
+/// Every owned weapon fires on its own timer with its own stats.
 /// </summary>
 public sealed class GameSession
 {
@@ -24,20 +25,18 @@ public sealed class GameSession
 
     public const int UpgradeChoices = 3;
 
-    /// <summary>The level whose round offers the weapon paths instead of general upgrades.</summary>
-    public const int WeaponPathLevel = 3;
-
     private readonly Random _random;
     private readonly IReadOnlyList<EnemyType> _roster;
     private readonly List<BossArrival> _bossesToCome;
     private readonly List<Enemy> _bosses = [];
     private readonly IReadOnlyList<SpawnPause> _spawnPauses;
     private readonly List<RingSpawn> _ringsToCome;
-    private readonly FiringTimer _firingTimer = new();
     private readonly List<Projectile> _lasers = [];
     private readonly List<Enemy> _enemies = [];
     private readonly List<Hazard> _hazards = [];
     private readonly List<Enemy> _enemySnapshot = [];
+    private readonly List<LightningSegment> _lightningSegments = [];
+    private readonly Action<Enemy, float> _damageEnemy;
     private int _pendingLevelUps;
 
     /// <param name="roster">Enemy types that join the spawner at their arrival times; defaults to EnemyRoster.All.</param>
@@ -47,14 +46,20 @@ public sealed class GameSession
     /// <param name="start">
     /// Debug start point. The clock starts at its time, with every enemy type that has arrived by then; bosses
     /// due earlier are skipped, while one due at exactly that time enters on the first frame. Starting above
-    /// level 1 offers the upgrade cards for each level skipped before anything moves. Rings follow the same rule as bosses.
+    /// level 1 offers the upgrade cards for each level skipped, after the starting pick and before anything moves.
+    /// Rings follow the same rule as bosses.
     /// </param>
+    /// <remarks>
+    /// Every session opens on the starting pick: play is paused on Upgrades.StartingWeapons and the ship owns no
+    /// weapon until one is chosen.
+    /// </remarks>
     public GameSession(Vector2 shipPosition, Random random, IReadOnlyList<EnemyType>? roster = null,
         IReadOnlyList<BossArrival>? bosses = null, StartOptions? start = null,
         IReadOnlyList<SpawnPause>? spawnPauses = null, IReadOnlyList<RingSpawn>? rings = null)
     {
         start ??= StartOptions.Default;
         _random = random;
+        _damageEnemy = DamageEnemy;
         _roster = roster ?? EnemyRoster.All;
         ElapsedSeconds = start.StartSeconds;
         _bossesToCome = [.. (bosses ?? EnemyRoster.Bosses).Where(arrival => arrival.AtSeconds >= ElapsedSeconds)];
@@ -63,9 +68,11 @@ public sealed class GameSession
         Ship = new Ship(shipPosition);
         Spawner = new EnemySpawner(random);
         Leveling = new Leveling(start.StartLevel);
+        // The skipped levels' rounds wait until the starting pick is made.
         _pendingLevelUps = start.StartLevel - 1;
         AddArrivedEnemyTypes();
-        OfferNextUpgrade();
+        IsStartingPick = true;
+        UpgradeOffer = Upgrades.StartingWeapons;
     }
 
     public Ship Ship { get; }
@@ -76,9 +83,12 @@ public sealed class GameSession
     public PlayerStats Stats { get; } = new();
     public Leveling Leveling { get; }
 
-    /// <summary>Projectiles in flight: lasers, or the chosen weapon path's projectiles once one is picked.</summary>
+    /// <summary>Projectiles in flight, fired by the owned weapons.</summary>
     public IReadOnlyList<Projectile> Lasers => _lasers;
     public IReadOnlyList<Enemy> Enemies => _enemies;
+
+    /// <summary>The lightning drawn this frame: ship to first target, then each hop; cleared at the start of every played frame.</summary>
+    public IReadOnlyList<LightningSegment> LightningSegments => _lightningSegments;
 
     /// <summary>Bosses currently alive. While there are any, the regular spawner is paused.</summary>
     public IReadOnlyList<Enemy> Bosses => _bosses;
@@ -102,10 +112,13 @@ public sealed class GameSession
     /// <summary>Seconds of contact immunity left after the ship was last hit.</summary>
     public float InvulnerableSecondsLeft { get; private set; }
 
-    /// <summary>The upgrades on offer while play is paused for a level-up; null while playing.</summary>
+    /// <summary>The cards on offer while play is paused for the starting pick or a level-up; null while playing.</summary>
     public IReadOnlyList<Upgrade>? UpgradeOffer { get; private set; }
 
     public bool IsChoosingUpgrade => UpgradeOffer is not null;
+
+    /// <summary>True while the offer is the starting-weapon pick rather than a level-up round.</summary>
+    public bool IsStartingPick { get; private set; }
 
     /// <summary>Adds an enemy (and any shield orbiting it) directly, for spawns that don't come from the edge spawner.</summary>
     public void AddEnemy(Enemy enemy) => AddEnemies([enemy]);
@@ -117,6 +130,8 @@ public sealed class GameSession
     public void AddHazards(IEnumerable<Hazard> hazards) => _hazards.AddRange(hazards);
 
     /// <summary>Applies the chosen card, then offers the next level-up's cards or resumes play.</summary>
+    /// <exception cref="InvalidOperationException">No card is on offer.</exception>
+    /// <exception cref="ArgumentOutOfRangeException">The index names no card on offer.</exception>
     public void ChooseUpgrade(int index)
     {
         if (UpgradeOffer is null)
@@ -125,7 +140,11 @@ public sealed class GameSession
             throw new ArgumentOutOfRangeException(nameof(index));
 
         Upgrades.Apply(UpgradeOffer[index], Stats);
-        _pendingLevelUps--;
+        // The starting pick grants no level, so it uses up no waiting round.
+        if (IsStartingPick)
+            IsStartingPick = false;
+        else
+            _pendingLevelUps--;
         UpgradeOffer = null;
         OfferNextUpgrade();
     }
@@ -146,8 +165,9 @@ public sealed class GameSession
 
         foreach (var laser in _lasers)
             laser.Update(elapsedSeconds);
-        foreach (var shot in _firingTimer.Update(elapsedSeconds, Ship.Nose, Ship.Heading, Stats.AttacksPerSecond))
-            _lasers.AddRange(Volley(shot.Position, shot.Heading));
+        _lightningSegments.Clear();
+        foreach (var weapon in Stats.Weapons)
+            FireWeapon(weapon, elapsedSeconds);
 
         AddArrivedBosses(width, height);
         AddArrivedRings();
@@ -165,7 +185,10 @@ public sealed class GameSession
         foreach (var enemy in _enemies)
         {
             var prevChargeSeg = (enemy.Movement as ChargeAlongLine)?.LastChargeSegment;
+            // An enemy's update ticks its burn, the only damage it deals itself, so a burn kill is credited here.
+            var wasAlive = !enemy.IsDead;
             enemy.Update(Ship.Position, elapsedSeconds);
+            CreditKill(enemy, wasAlive);
             if (enemy.Movement is ChargeAlongLine charge)
             {
                 var seg = charge.LastChargeSegment;
@@ -252,24 +275,48 @@ public sealed class GameSession
         }
     }
 
-    private IEnumerable<Projectile> Volley(Vector2 nose, float heading)
+    /// <summary>Advances one weapon's own timer and fires what it emits this frame.</summary>
+    private void FireWeapon(OwnedWeapon weapon, float elapsedSeconds)
     {
-        var count = Stats.ProjectileCount;
+        switch (weapon.Kind)
+        {
+            case WeaponKind.Laser:
+                foreach (var shot in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
+                    _lasers.AddRange(Volley(weapon, shot));
+                break;
+            case WeaponKind.Lightning:
+                // With nothing to strike, the shot waits rather than being spent, so the next enemy is struck at once.
+                if (!Lightning.HasTarget(_enemies))
+                {
+                    weapon.Charge(elapsedSeconds);
+                    break;
+                }
+                foreach (var _ in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
+                    Lightning.Strike(Ship.Position, weapon.Damage, weapon.Count, weapon.Level, _enemies, _random, _damageEnemy, _lightningSegments);
+                break;
+            case WeaponKind.Orbs:
+                foreach (var (enemy, damage) in weapon.Orbs!.Update(elapsedSeconds, Ship.Position, _enemies))
+                    DamageEnemy(enemy, damage);
+                break;
+            default:
+                throw new InvalidOperationException($"{weapon.Kind} has no firing rule.");
+        }
+    }
+
+    private static IEnumerable<Projectile> Volley(OwnedWeapon laser, ShotPose shot)
+    {
+        var count = laser.Count;
         for (var i = 0; i < count; i++)
         {
             var offset = (i - (count - 1) / 2f) * VolleySpreadRadians;
-            yield return Stats.WeaponPath switch
-            {
-                // A ballista bolt passes through two more enemies than the player's piercing alone allows.
-                WeaponPath.Ballista => new Ballista(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce + 2),
-                WeaponPath.Bola => new Bola(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
-                _ => new Laser(nose, heading + offset, Stats.ProjectileScale, Stats.Pierce),
-            };
+            yield return new Laser(shot.Position, shot.Heading + offset, pierce: laser.Pierce, damage: laser.Damage);
         }
     }
 
     private void ResolveLaserHits()
     {
+        // The laser's level-5 impact explosion follows its current level.
+        var laserLevel = Stats.Find(WeaponKind.Laser)?.Level ?? 0;
         _lasers.RemoveAll(laser =>
         {
             var shape = laser.GetShape();
@@ -280,19 +327,38 @@ public sealed class GameSession
                 if (enemy.IsDead || laser.HasHit(enemy) || !bounds.Reaches(enemy) || !shape.Touches(enemy.GetStrokes()))
                     continue;
 
-                // A bola hit also slows what it hits, unless a shield blocks the hit.
-                enemy.TakeDamage(Stats.Damage, slow: laser is Bola);
-                if (enemy.IsDead)
-                {
-                    Score += PointsPerKill;
-                    _pendingLevelUps += Leveling.Add(enemy.Experience);
-                }
+                // Each projectile deals its own damage, fixed when it was fired.
+                DamageEnemy(enemy, laser.Damage);
+                foreach (var splashed in Laser.GetExplosionTargets(enemy.Position, _enemies, laserLevel, enemy))
+                    DamageEnemy(splashed, laser.Damage);
                 if (laser.RegisterHit(enemy))
                     return true;
             }
             return false;
         });
         _enemies.RemoveAll(enemy => enemy.IsDead);
+    }
+
+    /// <summary>A weapon hit: deals damage to the enemy and credits the kill if this hit is what killed it.</summary>
+    private void DamageEnemy(Enemy enemy, float damage)
+    {
+        var wasAlive = !enemy.IsDead;
+        enemy.TakeDamage(damage);
+        CreditKill(enemy, wasAlive);
+    }
+
+    /// <summary>
+    /// The one place a kill is credited, for every kind of weapon damage (hits, explosions, strikes, hops, orbs,
+    /// the ring and burn): adds the kill's points and experience when the enemy was alive before the damage and is
+    /// dead after it, so damage to an enemy already dead earns nothing and a kill is credited once.
+    /// </summary>
+    private void CreditKill(Enemy enemy, bool wasAlive)
+    {
+        if (wasAlive && enemy.IsDead)
+        {
+            Score += PointsPerKill;
+            _pendingLevelUps += Leveling.Add(enemy.Experience);
+        }
     }
 
     private void ResolveContact()
@@ -328,13 +394,17 @@ public sealed class GameSession
 
     private void OfferNextUpgrade()
     {
-        if (UpgradeOffer is not null || _pendingLevelUps <= 0)
-            return;
+        while (UpgradeOffer is null && _pendingLevelUps > 0)
+        {
+            var offer = Upgrades.Offer(Stats, _random, UpgradeChoices);
+            if (offer.Count > 0)
+            {
+                UpgradeOffer = offer;
+                return;
+            }
 
-        // Rounds are offered oldest first, so this round grants the lowest level still waiting for its cards.
-        var levelGranted = Leveling.Level - _pendingLevelUps + 1;
-        UpgradeOffer = levelGranted == WeaponPathLevel
-            ? Upgrades.WeaponPaths
-            : Upgrades.Offer(Stats, _random, UpgradeChoices);
+            // Nothing left to take: the level is used up without pausing play.
+            _pendingLevelUps--;
+        }
     }
 }

@@ -183,4 +183,58 @@ public class EnemyTests
         Assert.True(Vector2.Distance(sideMidpoint, Start) < 20f / MathF.Sqrt(2f) * 0.75f);
         Assert.True(Collision.ContainsPoint(outline, Start));
     }
+
+    [Fact]
+    public void Burn_for_six_seconds_deals_five_damage_to_ten_hp_enemy()
+    {
+        var enemy = TestEnemies.Stationary(EnemyRoster.AppleIntelligence, Start);
+        Assert.Equal(10f, enemy.HitPoints);
+
+        enemy.ApplyBurn();
+        Assert.True(enemy.IsBurning);
+        Assert.Equal(5f, enemy.BurnSecondsLeft);
+
+        enemy.Update(Vector2.Zero, 6f);
+
+        Assert.Equal(5f, enemy.HitPoints);
+        Assert.Equal(0f, enemy.BurnSecondsLeft);
+        Assert.False(enemy.IsBurning);
+    }
+
+    [Fact]
+    public void Reburn_at_three_seconds_refreshes_burn_to_five_seconds_without_stacking()
+    {
+        var enemy = TestEnemies.Stationary(EnemyRoster.AppleIntelligence, Start);
+        Assert.Equal(10f, enemy.HitPoints);
+
+        enemy.ApplyBurn();
+        enemy.Update(Vector2.Zero, 3f);
+        Assert.Equal(7f, enemy.HitPoints);
+        Assert.Equal(2f, enemy.BurnSecondsLeft, precision: 4);
+
+        enemy.ApplyBurn();
+        Assert.Equal(5f, enemy.BurnSecondsLeft);
+
+        enemy.Update(Vector2.Zero, 5f);
+        Assert.Equal(2f, enemy.HitPoints);
+        Assert.Equal(8f, 10f - enemy.HitPoints);
+        Assert.Equal(0f, enemy.BurnSecondsLeft);
+        Assert.False(enemy.IsBurning);
+    }
+
+    [Fact]
+    public void Burn_does_not_apply_to_shielded_or_dead_enemies()
+    {
+        var boss = TestEnemies.Stationary(EnemyRoster.Bosses[0].Type, Start);
+        Assert.True(boss.IsShielded);
+        boss.ApplyBurn();
+        Assert.False(boss.IsBurning);
+        Assert.Equal(0f, boss.BurnSecondsLeft);
+
+        var deadEnemy = EnemyRoster.HuggingFace.Create(Start);
+        deadEnemy.TakeDamage(10f);
+        Assert.True(deadEnemy.IsDead);
+        deadEnemy.ApplyBurn();
+        Assert.False(deadEnemy.IsBurning);
+    }
 }

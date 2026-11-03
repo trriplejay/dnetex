@@ -308,7 +308,7 @@ public class SurvivorsGame : Game
             _batch.AddThickStroke([topLeft, topRight, topLeft + size, bottomLeft, topLeft], 3f, ToRgb(Color.White));
 
             DrawText($"{i + 1}", new(cardCenter.X, topLeft.Y + 34f), 28f, 3f, ToColor(ShipRendering.Color));
-            DrawText(Upgrades.Title(offer[i]), new(cardCenter.X, cardCenter.Y), 18f, 2f, Color.White);
+            DrawText(Upgrades.Title(offer[i], _session.Stats), new(cardCenter.X, cardCenter.Y), 18f, 2f, Color.White);
             DrawText(Upgrades.Describe(offer[i], _session.Stats), new(cardCenter.X, topLeft.Y + size.Y - 40f), 14f, 2f, Color.White);
         }
 
