@@ -236,6 +236,31 @@ public class SurvivorsGame : Game
                         _batch.AddCircle(orbPos, orbs.OrbRadius, ToRgb(Color.LightCyan));
                 }
             }
+
+            foreach (var disc in _session.Discs)
+                _batch.AddCircle(disc.Position, disc.Radius, ToRgb(Color.Gold));
+
+            foreach (var shard in _session.DiscShards)
+                _batch.AddCircle(shard.Position, DiscShard.Radius, ToRgb(Color.Gold));
+
+            foreach (var mine in _session.Mines)
+            {
+                if (mine.IsArmed)
+                {
+                    _batch.AddCircle(mine.Position, ProximityMines.MineRadius, ToRgb(Color.OrangeRed));
+                    _batch.AddCircle(mine.Position, ProximityMines.MineRadius * 0.4f, ToRgb(Color.Yellow));
+                }
+                else
+                {
+                    _batch.AddThickStroke(CircleOutline(mine.Position, ProximityMines.MineRadius), 1.5f, ToRgb(Color.DimGray));
+                }
+            }
+
+            foreach (var mini in _session.MiniMines)
+                _batch.AddCircle(mini.Position, ProximityMines.MineRadius * 0.5f, ToRgb(Color.Orange));
+
+            foreach (var blast in _session.MineExplosions)
+                _batch.AddThickStroke(CircleOutline(blast.Center, blast.Radius), 2f, ToRgb(Color.OrangeRed));
         }
 
         DrawText(GameClock.Format(_session.ElapsedSeconds), new(center.X, 40f), 32f, 3f, Color.White);
@@ -339,11 +364,14 @@ public class SurvivorsGame : Game
 
     private void DrawUpgradeCards(System.Numerics.Vector2 center, IReadOnlyList<Upgrade> offer)
     {
-        var title = _session.IsStartingPick ? "CHOOSE A WEAPON" : "LEVEL UP";
-        DrawText(title, center + new System.Numerics.Vector2(0, -UpgradeCards.CardSize.Y / 2f - 70f), 40f, 3f, ToColor(ShipRendering.Color));
-
         var corners = UpgradeCards.Layout(center, offer.Count, GraphicsDevice.Viewport.Width);
         var size = UpgradeCards.CardSize;
+        var topY = corners.Count > 0 ? corners.Min(c => c.Y) : center.Y - size.Y / 2f;
+        var bottomY = corners.Count > 0 ? corners.Max(c => c.Y) + size.Y : center.Y + size.Y / 2f;
+
+        var title = _session.IsStartingPick ? "CHOOSE A WEAPON" : "LEVEL UP";
+        DrawText(title, new(center.X, topY - 45f), 40f, 3f, ToColor(ShipRendering.Color));
+
         for (var i = 0; i < offer.Count; i++)
         {
             var topLeft = corners[i];
@@ -356,12 +384,57 @@ public class SurvivorsGame : Game
             _batch.AddPolygon([topLeft, topRight, topLeft + size, bottomLeft, topLeft], ToRgb(Color.Black));
             _batch.AddThickStroke([topLeft, topRight, topLeft + size, bottomLeft, topLeft], 3f, ToRgb(Color.White));
 
-            DrawText($"{i + 1}", new(cardCenter.X, topLeft.Y + 34f), 28f, 3f, ToColor(ShipRendering.Color));
-            DrawText(Upgrades.Title(offer[i], _session.Stats), new(cardCenter.X, cardCenter.Y), 18f, 2f, Color.White);
-            DrawText(Upgrades.Describe(offer[i], _session.Stats), new(cardCenter.X, topLeft.Y + size.Y - 40f), 14f, 2f, Color.White);
+            DrawText($"{i + 1}", new(cardCenter.X, topLeft.Y + 20f), 20f, 2.5f, ToColor(ShipRendering.Color));
+
+            var titleLines = WrapText(Upgrades.Title(offer[i], _session.Stats), 265f, 14f);
+            var titleY = topLeft.Y + 44f;
+            foreach (var tLine in titleLines)
+            {
+                DrawText(tLine, new(cardCenter.X, titleY), 14f, 2f, Color.White);
+                titleY += 17f;
+            }
+
+            var descLines = WrapText(Upgrades.Describe(offer[i], _session.Stats), 265f, 10.5f);
+            var descY = descLines.Count <= 2
+                ? MathF.Max(titleY + 18f, topLeft.Y + 110f)
+                : titleY + 8f;
+            foreach (var dLine in descLines)
+            {
+                DrawText(dLine, new(cardCenter.X, descY), 10.5f, 1.5f, Color.White);
+                descY += 14f;
+            }
         }
 
-        DrawText($"PRESS {CardKeysPrompt(offer.Count)} OR CLICK A CARD", center + new System.Numerics.Vector2(0, size.Y / 2f + 50f), 16f, 2f, Color.White);
+        DrawText($"PRESS {CardKeysPrompt(offer.Count)} OR CLICK A CARD", new(center.X, bottomY + 30f), 16f, 2f, Color.White);
+    }
+
+    private static List<string> WrapText(string text, float maxWidth, float height)
+    {
+        var lines = new List<string>();
+        var paragraphs = text.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        foreach (var paragraph in paragraphs)
+        {
+            var words = paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            var current = "";
+            foreach (var word in words)
+            {
+                var candidate = current.Length == 0 ? word : current + " " + word;
+                if (current.Length > 0 && VectorText.MeasureWidth(candidate, height) > maxWidth)
+                {
+                    lines.Add(current);
+                    current = word;
+                }
+                else
+                {
+                    current = candidate;
+                }
+            }
+
+            if (current.Length > 0)
+                lines.Add(current);
+        }
+
+        return lines;
     }
 
     /// <summary>A closed polyline approximating a circle, for outlines such as the laser explosion radius.</summary>
