@@ -250,6 +250,34 @@ public class PacingTests
         Assert.Contains(session.Bosses[0], session.Enemies);
     }
 
+    [Fact]
+    public void Boss_thrown_minions_are_added_in_full_while_regular_enemy_count_is_at_cap()
+    {
+        var session = new GameSession(Center, new Random(1), roster: [], rings: [],
+            start: new StartOptions(StartSeconds: 179.9f)).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+        session.Stats.Laser().Damage = 0f;
+
+        for (var i = 0; i < GameSession.MaxRegularEnemies; i++)
+            session.AddEnemy(TestEnemies.StationaryGemini(new Vector2(-500, -500)));
+        Assert.Equal(GameSession.MaxRegularEnemies, session.LiveRegularEnemyCount);
+        var seeded = session.Enemies.ToHashSet();
+
+        // The boss arrives, then throws a wave of minions every 3 seconds; none is held back by the cap.
+        for (var i = 0; i < 60 * 4; i++)
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
+
+        Assert.True(session.IsBossActive);
+        var boss = Assert.Single(session.Bosses);
+        // The boss throws one Gemini at the 3 s mark; it is in play although the regular count was already at the cap.
+        var thrown = Assert.Single(session.Enemies, enemy => enemy.Movement is Thrown);
+        Assert.Same(EnemyRoster.Gemini, thrown.Type);
+        Assert.DoesNotContain(thrown, seeded);
+        Assert.True(session.LiveRegularEnemyCount > GameSession.MaxRegularEnemies);
+        Assert.Contains(boss, session.Enemies);
+    }
+
     /// <summary>Stats owning three weapons (the first three kinds), each at level 5.</summary>
     private static PlayerStats MaxedWeapons()
     {
