@@ -130,10 +130,27 @@ public class OrbitingOrbsTests
 
     [Theory]
     [InlineData(0)]
-    [InlineData(6)]
-    public void Levels_outside_1_to_5_are_rejected(int level)
+    [InlineData(21)]
+    public void Levels_outside_1_to_20_are_rejected(int level)
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new OrbitingOrbs(level));
+        var orbs = new OrbitingOrbs(1);
+        Assert.Throws<ArgumentOutOfRangeException>(() => orbs.SetLevel(level));
+    }
+
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(6)]
+    [InlineData(20)]
+    public void Levels_1_to_20_are_accepted(int level)
+    {
+        var orbs = new OrbitingOrbs(level);
+        Assert.Equal(level, orbs.Level);
+
+        var existing = new OrbitingOrbs(1);
+        existing.SetLevel(level);
+        Assert.Equal(level, existing.Level);
     }
 
     [Fact]

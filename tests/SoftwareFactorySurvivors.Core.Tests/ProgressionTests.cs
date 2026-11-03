@@ -291,7 +291,7 @@ public class ProgressionTests
 
     /// <summary>
     /// Across seeded offers every option of the weapon appears, two cards for it in one offer always differ, and once
-    /// it reaches level 5 no card for it is offered (and applying one is refused).
+    /// it reaches level 20 no card for it is offered (and applying one is refused).
     /// </summary>
     private static void AssertAllOptionsOfferedDistinctAndNoneAtLevel5(WeaponKind kind)
     {
@@ -312,20 +312,214 @@ public class ProgressionTests
 
         var maxed = new PlayerStats();
         var weapon = maxed.AddWeapon(kind);
-        maxed.AddWeapon(WeaponKind.Laser);
+        var secondKind = kind == WeaponKind.Laser ? WeaponKind.Lightning : WeaponKind.Laser;
+        maxed.AddWeapon(secondKind);
         var options = Upgrades.OptionsFor(kind);
-        for (var i = 0; i < OwnedWeapon.MaxLevel - 1; i++)
+
+        for (var l = 1; l < OwnedWeapon.MaxLevel; l++)
         {
-            Assert.False(weapon.IsFinale);
-            Upgrades.Apply(Upgrade.ForWeapon(kind, options[i % options.Count]), maxed);
+            var option = options[(l - 1) % options.Count];
+            var card = Upgrade.ForWeapon(kind, option);
+
+            // At every level below 20 it asserts the card is among the options
+            var eligible = Upgrades.Eligible(maxed);
+            Assert.Contains(card, eligible);
+
+            var statBefore = GetWeaponOptionStat(weapon, option);
+            var step = GetWeaponOptionStep(option);
+
+            Upgrades.Apply(card, maxed);
+
+            // After applying it asserts Level == L+1 and the stat equals the per-level formula
+            Assert.Equal(l + 1, weapon.Level);
+            var statAfter = GetWeaponOptionStat(weapon, option);
+            Assert.Equal(statBefore + step, statAfter, precision: 3);
+
+            if (l == 5)
+            {
+                // Explicit assert at 5->6
+                Assert.Equal(5, l);
+                Assert.Equal(6, weapon.Level);
+            }
+            if (l == 19)
+            {
+                // Explicit assert at 19->20
+                Assert.Equal(19, l);
+                Assert.Equal(20, weapon.Level);
+                Assert.Equal(OwnedWeapon.MaxLevel, weapon.Level);
+            }
         }
+
         Assert.Equal(OwnedWeapon.MaxLevel, weapon.Level);
-        Assert.True(weapon.IsFinale);
         for (var seed = 0; seed < 300; seed++)
             Assert.DoesNotContain(Upgrades.Offer(maxed, new Random(seed), GameSession.UpgradeChoices), card => card.Weapon == kind);
         Assert.DoesNotContain(Upgrades.Eligible(maxed), card => card.Weapon == kind);
-        Assert.Throws<InvalidOperationException>(() => Upgrades.Apply(Upgrade.ForWeapon(kind, options[0]), maxed));
+        var ex = Assert.Throws<InvalidOperationException>(() => Upgrades.Apply(Upgrade.ForWeapon(kind, options[0]), maxed));
+        Assert.Contains("20", ex.Message);
     }
+
+    [Theory]
+    [InlineData(WeaponKind.Laser)]
+    [InlineData(WeaponKind.Lightning)]
+    [InlineData(WeaponKind.Orbs)]
+    [InlineData(WeaponKind.RicochetDisc)]
+    [InlineData(WeaponKind.ProximityMines)]
+    public void For_every_weapon_kind_ship_is_offered_upgrades_up_to_level_20_and_applies_standard_step(WeaponKind kind)
+    {
+        AssertAllOptionsOfferedDistinctAndNoneAtLevel5(kind);
+    }
+
+    [Fact]
+    public void Weapon_card_titles_show_levels_up_to_level_19_to_20()
+    {
+        var stats = new PlayerStats();
+        stats.AddWeapon(WeaponKind.Laser);
+        var laser = stats.Laser();
+
+        var toTwo = Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage);
+        Assert.Equal("LASER LV 1 > 2", Upgrades.Title(toTwo, stats));
+
+        while (laser.Level < 5)
+            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage), stats);
+        Assert.Equal(5, laser.Level);
+        var toSix = Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage);
+        Assert.Equal("LASER LV 5 > 6", Upgrades.Title(toSix, stats));
+
+        while (laser.Level < 19)
+            Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage), stats);
+        Assert.Equal(19, laser.Level);
+        var toTwenty = Upgrade.ForWeapon(WeaponKind.Laser, WeaponOption.LaserDamage);
+        Assert.Equal("LASER LV 19 > 20", Upgrades.Title(toTwenty, stats));
+    }
+
+    [Fact]
+    public void When_all_three_weapon_and_three_enhancement_slots_are_filled_only_upgrades_are_offered()
+    {
+        var stats = new PlayerStats();
+        stats.AddWeapon(WeaponKind.Laser);
+        stats.AddWeapon(WeaponKind.Lightning);
+        stats.AddWeapon(WeaponKind.Orbs);
+
+        stats.AddEnhancement(ShipEnhancements.MoveSpeed);
+        stats.AddEnhancement(ShipEnhancements.Health);
+        stats.AddEnhancement(ShipEnhancements.Shield);
+
+        // All 3 weapons and 3 enhancements owned below level 20
+        Assert.Equal(3, stats.Weapons.Count);
+        Assert.Equal(3, stats.Enhancements.Count);
+        Assert.All(stats.Weapons, w => Assert.True(w.Level < OwnedWeapon.MaxLevel));
+        Assert.All(stats.Enhancements, e => Assert.True(e.Level < OwnedEnhancement.MaxLevel));
+
+        var eligible = Upgrades.Eligible(stats);
+        Assert.NotEmpty(eligible);
+        Assert.DoesNotContain(eligible, card => card.Kind == UpgradeKind.NewWeapon);
+        Assert.DoesNotContain(eligible, card => card.Kind == UpgradeKind.NewEnhancement);
+        Assert.All(eligible, card => Assert.True(card.Kind is UpgradeKind.WeaponUpgrade or UpgradeKind.EnhancementUpgrade));
+
+        for (var seed = 0; seed < 100; seed++)
+        {
+            var offer = Upgrades.Offer(stats, new Random(seed), GameSession.UpgradeChoices);
+            Assert.NotEmpty(offer);
+            Assert.DoesNotContain(offer, card => card.Kind == UpgradeKind.NewWeapon);
+            Assert.DoesNotContain(offer, card => card.Kind == UpgradeKind.NewEnhancement);
+            Assert.All(offer, card => Assert.True(card.Kind is UpgradeKind.WeaponUpgrade or UpgradeKind.EnhancementUpgrade));
+        }
+    }
+
+    [Fact]
+    public void When_every_owned_weapon_and_enhancement_is_at_level_20_no_cards_offered_and_apply_refused()
+    {
+        var stats = new PlayerStats();
+        foreach (var kind in Upgrades.AllWeapons.Take(PlayerStats.MaxWeapons))
+            stats.AddWeapon(kind);
+        foreach (var enhancement in ShipEnhancements.All.Take(PlayerStats.MaxEnhancements))
+            stats.AddEnhancement(enhancement);
+
+        foreach (var weapon in stats.Weapons)
+        {
+            while (weapon.Level < OwnedWeapon.MaxLevel)
+                Upgrades.Apply(Upgrade.ForWeapon(weapon.Kind, Upgrades.OptionsFor(weapon.Kind)[0]), stats);
+            Assert.Equal(20, weapon.Level);
+        }
+
+        foreach (var enhancement in stats.Enhancements)
+        {
+            while (enhancement.Level < OwnedEnhancement.MaxLevel)
+                Upgrades.Apply(Upgrade.ForEnhancement(enhancement.Definition), stats);
+            Assert.Equal(20, enhancement.Level);
+        }
+
+        var eligible = Upgrades.Eligible(stats);
+        Assert.Empty(eligible);
+
+        for (var seed = 0; seed < 100; seed++)
+        {
+            var offer = Upgrades.Offer(stats, new Random(seed), GameSession.UpgradeChoices);
+            Assert.Empty(offer);
+        }
+
+        foreach (var weapon in stats.Weapons)
+        {
+            var card = Upgrade.ForWeapon(weapon.Kind, Upgrades.OptionsFor(weapon.Kind)[0]);
+            var ex = Assert.Throws<InvalidOperationException>(() => Upgrades.Apply(card, stats));
+            Assert.Contains("20", ex.Message);
+            Assert.Equal(20, weapon.Level);
+        }
+
+        foreach (var enhancement in stats.Enhancements)
+        {
+            var card = Upgrade.ForEnhancement(enhancement.Definition);
+            var ex = Assert.Throws<InvalidOperationException>(() => Upgrades.Apply(card, stats));
+            Assert.Contains("20", ex.Message);
+            Assert.Equal(20, enhancement.Level);
+        }
+    }
+
+    private static float GetWeaponOptionStat(OwnedWeapon weapon, WeaponOption option) => option switch
+    {
+        WeaponOption.LaserProjectile => weapon.Count,
+        WeaponOption.LaserDamage => weapon.Damage,
+        WeaponOption.LaserAttackSpeed => weapon.AttacksPerSecond,
+        WeaponOption.LightningDamage => weapon.Damage,
+        WeaponOption.LightningAttackSpeed => weapon.AttacksPerSecond,
+        WeaponOption.LightningChain => weapon.Count,
+        WeaponOption.OrbsCount => weapon.Count,
+        WeaponOption.OrbsSpeedAndOrbit => weapon.Orbs?.OrbitRadius ?? 0f,
+        WeaponOption.OrbsRadius => weapon.Orbs?.OrbRadius ?? 0f,
+        WeaponOption.OrbsDamage => weapon.Damage,
+        WeaponOption.DiscCount => weapon.Count,
+        WeaponOption.DiscDamage => weapon.Damage,
+        WeaponOption.DiscAttackSpeed => weapon.AttacksPerSecond,
+        WeaponOption.DiscSize => weapon.SizeScale,
+        WeaponOption.MinesDamage => weapon.Damage,
+        WeaponOption.MinesBlastRadius => weapon.BlastRadius,
+        WeaponOption.MinesDropRate => weapon.AttacksPerSecond,
+        WeaponOption.MinesPerDrop => weapon.Count,
+        _ => throw new ArgumentOutOfRangeException(nameof(option)),
+    };
+
+    private static float GetWeaponOptionStep(WeaponOption option) => option switch
+    {
+        WeaponOption.LaserProjectile => 1f,
+        WeaponOption.LaserDamage => Upgrades.LaserDamageStep,
+        WeaponOption.LaserAttackSpeed => Upgrades.LaserAttackSpeedStep,
+        WeaponOption.LightningDamage => Upgrades.LightningDamageStep,
+        WeaponOption.LightningAttackSpeed => Upgrades.LightningAttackSpeedStep,
+        WeaponOption.LightningChain => 1f,
+        WeaponOption.OrbsCount => OrbitingOrbs.UpgradeOrbCountStep,
+        WeaponOption.OrbsSpeedAndOrbit => OrbitingOrbs.UpgradeOrbitRadiusStep,
+        WeaponOption.OrbsRadius => OrbitingOrbs.UpgradeOrbRadiusStep,
+        WeaponOption.OrbsDamage => OrbitingOrbs.UpgradeDamageStep,
+        WeaponOption.DiscCount => 1f,
+        WeaponOption.DiscDamage => Upgrades.DiscDamageStep,
+        WeaponOption.DiscAttackSpeed => Upgrades.DiscAttackSpeedStep,
+        WeaponOption.DiscSize => Upgrades.DiscSizeStep,
+        WeaponOption.MinesDamage => Upgrades.MinesDamageStep,
+        WeaponOption.MinesBlastRadius => Upgrades.MinesBlastRadiusStep,
+        WeaponOption.MinesDropRate => Upgrades.MinesDropRateStep,
+        WeaponOption.MinesPerDrop => 1f,
+        _ => throw new ArgumentOutOfRangeException(nameof(option)),
+    };
 
     [Fact]
     public void Killing_enough_enemies_pauses_play_until_an_upgrade_is_chosen()

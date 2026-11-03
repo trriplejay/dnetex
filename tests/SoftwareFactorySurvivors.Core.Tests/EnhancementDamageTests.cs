@@ -208,7 +208,7 @@ public class EnhancementDamageTests
     {
         Assert.Equal("+20% MOVE SPEED", ShipEnhancements.CardDescription(ShipEnhancements.MoveSpeed, 2));
         Assert.Equal("+60 MAX HP", ShipEnhancements.CardDescription(ShipEnhancements.Health, 3));
-        Assert.Equal("20 SHIELD, REFILLS 7 S AFTER BREAKING", ShipEnhancements.CardDescription(ShipEnhancements.Shield, 4));
+        Assert.Equal("20 SHIELD, REFILLS 8.5 S AFTER BREAKING", ShipEnhancements.CardDescription(ShipEnhancements.Shield, 4));
         Assert.Equal("-2 DAMAGE PER HIT, NEVER BELOW 1", ShipEnhancements.CardDescription(ShipEnhancements.Armor, 2));
         foreach (var enhancement in ShipEnhancements.All)
         {
@@ -218,7 +218,7 @@ public class EnhancementDamageTests
             // Every character is one the vector font can draw.
             VectorText.GetStrokes(top, Vector2.Zero, 10f);
         }
-        Assert.Throws<ArgumentOutOfRangeException>(() => ShipEnhancements.CardDescription(ShipEnhancements.Armor, 6));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ShipEnhancements.CardDescription(ShipEnhancements.Armor, 21));
         Assert.Throws<ArgumentException>(() => ShipEnhancements.CardDescription(new Enhancement("OTHER", "X"), 1));
     }
 
@@ -233,7 +233,10 @@ public class EnhancementDamageTests
         Assert.Equal(25f, ShipEnhancements.ShieldExplosionDamage);
         Assert.Equal(2f, ShipEnhancements.SecondWindSeconds);
         Assert.Equal(5f, ShipEnhancements.RegenBoostSeconds);
-        Assert.Equal([10f, 9f, 8f, 7f, 5f], Enumerable.Range(1, 5).Select(ShipEnhancements.ShieldRechargeSeconds));
+        var expectedDelays = Enumerable.Range(1, 20).Select(l => 10f - 0.5f * (l - 1)).ToArray();
+        Assert.Equal(expectedDelays, Enumerable.Range(1, 20).Select(ShipEnhancements.ShieldRechargeSeconds));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ShipEnhancements.ShieldRechargeSeconds(0));
+        Assert.Throws<ArgumentOutOfRangeException>(() => ShipEnhancements.ShieldRechargeSeconds(21));
         Assert.Equal([5f, 10f, 15f, 20f, 25f], Enumerable.Range(1, 5).Select(ShipEnhancements.ShieldCapacity));
         Assert.Equal([20f, 40f, 60f, 80f, 100f], Enumerable.Range(1, 5).Select(ShipEnhancements.HealthBonus));
         Assert.Equal([1f, 2f, 3f, 4f, 5f], Enumerable.Range(1, 5).Select(ShipEnhancements.ArmorReduction));

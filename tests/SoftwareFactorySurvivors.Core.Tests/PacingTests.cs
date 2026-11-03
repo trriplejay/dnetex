@@ -278,7 +278,7 @@ public class PacingTests
         Assert.Contains(boss, session.Enemies);
     }
 
-    /// <summary>Stats owning three weapons (the first three kinds), each at level 5.</summary>
+    /// <summary>Stats owning three weapons (the first three kinds), each at level 20.</summary>
     private static PlayerStats MaxedWeapons()
     {
         var stats = new PlayerStats();

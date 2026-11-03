@@ -25,7 +25,7 @@ Enemies are white line-art logos of AI companies, each with its own hit points, 
 
 Kills give experience; level *n* needs max(1, round(2.0 × *n*^1.25)) experience (2, 5, 8, 11, 15 …). Each level pauses the game and offers three random upgrade cards; the one you pick lasts for the rest of the game:
 
-Each weapon the ship owns (up to 3) has its own level, damage, attack speed and count, and fires on its own timer; an upgrade to one weapon leaves the others unchanged. Every game opens on a pick of the starting weapon (Laser, Lightning, Orbs, Ricochet Disc or Proximity Mines). After that, a level-up offers up to three different cards: a new weapon (while a weapon slot is free), or one option for a weapon you own below level 5, which raises that weapon one level (shown as `LV n > n+1`). A level with no card left to offer is used up without pausing.
+Each weapon the ship owns (up to 3) has its own level, damage, attack speed and count, and fires on its own timer; an upgrade to one weapon leaves the others unchanged. Every game opens on a pick of the starting weapon (Laser, Lightning, Orbs, Ricochet Disc or Proximity Mines). After that, a level-up offers up to three different cards: a new weapon (while a weapon slot is free), or one option for a weapon you own below level 20, which raises that weapon one level (shown as `LV n > n+1`). A level with no card left to offer is used up without pausing.
 
 | Weapon | Options per upgrade card |
 |---|---|

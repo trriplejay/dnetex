@@ -14,7 +14,7 @@ public sealed class OrbitingOrbs
     public const float DefaultDamage = 1f;
     public const float OrbHitCooldown = 0.5f; // seconds per enemy
     public const float RingContactSeconds = 1.0f; // contact needed per ring hit
-    public const int MaxLevel = 5;
+    public const int MaxLevel = 20;
 
     // Upgrade options increments:
     public const int UpgradeOrbCountStep = 1;
@@ -40,7 +40,7 @@ public sealed class OrbitingOrbs
     public float Angle { get; private set; }
 
     /// <summary>True at the maximum level, where the orbs become a solid ring band.</summary>
-    public bool IsRingMode => Level >= MaxLevel;
+    public bool IsRingMode => Level >= 5;
 
     /// <summary>Outer radius of the level 5 ring band.</summary>
     public float RingOuterRadius => OrbitRadius + OrbRadius;
@@ -53,7 +53,7 @@ public sealed class OrbitingOrbs
         SetLevel(level);
     }
 
-    /// <summary>Configures the weapon level (1-5); a level change forgets every running cooldown and contact timer.</summary>
+    /// <summary>Configures the weapon level (1-20); a level change forgets every running cooldown and contact timer.</summary>
     public void SetLevel(int level)
     {
         if (level < 1 || level > MaxLevel)

@@ -28,7 +28,7 @@ public static class ShipEnhancements
     public static IReadOnlyList<Enhancement> All { get; } = [MoveSpeed, Health, Shield, Armor, Regeneration];
 
     /// <summary>The level at which an enhancement's special bonus switches on.</summary>
-    public const int BonusLevel = OwnedEnhancement.MaxLevel;
+    public const int BonusLevel = 5;
 
     // ---- Move Speed ----
 
@@ -57,8 +57,12 @@ public static class ShipEnhancements
     /// <summary>Shield points each Shield level holds.</summary>
     public const float ShieldCapacityPerLevel = 5f;
 
-    // Seconds a broken shield waits before refilling, for levels 1-5.
-    private static readonly float[] ShieldRechargeDelays = [10f, 9f, 8f, 7f, 5f];
+    // Seconds a broken shield waits before refilling, for levels 1-20: 10 - 0.5*(level-1).
+    private static readonly float[] ShieldRechargeDelays =
+    [
+        10.0f, 9.5f, 9.0f, 8.5f, 8.0f, 7.5f, 7.0f, 6.5f, 6.0f, 5.5f,
+        5.0f, 4.5f, 4.0f, 3.5f, 3.0f, 2.5f, 2.0f, 1.5f, 1.0f, 0.5f,
+    ];
 
     /// <summary>Radius around the ship of a level-5 shield's blast when it breaks.</summary>
     public const float ShieldExplosionRadius = 300f;
@@ -108,8 +112,8 @@ public static class ShipEnhancements
     /// <summary>Shield points held at a Shield level: 5 × level.</summary>
     public static float ShieldCapacity(int level) => ShieldCapacityPerLevel * CheckLevel(level);
 
-    /// <summary>Seconds a broken shield waits before refilling at a Shield level 1-5: 10, 9, 8, 7, 5.</summary>
-    /// <exception cref="ArgumentOutOfRangeException">The level is not 1-5.</exception>
+    /// <summary>Seconds a broken shield waits before refilling at a Shield level 1-20: 10 - 0.5*(level-1).</summary>
+    /// <exception cref="ArgumentOutOfRangeException">The level is not 1-20.</exception>
     public static float ShieldRechargeSeconds(int level) =>
         level is >= 1 and <= OwnedEnhancement.MaxLevel
             ? ShieldRechargeDelays[level - 1]
@@ -152,7 +156,7 @@ public static class ShipEnhancements
             return Invariant($"+{HealthBonus(level):0} MAX HP")
                 + (bonus ? Invariant($". LV5 SECOND WIND: ONCE PER RUN A FATAL HIT LEAVES {SecondWindHitPoints:0} HP AND {SecondWindSeconds:0} S UNTOUCHABLE") : "");
         if (enhancement == Shield)
-            return Invariant($"{ShieldCapacity(level):0} SHIELD, REFILLS {ShieldRechargeSeconds(level):0} S AFTER BREAKING")
+            return Invariant($"{ShieldCapacity(level):0} SHIELD, REFILLS {ShieldRechargeSeconds(level):0.#} S AFTER BREAKING")
                 + (bonus ? Invariant($". LV5: BREAKING DEALS {ShieldExplosionDamage:0} DAMAGE WITHIN {ShieldExplosionRadius:0} PX") : "");
         if (enhancement == Armor)
             return Invariant($"-{ArmorReduction(level):0} DAMAGE PER HIT, NEVER BELOW {ArmorMinimumDamage:0}")
