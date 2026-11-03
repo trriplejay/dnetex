@@ -633,12 +633,10 @@ public sealed class GameSession
         var shieldLevel = ShipEnhancements.LevelOf(Stats, ShipEnhancements.Shield);
         if (shieldLevel == 0)
             return damage;
+        // A broken shield absorbs nothing, and a hit leaves its running wait alone: the wait starts on the break
+        // and runs out even while the ship stays under contact.
         if (Stats.ShieldPoints <= 0f)
-        {
-            // A hit on a broken shield starts its wait over.
-            _shieldRechargeTimer = ShipEnhancements.ShieldRechargeSeconds(shieldLevel);
             return damage;
-        }
 
         var absorbed = MathF.Min(Stats.ShieldPoints, damage);
         Stats.ShieldPoints -= absorbed;

@@ -126,20 +126,54 @@ public class ShipEnhancementTests
     }
 
     [Fact]
-    public void A_hit_on_a_broken_shield_restarts_its_wait_and_a_level_gained_refills_it()
+    public void A_broken_shield_refills_after_its_delay_under_continuous_contact_and_a_level_gained_refills_it()
     {
         var session = QuietSessionWith((ShipEnhancements.Shield, 1));
+        // Enough HP to stay alive through 10 s of ticks.
+        session.Stats.MaxHitPoints = 1_000f;
+        session.Stats.HitPoints = 1_000f;
         var toucher = TestEnemies.Stationary(EnemyRoster.Gemini with { HitPoints = 1_000_000f, ContactDamage = 8f }, Center);
         session.AddEnemy(toucher);
         Step(session);
         Assert.Equal(0f, session.Stats.ShieldPoints);
-
-        // Still touching: the next tick lands 0.5 s later and the 10 s wait starts again from there.
-        Step(session, GameSession.ContactTickSeconds);
         Assert.Equal(10f, session.ShieldRechargeSecondsLeft);
-        toucher.TakeDamage(float.MaxValue);
-        Step(session, 9.9f);
+
+        // Still touching: the ticks that land on the broken shield do not restart its wait.
+        Step(session, GameSession.ContactTickSeconds);
+        Assert.Equal(9.5f, session.ShieldRechargeSecondsLeft, precision: 3);
+
+        // Contact goes on, frame by frame; the shield is still broken just before 10 s after the break...
+        var sinceBreak = GameSession.ContactTickSeconds;
+        while (sinceBreak < 9.9f)
+        {
+            Step(session);
+            sinceBreak += Frame;
+        }
         Assert.Equal(0f, session.Stats.ShieldPoints);
+        Assert.True(session.ShieldRechargeSecondsLeft is > 0f and < 0.2f,
+            $"Wait left {session.ShieldRechargeSecondsLeft} s is not about to run out");
+
+        // ...and refills to capacity once the 10 s run out, though the enemy never stopped touching. A tick due on
+        // the refill frame may empty it again at once; that fresh break starts a fresh 10 s wait, proving the refill.
+        var refilled = false;
+        for (var i = 0; i < 20 && !refilled; i++)
+        {
+            var hitPointsBefore = session.Stats.HitPoints;
+            Step(session);
+            refilled = session.Stats.ShieldPoints > 0f || session.ShieldRechargeSecondsLeft > 9f;
+            if (refilled && session.Stats.ShieldPoints <= 0f)
+                // The refilled 5 points took 5 of the clock-scaled 8-point tick; only the rest reached HP.
+                Assert.Equal(EnemyRoster.ScaledContactDamage(8f, session.ElapsedSeconds) - 5f,
+                    hitPointsBefore - session.Stats.HitPoints, precision: 2);
+        }
+        Assert.True(refilled, "A continuously touched shield never refilled");
+        Assert.False(session.IsGameOver);
+
+        // Break it (again, if needed) and stop touching for the next part.
+        while (session.Stats.ShieldPoints > 0f && !session.IsGameOver)
+            Step(session);
+        Assert.Equal(0f, session.Stats.ShieldPoints);
+        toucher.TakeDamage(float.MaxValue);
 
         // Levelling the broken shield fills it to its new capacity at once.
         Upgrades.Apply(Upgrade.ForEnhancement(ShipEnhancements.Shield), session.Stats);
