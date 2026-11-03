@@ -129,6 +129,10 @@ public class SurvivorsGame : Game
         {
             StartSession();
         }
+        else if (!_session.IsChoosingUpgrade && !_session.IsFinished && Pressed(Keys.Space))
+        {
+            _session.RequestBlink();
+        }
 
         _previousKeyboard = keyboard;
 
@@ -165,6 +169,8 @@ public class SurvivorsGame : Game
             {
                 foreach (var stroke in _session.Ship.GetStrokes())
                     _batch.AddThickStroke(stroke, ShipRendering.StrokeWidth, ShipRendering.Color);
+                if (_session.ShieldPoints > 0f)
+                    _batch.AddThickStroke(CircleOutline(_session.Ship.Position, 24f), 1.5f, ToRgb(Color.LightCyan));
             }
 
             foreach (var hazard in _session.Hazards)
@@ -319,12 +325,42 @@ public class SurvivorsGame : Game
 
         DrawTextLeft($"HP {stats.DisplayHitPoints}/{stats.DisplayMaxHitPoints}", new(left, 96f), 16f, 2f, Color.White);
 
-        var weaponY = 124f;
+        var statusY = 120f;
+        var shieldLevel = ShipEnhancements.LevelOf(stats, ShipEnhancements.Shield);
+        if (shieldLevel > 0)
+        {
+            var shieldText = stats.ShieldPoints > 0f
+                ? $"SHIELD {(int)MathF.Ceiling(stats.ShieldPoints)}/{(int)MathF.Ceiling(stats.ShieldCapacity)}"
+                : $"SHIELD RECHARGING {(int)MathF.Ceiling(_session.ShieldRechargeSecondsLeft)}s";
+            DrawTextLeft(shieldText, new(left, statusY), 14f, 2f, Color.LightCyan);
+            statusY += 22f;
+        }
+
+        foreach (var enhancement in stats.Enhancements)
+        {
+            string enhancementText;
+            if (enhancement.Definition == ShipEnhancements.Regeneration)
+            {
+                var rate = ShipEnhancements.RegenPerReadout(enhancement.Level);
+                if (_session.RegenBoostSecondsLeft > 0f)
+                    rate *= ShipEnhancements.RegenBoostMultiplier;
+                enhancementText = $"REGEN LV {enhancement.Level} +{rate:0.##} HP/5s";
+            }
+            else
+            {
+                enhancementText = $"{enhancement.Definition.Name} LV {enhancement.Level}";
+            }
+
+            DrawTextLeft(enhancementText, new(left, statusY), 12f, 2f, Color.White);
+            statusY += 18f;
+        }
+
+        statusY += 6f;
         foreach (var weapon in stats.Weapons)
         {
             var weaponText = $"{Upgrades.WeaponName(weapon.Kind)} LV {weapon.Level}";
-            DrawTextLeft(weaponText, new(left, weaponY), 12f, 2f, Color.White);
-            weaponY += 20f;
+            DrawTextLeft(weaponText, new(left, statusY), 12f, 2f, Color.White);
+            statusY += 18f;
         }
     }
 

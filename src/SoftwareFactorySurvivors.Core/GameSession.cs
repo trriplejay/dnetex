@@ -191,6 +191,9 @@ public sealed class GameSession
     /// <summary>Seconds until the next blink is accepted; 0 when one can go now.</summary>
     public float BlinkCooldownSecondsLeft => _blinkCooldownLeft;
 
+    /// <summary>Seconds left on the level-5 regeneration boost after a hit; 0 when inactive.</summary>
+    public float RegenBoostSecondsLeft => _regenBoostSecondsLeft;
+
     /// <summary>
     /// Asks for one blink (e.g. on a Space press). The next Update moves the ship ShipEnhancements.BlinkDistance
     /// along Forward, clamped to the play area, but only at Move Speed level 5 and once
