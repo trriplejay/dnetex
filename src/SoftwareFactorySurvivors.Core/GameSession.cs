@@ -47,6 +47,9 @@ public sealed class GameSession
     private readonly List<Enemy> _enemySnapshot = [];
     private readonly List<LightningSegment> _lightningSegments = [];
     private readonly List<Vector2> _laserExplosions = [];
+    private readonly List<RicochetDisc> _discs = [];
+    private readonly List<DiscShard> _discShards = [];
+    private readonly ProximityMines _mines = new();
     private readonly Action<Enemy, float> _damageEnemy;
     // Seconds until each touching source (enemy or hazard) deals its next tick; a source not touching has no entry.
     // Two maps swapped each frame, so a source that stops touching drops its timer without a per-frame allocation.
@@ -107,6 +110,21 @@ public sealed class GameSession
 
     /// <summary>Impact points of level-5 laser explosions this frame (radius is <see cref="Laser.ExplosionRadius"/>); cleared at the start of every played frame.</summary>
     public IReadOnlyList<Vector2> LaserExplosions => _laserExplosions;
+
+    /// <summary>Ricochet Discs in flight, out or back (position, radius, leg).</summary>
+    public IReadOnlyList<RicochetDisc> Discs => _discs;
+
+    /// <summary>Shards from level-5 discs (SHATTER) still flying.</summary>
+    public IReadOnlyList<DiscShard> DiscShards => _discShards;
+
+    /// <summary>Proximity Mines lying in play, oldest first (position, armed).</summary>
+    public IReadOnlyList<Mine> Mines => _mines.Mines;
+
+    /// <summary>Level-5 mini-mines (CLUSTER) waiting for their fuse.</summary>
+    public IReadOnlyList<MiniMine> MiniMines => _mines.MiniMines;
+
+    /// <summary>Mine and mini-mine explosions this frame (centre, blast radius); cleared at the start of every played frame's hit pass.</summary>
+    public IReadOnlyList<Circle> MineExplosions => _mines.Explosions;
 
     /// <summary>Bosses currently alive. While there are any, the regular spawner is paused.</summary>
     public IReadOnlyList<Enemy> Bosses => _bosses;
@@ -183,6 +201,11 @@ public sealed class GameSession
 
         foreach (var laser in _lasers)
             laser.Update(elapsedSeconds);
+        // Shards burst this frame start flying next frame, like a freshly fired laser.
+        foreach (var shard in _discShards)
+            shard.Update(elapsedSeconds);
+        foreach (var disc in _discs)
+            disc.Update(elapsedSeconds, Ship.Position, _discShards);
         _lightningSegments.Clear();
         _laserExplosions.Clear();
         foreach (var weapon in Stats.Weapons)
@@ -228,7 +251,7 @@ public sealed class GameSession
                 AddHazards(abilityProds.TakeHazards());
         }
 
-        ResolveLaserHits();
+        ResolveWeaponHits(elapsedSeconds);
         // A boss can respawn its shield when a hit moves it into a new phase.
         foreach (var enemy in SnapshotEnemies())
             _enemies.AddRange(enemy.TakeNewShields());
@@ -317,6 +340,14 @@ public sealed class GameSession
                 foreach (var (enemy, damage) in weapon.Orbs!.Update(elapsedSeconds, Ship.Position, _enemies))
                     DamageEnemy(enemy, damage);
                 break;
+            case WeaponKind.RicochetDisc:
+                foreach (var _ in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
+                    _discs.AddRange(RicochetDisc.Throw(weapon, Ship.Position, Ship.Forward, _enemies));
+                break;
+            case WeaponKind.ProximityMines:
+                foreach (var _ in weapon.Fire(elapsedSeconds, Ship.Nose, Ship.Heading))
+                    _mines.Drop(weapon, weapon.MineDropPositions(Ship.Position, _random));
+                break;
             default:
                 throw new InvalidOperationException($"{weapon.Kind} has no firing rule.");
         }
@@ -332,7 +363,7 @@ public sealed class GameSession
         }
     }
 
-    private void ResolveLaserHits()
+    private void ResolveWeaponHits(float elapsedSeconds)
     {
         // The laser's level-5 impact explosion follows its current level.
         var laserLevel = Stats.Find(WeaponKind.Laser)?.Level ?? 0;
@@ -357,7 +388,23 @@ public sealed class GameSession
             }
             return false;
         });
+        ResolveDiscAndMineHits(elapsedSeconds);
         _enemies.RemoveAll(enemy => enemy.IsDead);
+    }
+
+    /// <summary>
+    /// Disc, shard, mine and mini-mine damage, all dealt through DamageEnemy so each kill is credited once; each
+    /// skips enemies already dead, so overlapping blasts never credit a kill twice.
+    /// </summary>
+    private void ResolveDiscAndMineHits(float elapsedSeconds)
+    {
+        foreach (var disc in _discs)
+            disc.Strike(_enemies, _damageEnemy);
+        _discs.RemoveAll(disc => disc.IsCaught);
+        foreach (var shard in _discShards)
+            shard.Strike(_enemies, _damageEnemy);
+        _discShards.RemoveAll(shard => shard.IsGone);
+        _mines.Update(elapsedSeconds, _enemies, _damageEnemy);
     }
 
     /// <summary>A weapon hit: deals damage to the enemy and credits the kill if this hit is what killed it.</summary>

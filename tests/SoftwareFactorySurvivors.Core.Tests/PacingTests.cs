@@ -97,11 +97,11 @@ public class PacingTests
         Assert.Equal(1f, session.ElapsedSeconds);
     }
 
-    /// <summary>Stats owning all three weapons, each at level 5.</summary>
+    /// <summary>Stats owning three weapons (the first three kinds), each at level 5.</summary>
     private static PlayerStats MaxedWeapons()
     {
         var stats = new PlayerStats();
-        foreach (var kind in Upgrades.AllWeapons)
+        foreach (var kind in Upgrades.AllWeapons.Take(PlayerStats.MaxWeapons))
         {
             var weapon = stats.AddWeapon(kind);
             while (weapon.Level < OwnedWeapon.MaxLevel)

@@ -121,17 +121,211 @@ public class ProgressionTests
         Assert.Equal("LIGHTNING", Upgrades.Title(lightning, stats));
         Assert.Contains("NEW", Upgrades.Describe(lightning, stats));
 
-        // Every option of every weapon has card text the vector font can draw.
-        var all = new PlayerStats();
-        foreach (var kind in Upgrades.AllWeapons)
-            all.AddWeapon(kind);
-        foreach (var card in Upgrades.Eligible(all))
+        // Every option of every weapon has card text the vector font can draw (three weapons per ship, all five covered).
+        foreach (var kinds in Upgrades.AllWeapons.Chunk(PlayerStats.MaxWeapons))
         {
-            var cardText = $"{Upgrades.Title(card, all)} {Upgrades.Describe(card, all)}";
-            Assert.Contains(Upgrades.WeaponName(card.Weapon!.Value), cardText);
-            Assert.Contains("LV 1 > 2", cardText);
-            Assert.NotEmpty(VectorText.GetStrokes(cardText, Vector2.Zero, 10f));
+            var all = new PlayerStats();
+            foreach (var kind in kinds)
+                all.AddWeapon(kind);
+            foreach (var card in Upgrades.Eligible(all).Where(card => card.Kind == UpgradeKind.WeaponUpgrade))
+            {
+                var cardText = $"{Upgrades.Title(card, all)} {Upgrades.Describe(card, all)}";
+                Assert.Contains(Upgrades.WeaponName(card.Weapon!.Value), cardText);
+                Assert.Contains("LV 1 > 2", cardText);
+                Assert.NotEmpty(VectorText.GetStrokes(cardText, Vector2.Zero, 10f));
+            }
         }
+        foreach (var kind in Upgrades.AllWeapons)
+        {
+            var card = Upgrade.NewWeapon(kind);
+            Assert.NotEmpty(VectorText.GetStrokes($"{Upgrades.Title(card, stats)} {Upgrades.Describe(card, stats)}", Vector2.Zero, 10f));
+        }
+    }
+
+    [Fact]
+    public void Ricochet_disc_and_proximity_mines_new_weapon_cards_carry_their_exact_title_and_description()
+    {
+        var stats = new PlayerStats();
+        var disc = Upgrade.NewWeapon(WeaponKind.RicochetDisc);
+        var mines = Upgrade.NewWeapon(WeaponKind.ProximityMines);
+
+        Assert.Equal("RICOCHET DISC", Upgrades.Title(disc, stats));
+        Assert.Equal(
+            "Throws a disc that flies out and back, cutting through every enemy. LV5 SHATTER: bursts into 4 shards at its far point.",
+            Upgrades.Describe(disc, stats));
+        Assert.Contains("SHATTER", Upgrades.Describe(disc, stats));
+
+        Assert.Equal("PROXIMITY MINES", Upgrades.Title(mines, stats));
+        Assert.Equal(
+            "Drops mines that explode when enemies touch them. LV5 CLUSTER: each blast throws 3 mini-mines.",
+            Upgrades.Describe(mines, stats));
+        Assert.Contains("CLUSTER", Upgrades.Describe(mines, stats));
+
+        // The three original weapons keep their plain NEW WEAPON line.
+        Assert.Equal("NEW WEAPON", Upgrades.Describe(Upgrade.NewWeapon(WeaponKind.Orbs), stats));
+    }
+
+    [Fact]
+    public void Ricochet_disc_and_proximity_mines_join_the_new_weapon_pool_only_while_unowned_and_a_slot_is_free()
+    {
+        var (sawDisc, sawMines) = (false, false);
+        for (var seed = 0; seed < 300; seed++)
+        {
+            // One weapon owned: both new weapons can be offered.
+            var one = new PlayerStats();
+            one.AddWeapon(WeaponKind.Laser);
+            var offer = Upgrades.Offer(one, new Random(seed), GameSession.UpgradeChoices);
+            sawDisc |= offer.Contains(Upgrade.NewWeapon(WeaponKind.RicochetDisc));
+            sawMines |= offer.Contains(Upgrade.NewWeapon(WeaponKind.ProximityMines));
+
+            // The disc owned: its new-weapon card never shows, the mines' still may.
+            var owningDisc = new PlayerStats();
+            owningDisc.AddWeapon(WeaponKind.RicochetDisc);
+            Assert.DoesNotContain(Upgrade.NewWeapon(WeaponKind.RicochetDisc), Upgrades.Offer(owningDisc, new Random(seed), GameSession.UpgradeChoices));
+
+            // Three weapons owned: neither new weapon shows.
+            var full = new PlayerStats();
+            full.AddWeapon(WeaponKind.Laser);
+            full.AddWeapon(WeaponKind.Lightning);
+            full.AddWeapon(WeaponKind.Orbs);
+            Assert.DoesNotContain(Upgrades.Offer(full, new Random(seed), GameSession.UpgradeChoices), card => card.Kind == UpgradeKind.NewWeapon);
+        }
+        Assert.True(sawDisc, "No offer held a Ricochet Disc card");
+        Assert.True(sawMines, "No offer held a Proximity Mines card");
+
+        var withDisc = new PlayerStats();
+        withDisc.AddWeapon(WeaponKind.RicochetDisc);
+        Assert.Contains(Upgrade.NewWeapon(WeaponKind.ProximityMines), Upgrades.Eligible(withDisc));
+        Assert.DoesNotContain(Upgrade.NewWeapon(WeaponKind.RicochetDisc), Upgrades.Eligible(withDisc));
+    }
+
+    [Fact]
+    public void Each_ricochet_disc_option_changes_only_its_stat_and_one_level_and_a_level_5_disc_gets_no_card()
+    {
+        var expected = new Dictionary<WeaponOption, Func<WeaponSnapshotFull, WeaponSnapshotFull>>
+        {
+            [WeaponOption.DiscCount] = s => s with { Count = s.Count + 1 },
+            [WeaponOption.DiscDamage] = s => s with { Damage = s.Damage + 1f },
+            [WeaponOption.DiscAttackSpeed] = s => s with { AttacksPerSecond = s.AttacksPerSecond + 0.15f },
+            [WeaponOption.DiscSize] = s => s with { SizeScale = s.SizeScale + 0.25f },
+        };
+        AssertEachOptionChangesOnlyItsStat(WeaponKind.RicochetDisc, expected,
+            new WeaponSnapshotFull(1, 2f, 0.5f, 1, 1f, 250f, 400f, 0f));
+        Assert.Equal(["+1 DISC", "+1 DAMAGE", "+0.15 ATTACKS/S", "+25% DISC SIZE"],
+            Upgrades.OptionsFor(WeaponKind.RicochetDisc).Select(Upgrades.Effect));
+        AssertAllOptionsOfferedDistinctAndNoneAtLevel5(WeaponKind.RicochetDisc);
+    }
+
+    [Fact]
+    public void Each_proximity_mines_option_changes_only_its_stat_and_one_level_and_a_level_5_mines_weapon_gets_no_card()
+    {
+        var expected = new Dictionary<WeaponOption, Func<WeaponSnapshotFull, WeaponSnapshotFull>>
+        {
+            [WeaponOption.MinesDamage] = s => s with { Damage = s.Damage + 1.5f },
+            [WeaponOption.MinesBlastRadius] = s => s with { BlastRadius = s.BlastRadius + 15f },
+            [WeaponOption.MinesDropRate] = s => s with { AttacksPerSecond = s.AttacksPerSecond + 0.15f },
+            [WeaponOption.MinesPerDrop] = s => s with { Count = s.Count + 1 },
+        };
+        AssertEachOptionChangesOnlyItsStat(WeaponKind.ProximityMines, expected,
+            new WeaponSnapshotFull(1, 3f, 0.5f, 1, 0f, 0f, 0f, 60f));
+        Assert.Equal(["+1.5 DAMAGE", "+15 PX BLAST RADIUS", "+0.15 DROPS/S", "+1 MINE PER DROP"],
+            Upgrades.OptionsFor(WeaponKind.ProximityMines).Select(Upgrades.Effect));
+        AssertAllOptionsOfferedDistinctAndNoneAtLevel5(WeaponKind.ProximityMines);
+
+        // One drop lays one mine per Count: the first at the ship, every extra one within 40 px of it.
+        var stats = new PlayerStats();
+        var mines = stats.AddWeapon(WeaponKind.ProximityMines);
+        Assert.Equal([Center], mines.MineDropPositions(Center, new Random(1)));
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.ProximityMines, WeaponOption.MinesPerDrop), stats);
+        Upgrades.Apply(Upgrade.ForWeapon(WeaponKind.ProximityMines, WeaponOption.MinesPerDrop), stats);
+        var sawSpread = false;
+        for (var seed = 0; seed < 50; seed++)
+        {
+            var drop = mines.MineDropPositions(Center, new Random(seed));
+            Assert.Equal(3, drop.Count);
+            Assert.Equal(Center, drop[0]);
+            Assert.All(drop, position => Assert.InRange(Vector2.Distance(position, Center), 0f, OwnedWeapon.MineScatterRadius + 0.001f));
+            sawSpread |= drop.Skip(1).Any(position => Vector2.Distance(position, Center) > 1f);
+        }
+        Assert.True(sawSpread, "Extra mines never left the ship's spot");
+    }
+
+    private sealed record WeaponSnapshotFull(int Level, float Damage, float AttacksPerSecond, int Count, float SizeScale, float Range, float Speed, float BlastRadius)
+    {
+        public static WeaponSnapshotFull Of(OwnedWeapon w) =>
+            new(w.Level, w.Damage, w.AttacksPerSecond, w.Count, w.SizeScale, w.Range, w.Speed, w.BlastRadius);
+
+        public WeaponSnapshotFull Rounded() => this with
+        {
+            Damage = MathF.Round(Damage, 4),
+            AttacksPerSecond = MathF.Round(AttacksPerSecond, 4),
+            SizeScale = MathF.Round(SizeScale, 4),
+            BlastRadius = MathF.Round(BlastRadius, 4),
+        };
+    }
+
+    /// <summary>
+    /// For each option: a fresh ship owning a level-1 weapon of this kind beside a laser and lightning takes that one
+    /// card; only the option's stat moves by its step, the level rises by one, and the other weapons don't change.
+    /// </summary>
+    private static void AssertEachOptionChangesOnlyItsStat(
+        WeaponKind kind, IReadOnlyDictionary<WeaponOption, Func<WeaponSnapshotFull, WeaponSnapshotFull>> expected, WeaponSnapshotFull levelOne)
+    {
+        Assert.Equal(Upgrades.OptionsFor(kind).ToHashSet(), expected.Keys.ToHashSet());
+        foreach (var (option, change) in expected)
+        {
+            var stats = new PlayerStats();
+            var laser = stats.AddWeapon(WeaponKind.Laser);
+            var weapon = stats.AddWeapon(kind);
+            var lightning = stats.AddWeapon(WeaponKind.Lightning);
+            var before = WeaponSnapshotFull.Of(weapon);
+            Assert.Equal(levelOne, before);
+            var (laserBefore, lightningBefore) = (WeaponSnapshotFull.Of(laser), WeaponSnapshotFull.Of(lightning));
+
+            Upgrades.Apply(Upgrade.ForWeapon(kind, option), stats);
+
+            Assert.Equal(change(before with { Level = 2 }).Rounded(), WeaponSnapshotFull.Of(weapon).Rounded());
+            Assert.Equal(laserBefore, WeaponSnapshotFull.Of(laser));
+            Assert.Equal(lightningBefore, WeaponSnapshotFull.Of(lightning));
+        }
+    }
+
+    /// <summary>
+    /// Across seeded offers every option of the weapon appears, two cards for it in one offer always differ, and once
+    /// it reaches level 5 no card for it is offered (and applying one is refused).
+    /// </summary>
+    private static void AssertAllOptionsOfferedDistinctAndNoneAtLevel5(WeaponKind kind)
+    {
+        var seen = new HashSet<WeaponOption>();
+        var sawTwo = false;
+        for (var seed = 0; seed < 300; seed++)
+        {
+            var stats = new PlayerStats();
+            stats.AddWeapon(kind);
+            var cards = Upgrades.Offer(stats, new Random(seed), GameSession.UpgradeChoices)
+                .Where(card => card.Kind == UpgradeKind.WeaponUpgrade && card.Weapon == kind).ToArray();
+            Assert.Equal(cards.Length, cards.Select(card => card.Option).Distinct().Count());
+            sawTwo |= cards.Length >= 2;
+            seen.UnionWith(cards.Select(card => card.Option!.Value));
+        }
+        Assert.Equal(Upgrades.OptionsFor(kind).ToHashSet(), seen);
+        Assert.True(sawTwo, $"No offer held two {kind} cards");
+
+        var maxed = new PlayerStats();
+        var weapon = maxed.AddWeapon(kind);
+        maxed.AddWeapon(WeaponKind.Laser);
+        var options = Upgrades.OptionsFor(kind);
+        for (var i = 0; i < OwnedWeapon.MaxLevel - 1; i++)
+        {
+            Assert.False(weapon.IsFinale);
+            Upgrades.Apply(Upgrade.ForWeapon(kind, options[i % options.Count]), maxed);
+        }
+        Assert.Equal(OwnedWeapon.MaxLevel, weapon.Level);
+        Assert.True(weapon.IsFinale);
+        for (var seed = 0; seed < 300; seed++)
+            Assert.DoesNotContain(Upgrades.Offer(maxed, new Random(seed), GameSession.UpgradeChoices), card => card.Weapon == kind);
+        Assert.DoesNotContain(Upgrades.Eligible(maxed), card => card.Weapon == kind);
+        Assert.Throws<InvalidOperationException>(() => Upgrades.Apply(Upgrade.ForWeapon(kind, options[0]), maxed));
     }
 
     [Fact]

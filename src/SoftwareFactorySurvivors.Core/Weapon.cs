@@ -8,6 +8,8 @@ public enum WeaponKind
     Laser,
     Lightning,
     Orbs,
+    RicochetDisc,
+    ProximityMines,
 }
 
 /// <summary>
@@ -30,11 +32,30 @@ public sealed class OwnedWeapon
             WeaponKind.Lightning => (0.8f, 1.2f, 1),
             // Orbs circle the ship all the time instead of firing, so they have no attack rate.
             WeaponKind.Orbs => (1f, 0f, 3),
+            // Discs thrown per attack; mines dropped per drop.
+            WeaponKind.RicochetDisc => (2f, 0.5f, 1),
+            WeaponKind.ProximityMines => (3f, 0.5f, 1),
             _ => throw new ArgumentOutOfRangeException(nameof(kind)),
         };
         if (kind == WeaponKind.Orbs)
             Orbs = new OrbitingOrbs();
+        if (kind == WeaponKind.RicochetDisc)
+            (SizeScale, Range, Speed) = (1f, DiscRange, DiscSpeed);
+        if (kind == WeaponKind.ProximityMines)
+            BlastRadius = MinesBlastRadius;
     }
+
+    /// <summary>How far a Ricochet Disc flies out before it turns back, in pixels.</summary>
+    public const float DiscRange = 250f;
+
+    /// <summary>A Ricochet Disc's flight speed, out and back, in pixels per second.</summary>
+    public const float DiscSpeed = 400f;
+
+    /// <summary>A level-1 Proximity Mine's blast radius, in pixels.</summary>
+    public const float MinesBlastRadius = 60f;
+
+    /// <summary>Every mine after the first in one drop lands at most this far from the ship, in pixels.</summary>
+    public const float MineScatterRadius = 40f;
 
     public WeaponKind Kind { get; }
 
@@ -56,11 +77,50 @@ public sealed class OwnedWeapon
     /// <summary>How many extra enemies each projectile passes through before it's used up.</summary>
     public int Pierce { get; set; }
 
+    /// <summary>Disc size relative to level 1 (1 = base size); 0 for any weapon but the Ricochet Disc.</summary>
+    public float SizeScale { get; set; }
+
+    /// <summary>How far a disc flies out before turning back, in pixels; 0 for any weapon but the Ricochet Disc.</summary>
+    public float Range { get; set; }
+
+    /// <summary>Disc flight speed in pixels per second; 0 for any weapon but the Ricochet Disc.</summary>
+    public float Speed { get; set; }
+
+    /// <summary>Mine blast radius in pixels; 0 for any weapon but Proximity Mines.</summary>
+    public float BlastRadius { get; set; }
+
+    /// <summary>
+    /// True at MaxLevel: the weapon's level-5 bonus is on (the disc's SHATTER, the mines' CLUSTER, and so on).
+    /// </summary>
+    public bool IsFinale => Level >= MaxLevel;
+
     /// <summary>Fraction of the way to this weapon's next shot.</summary>
     public double TimerProgress => _timer.Progress;
 
     /// <summary>Raises the level by one; does nothing once the weapon is at MaxLevel.</summary>
     public void RaiseLevel() => Level = Math.Min(MaxLevel, Level + 1);
+
+    /// <summary>
+    /// Where one drop of mines lands: Count positions, the first at the ship and each further one at a random spot
+    /// within MineScatterRadius of it.
+    /// </summary>
+    public IReadOnlyList<Vector2> MineDropPositions(Vector2 shipPosition, Random random)
+    {
+        var positions = new Vector2[Math.Max(0, Count)];
+        for (var i = 0; i < positions.Length; i++)
+        {
+            if (i == 0)
+            {
+                positions[i] = shipPosition;
+                continue;
+            }
+            // The square root spreads the spots evenly over the disc instead of bunching them at the centre.
+            var angle = random.NextSingle() * MathF.Tau;
+            var distance = MineScatterRadius * MathF.Sqrt(random.NextSingle());
+            positions[i] = shipPosition + distance * new Vector2(MathF.Cos(angle), MathF.Sin(angle));
+        }
+        return positions;
+    }
 
     /// <summary>Advances this weapon's own timer and returns the pose of each shot it fires this frame.</summary>
     public IReadOnlyList<ShotPose> Fire(float elapsedSeconds, Vector2 nose, float heading) =>

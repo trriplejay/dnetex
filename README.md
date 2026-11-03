@@ -25,13 +25,17 @@ Enemies are white line-art logos of AI companies, each with its own hit points, 
 
 Kills give experience; level *n* needs 3.5 × *n*^1.5 experience (4, 10, 18, 28, 39 …). Each level pauses the game and offers three random upgrade cards; the one you pick lasts for the rest of the game:
 
-Each weapon the ship owns (up to 3) has its own level, damage, attack speed and count, and fires on its own timer; an upgrade to one weapon leaves the others unchanged. Every game opens on a pick of the starting weapon (Laser, Lightning or Orbs). After that, a level-up offers up to three different cards: a new weapon (while a weapon slot is free), or one option for a weapon you own below level 5, which raises that weapon one level (shown as `LV n > n+1`). A level with no card left to offer is used up without pausing.
+Each weapon the ship owns (up to 3) has its own level, damage, attack speed and count, and fires on its own timer; an upgrade to one weapon leaves the others unchanged. Every game opens on a pick of the starting weapon (Laser, Lightning, Orbs, Ricochet Disc or Proximity Mines). After that, a level-up offers up to three different cards: a new weapon (while a weapon slot is free), or one option for a weapon you own below level 5, which raises that weapon one level (shown as `LV n > n+1`). A level with no card left to offer is used up without pausing.
 
 | Weapon | Options per upgrade card |
 |---|---|
 | Laser | +1 projectile, +1 damage, +0.25 attacks/s |
 | Lightning | +0.4 damage, +0.2 attacks/s, +1 chain |
 | Orbs | +1 orb, +30 deg/s and +15 px orbit, +3 px orb size, +0.5 damage |
+| Ricochet Disc | +1 disc, +1 damage, +0.15 attacks/s, +25% disc size |
+| Proximity Mines | +1.5 damage, +15 px blast radius, +0.15 drops/s, +1 mine per drop |
+
+The Ricochet Disc (2 damage, one throw every 2 s) is thrown at the nearest enemy, or straight ahead with none, flies out 250 px at 400 px/s and back to the ship, and hits every enemy it passes through once each way. At level 5 (Shatter) it bursts into 4 shards at its far point, each dealing half its damage to the first enemy it hits within 200 px. Proximity Mines drops a mine at the ship every 2 s (3 damage, 60 px blast). A mine arms after 0.5 s, explodes when an enemy touches it and damages every enemy within its blast once; an untouched mine is gone after 10 s, and at most 12 lie at once (a new one removes the oldest). At level 5 (Cluster) each explosion throws 3 mini-mines 50 px out that go off 0.3 s later at half damage and half radius.
 
 The ship starts with 100 hit points. Anything that touches it deals contact damage the moment it first touches and again every 0.5 s while it stays in contact, each enemy or hazard on its own timer, so a swarm hurts in proportion to how many are touching. Enemies survive the contact. Regular enemies deal 5–8 per tick, bosses 15, a boss's trail 4, the closing ring's band 6, and a bullet 8 once before it vanishes. All contact damage grows with the clock: base × (1 + minutes / 10), so twice the base at 10:00 (`EnemyRoster.ScaledContactDamage`). Hit points are shown as whole numbers rounded up, so a living ship never shows 0.
 

@@ -131,6 +131,8 @@ public class GameSessionTests
             Upgrade.NewWeapon(WeaponKind.Laser),
             Upgrade.NewWeapon(WeaponKind.Lightning),
             Upgrade.NewWeapon(WeaponKind.Orbs),
+            Upgrade.NewWeapon(WeaponKind.RicochetDisc),
+            Upgrade.NewWeapon(WeaponKind.ProximityMines),
         ];
         var first = new GameSession(Center, new Random(1));
         var second = new GameSession(Center, new Random(987_654));
@@ -154,6 +156,32 @@ public class GameSessionTests
         Assert.False(first.IsStartingPick);
         first.Update(Vector2.Zero, null, 1f, Width, Height);
         Assert.Equal(1f, first.ElapsedSeconds);
+    }
+
+    [Fact]
+    public void The_starting_pick_lists_all_five_weapons_in_order_and_picking_disc_or_mines_gives_only_that_weapon()
+    {
+        Upgrade[] expected =
+        [
+            Upgrade.NewWeapon(WeaponKind.Laser),
+            Upgrade.NewWeapon(WeaponKind.Lightning),
+            Upgrade.NewWeapon(WeaponKind.Orbs),
+            Upgrade.NewWeapon(WeaponKind.RicochetDisc),
+            Upgrade.NewWeapon(WeaponKind.ProximityMines),
+        ];
+        foreach (var (index, kind) in new[] { (3, WeaponKind.RicochetDisc), (4, WeaponKind.ProximityMines) })
+        {
+            var session = new GameSession(Center, new Random(index * 31), roster: [], bosses: [], rings: []);
+            Assert.True(session.IsChoosingUpgrade);
+            Assert.Equal(expected, session.UpgradeOffer!);
+
+            session.ChooseUpgrade(index);
+
+            var owned = Assert.Single(session.Stats.Weapons);
+            Assert.Equal((kind, 1), (owned.Kind, owned.Level));
+            Assert.False(session.IsChoosingUpgrade);
+            Assert.False(session.IsStartingPick);
+        }
     }
 
     [Fact]
@@ -218,7 +246,7 @@ public class GameSessionTests
         var sawNewWeapon = false;
         for (var seed = 0; seed < 200; seed++)
         {
-            // One weapon owned: new-weapon cards for the two others may appear; every card is eligible.
+            // One weapon owned: new-weapon cards for the four others may appear; every card is eligible.
             var one = new PlayerStats();
             one.AddWeapon(WeaponKind.Laser);
             var offer = Upgrades.Offer(one, new Random(seed), GameSession.UpgradeChoices);
@@ -226,7 +254,7 @@ public class GameSessionTests
             Assert.Equal(offer.Count, offer.Distinct().Count());
             Assert.All(offer, card => Assert.True(
                 card.Kind == UpgradeKind.WeaponUpgrade && card.Weapon == WeaponKind.Laser
-                || card.Kind == UpgradeKind.NewWeapon && card.Weapon is WeaponKind.Lightning or WeaponKind.Orbs,
+                || card.Kind == UpgradeKind.NewWeapon && card.Weapon != WeaponKind.Laser,
                 $"Ineligible card {card}"));
             sawNewWeapon |= offer.Any(card => card.Kind == UpgradeKind.NewWeapon);
 
@@ -303,6 +331,122 @@ public class GameSessionTests
             Assert.All(Upgrades.Offer(fresh, new Random(seed), GameSession.UpgradeChoices),
                 card => Assert.True(card.Kind is UpgradeKind.NewWeapon or UpgradeKind.WeaponUpgrade));
         }
+    }
+
+    public enum DiscOrMineSource
+    {
+        Disc,
+        Shard,
+        Mine,
+        MiniMine,
+    }
+
+    [Theory]
+    [InlineData(DiscOrMineSource.Disc)]
+    [InlineData(DiscOrMineSource.Shard)]
+    [InlineData(DiscOrMineSource.Mine)]
+    [InlineData(DiscOrMineSource.MiniMine)]
+    public void A_kill_by_disc_shard_mine_or_mini_mine_credits_score_and_experience_exactly_once(DiscOrMineSource source)
+    {
+        var (session, victim) = ArrangeDiscOrMineKill(source);
+        var sawShard = false;
+
+        for (var i = 0; i < 6 * 60 && !victim.IsDead; i++)
+        {
+            session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
+            sawShard |= session.DiscShards.Count > 0;
+        }
+
+        Assert.True(victim.IsDead);
+        Assert.Equal(GameSession.PointsPerKill, session.Score);
+        Assert.Equal(victim.Experience, session.Leveling.Experience);
+        if (source == DiscOrMineSource.Shard)
+            Assert.True(sawShard, "The victim should die only once the disc has shattered");
+
+        // The weapon keeps working; the kill is never credited again.
+        for (var i = 0; i < 3 * 60; i++)
+            session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
+        Assert.Equal(GameSession.PointsPerKill, session.Score);
+        Assert.Equal(victim.Experience, session.Leveling.Experience);
+    }
+
+    [Fact]
+    public void Two_mini_mine_blasts_overlapping_a_dying_enemy_credit_its_kill_once()
+    {
+        var session = KillCreditTests.SessionWith(WeaponKind.ProximityMines);
+        // Level 5: blast 90 px (mini-mines 45 px), damage 6 (mini-mines 3).
+        RaiseWeapon(session, WeaponKind.ProximityMines, WeaponOption.MinesBlastRadius, 2);
+        RaiseWeapon(session, WeaponKind.ProximityMines, WeaponOption.MinesDamage, 2);
+        Assert.True(session.Stats.Find(WeaponKind.ProximityMines)!.IsFinale);
+        session.AddEnemy(TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 1000f, Experience = 3 }, Center));
+        // Between the first two mini-mines (thrown at 0 and 120 degrees), 43.3 px from each: inside both their
+        // blasts. The mine's blast leaves it 1 HP, then the two mini-mines go off on the same frame.
+        var spot = Center + 25f * new Vector2(MathF.Cos(MathF.PI / 3f), MathF.Sin(MathF.PI / 3f));
+        var victim = TestEnemies.Stationary(EnemyRoster.HuggingFace with { HitPoints = 7f, Experience = 2 }, spot);
+        session.AddEnemy(victim);
+
+        IReadOnlyList<Circle> blastsThatKilled = [];
+        for (var i = 0; i < 6 * 60 && !victim.IsDead; i++)
+        {
+            session.Update(Vector2.Zero, null, 1f / 60f, Width, Height);
+            blastsThatKilled = session.MineExplosions.ToArray();
+        }
+
+        Assert.True(victim.IsDead);
+        Assert.Equal(2, blastsThatKilled.Count(blast => Vector2.Distance(blast.Center, spot) <= blast.Radius));
+        Assert.All(blastsThatKilled, blast => Assert.Equal(45f, blast.Radius));
+        Assert.Equal(GameSession.PointsPerKill, session.Score);
+        Assert.Equal(victim.Experience, session.Leveling.Experience);
+    }
+
+    private static (GameSession Session, Enemy Victim) ArrangeDiscOrMineKill(DiscOrMineSource source)
+    {
+        var victimType = EnemyRoster.HuggingFace with { HitPoints = 1f, Experience = 2 };
+        var tough = EnemyRoster.HuggingFace with { HitPoints = 1000f, Experience = 3 };
+        switch (source)
+        {
+            case DiscOrMineSource.Disc:
+            {
+                var session = KillCreditTests.SessionWith(WeaponKind.RicochetDisc);
+                var victim = TestEnemies.Stationary(victimType, Center + new Vector2(0, -150));
+                session.AddEnemy(victim);
+                return (session, victim);
+            }
+            case DiscOrMineSource.Shard:
+            {
+                var session = KillCreditTests.SessionWith(WeaponKind.RicochetDisc);
+                RaiseWeapon(session, WeaponKind.RicochetDisc, WeaponOption.DiscDamage, 4);
+                // Beyond the disc's 250 px reach, within a shard's 200 px flight from the far point.
+                var victim = TestEnemies.Stationary(victimType, Center + new Vector2(0, -310));
+                session.AddEnemy(victim);
+                return (session, victim);
+            }
+            case DiscOrMineSource.Mine:
+            {
+                var session = KillCreditTests.SessionWith(WeaponKind.ProximityMines);
+                var victim = TestEnemies.Stationary(victimType, Center);
+                session.AddEnemy(victim);
+                return (session, victim);
+            }
+            case DiscOrMineSource.MiniMine:
+            {
+                var session = KillCreditTests.SessionWith(WeaponKind.ProximityMines);
+                RaiseWeapon(session, WeaponKind.ProximityMines, WeaponOption.MinesDamage, 4);
+                session.AddEnemy(TestEnemies.Stationary(tough, Center));
+                // Outside the mine's 60 px blast, inside the 30 px blast of the mini-mine thrown 50 px to the right.
+                var victim = TestEnemies.Stationary(victimType, Center + new Vector2(75, 0));
+                session.AddEnemy(victim);
+                return (session, victim);
+            }
+            default:
+                throw new ArgumentOutOfRangeException(nameof(source));
+        }
+    }
+
+    private static void RaiseWeapon(GameSession session, WeaponKind kind, WeaponOption option, int times)
+    {
+        for (var i = 0; i < times; i++)
+            Upgrades.Apply(Upgrade.ForWeapon(kind, option), session.Stats);
     }
 
     /// <summary>Puts a stationary enemy worth the given experience in front of the ship and shoots it until a level-up offer appears.</summary>

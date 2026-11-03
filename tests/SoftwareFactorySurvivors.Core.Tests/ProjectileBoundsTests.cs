@@ -4,7 +4,7 @@ using SoftwareFactorySurvivors.Core;
 namespace SoftwareFactorySurvivors.Core.Tests;
 
 /// <summary>
-/// The quick reject ResolveLaserHits runs before the exact hit test: whenever a projectile's bounds can't reach an
+/// The quick reject ResolveWeaponHits runs before the exact hit test: whenever a projectile's bounds can't reach an
 /// enemy's bounding circle, the exact test must agree that they don't touch.
 /// </summary>
 public class ProjectileBoundsTests

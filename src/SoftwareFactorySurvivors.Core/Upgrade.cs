@@ -31,6 +31,14 @@ public enum WeaponOption
     OrbsSpeedAndOrbit,
     OrbsRadius,
     OrbsDamage,
+    DiscCount,
+    DiscDamage,
+    DiscAttackSpeed,
+    DiscSize,
+    MinesDamage,
+    MinesBlastRadius,
+    MinesDropRate,
+    MinesPerDrop,
 }
 
 /// <summary>
@@ -64,6 +72,12 @@ public static class Upgrades
     public const float LaserAttackSpeedStep = 0.25f;
     public const float LightningDamageStep = 0.4f;
     public const float LightningAttackSpeedStep = 0.2f;
+    public const float DiscDamageStep = 1f;
+    public const float DiscAttackSpeedStep = 0.15f;
+    public const float DiscSizeStep = 0.25f;
+    public const float MinesDamageStep = 1.5f;
+    public const float MinesBlastRadiusStep = 15f;
+    public const float MinesDropRateStep = 0.15f;
 
     /// <summary>Every implemented weapon, in the order the starting pick shows them.</summary>
     public static IReadOnlyList<WeaponKind> AllWeapons { get; } = Enum.GetValues<WeaponKind>();
@@ -82,6 +96,8 @@ public static class Upgrades
         WeaponKind.Laser => [WeaponOption.LaserProjectile, WeaponOption.LaserDamage, WeaponOption.LaserAttackSpeed],
         WeaponKind.Lightning => [WeaponOption.LightningDamage, WeaponOption.LightningAttackSpeed, WeaponOption.LightningChain],
         WeaponKind.Orbs => [WeaponOption.OrbsCount, WeaponOption.OrbsSpeedAndOrbit, WeaponOption.OrbsRadius, WeaponOption.OrbsDamage],
+        WeaponKind.RicochetDisc => [WeaponOption.DiscCount, WeaponOption.DiscDamage, WeaponOption.DiscAttackSpeed, WeaponOption.DiscSize],
+        WeaponKind.ProximityMines => [WeaponOption.MinesDamage, WeaponOption.MinesBlastRadius, WeaponOption.MinesDropRate, WeaponOption.MinesPerDrop],
         _ => throw new ArgumentOutOfRangeException(nameof(weapon)),
     };
 
@@ -90,7 +106,20 @@ public static class Upgrades
         WeaponKind.Laser => "LASER",
         WeaponKind.Lightning => "LIGHTNING",
         WeaponKind.Orbs => "ORBS",
+        WeaponKind.RicochetDisc => "RICOCHET DISC",
+        WeaponKind.ProximityMines => "PROXIMITY MINES",
         _ => throw new ArgumentOutOfRangeException(nameof(weapon)),
+    };
+
+    /// <summary>
+    /// The second line of a weapon's new-weapon card: "NEW WEAPON", or for a weapon with its own description what it
+    /// does and what its level-5 bonus is.
+    /// </summary>
+    public static string NewWeaponDescription(WeaponKind weapon) => weapon switch
+    {
+        WeaponKind.RicochetDisc => "Throws a disc that flies out and back, cutting through every enemy. LV5 SHATTER: bursts into 4 shards at its far point.",
+        WeaponKind.ProximityMines => "Drops mines that explode when enemies touch them. LV5 CLUSTER: each blast throws 3 mini-mines.",
+        _ => "NEW WEAPON",
     };
 
     /// <summary>The option's effect as shown on its card, e.g. "+1 DAMAGE"; always with a decimal point the vector font can draw.</summary>
@@ -106,6 +135,14 @@ public static class Upgrades
         WeaponOption.OrbsSpeedAndOrbit => Invariant($"+{OrbitingOrbs.UpgradeRotationSpeedDegStep:0} DEG/S +{OrbitingOrbs.UpgradeOrbitRadiusStep:0} PX"),
         WeaponOption.OrbsRadius => Invariant($"+{OrbitingOrbs.UpgradeOrbRadiusStep:0} PX ORB SIZE"),
         WeaponOption.OrbsDamage => Invariant($"+{OrbitingOrbs.UpgradeDamageStep:0.##} DAMAGE"),
+        WeaponOption.DiscCount => "+1 DISC",
+        WeaponOption.DiscDamage => Invariant($"+{DiscDamageStep:0.##} DAMAGE"),
+        WeaponOption.DiscAttackSpeed => Invariant($"+{DiscAttackSpeedStep:0.##} ATTACKS/S"),
+        WeaponOption.DiscSize => Invariant($"+{DiscSizeStep * 100f:0}% DISC SIZE"),
+        WeaponOption.MinesDamage => Invariant($"+{MinesDamageStep:0.##} DAMAGE"),
+        WeaponOption.MinesBlastRadius => Invariant($"+{MinesBlastRadiusStep:0} PX BLAST RADIUS"),
+        WeaponOption.MinesDropRate => Invariant($"+{MinesDropRateStep:0.##} DROPS/S"),
+        WeaponOption.MinesPerDrop => "+1 MINE PER DROP",
         _ => throw new ArgumentOutOfRangeException(nameof(option)),
     };
 
@@ -119,10 +156,10 @@ public static class Upgrades
         _ => throw new ArgumentOutOfRangeException(nameof(upgrade)),
     };
 
-    /// <summary>The card's second line: NEW for a new weapon or enhancement, otherwise the effect.</summary>
+    /// <summary>The card's second line: the new weapon's description (see NewWeaponDescription), NEW ENHANCEMENT, or the effect.</summary>
     public static string Describe(Upgrade upgrade, PlayerStats stats) => upgrade.Kind switch
     {
-        UpgradeKind.NewWeapon => "NEW WEAPON",
+        UpgradeKind.NewWeapon => NewWeaponDescription(WeaponOf(upgrade)),
         UpgradeKind.WeaponUpgrade => Effect(OptionOf(upgrade)),
         UpgradeKind.NewEnhancement => "NEW ENHANCEMENT",
         UpgradeKind.EnhancementUpgrade => EnhancementOf(upgrade).Effect,
@@ -199,6 +236,14 @@ public static class Upgrades
             case WeaponOption.OrbsSpeedAndOrbit: OrbsOf(weapon).AddSpeedAndOrbit(); break;
             case WeaponOption.OrbsRadius: OrbsOf(weapon).AddOrbRadius(); break;
             case WeaponOption.OrbsDamage: OrbsOf(weapon).AddDamage(); break;
+            case WeaponOption.DiscCount: weapon.Count += 1; break;
+            case WeaponOption.DiscDamage: weapon.Damage += DiscDamageStep; break;
+            case WeaponOption.DiscAttackSpeed: weapon.AttacksPerSecond += DiscAttackSpeedStep; break;
+            case WeaponOption.DiscSize: weapon.SizeScale += DiscSizeStep; break;
+            case WeaponOption.MinesDamage: weapon.Damage += MinesDamageStep; break;
+            case WeaponOption.MinesBlastRadius: weapon.BlastRadius += MinesBlastRadiusStep; break;
+            case WeaponOption.MinesDropRate: weapon.AttacksPerSecond += MinesDropRateStep; break;
+            case WeaponOption.MinesPerDrop: weapon.Count += 1; break;
             default: throw new ArgumentOutOfRangeException(nameof(option));
         }
 
