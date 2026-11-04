@@ -29,8 +29,7 @@ public class RetiredWeaponsSourceTests
         Assert.False(File.Exists(Path.Combine(core, "Bola.cs")));
     }
 
-    // The level-5 bonuses' names. The ship's blink is matched as a call on an object (".Blink("), so the enemy
-    // Blink movement pattern ("new Blink(") stays allowed.
+    // The level-5 bonuses' names. The ship's blink is matched as a call on an object (".Blink(").
     private static readonly Regex LevelFiveBonus = new(
         @"\b(IsFinale|BonusLevel|HasBonus|ExplosionLevel|BurnLevel|IsRingMode|DiscShards?|MiniMines?|LaserExplosions|"
         + @"RequestBlink|UpdateBlink|BlinkDistance|BlinkCooldownSeconds|InvulnerableSecondsLeft|RegenBoostMultiplier|"

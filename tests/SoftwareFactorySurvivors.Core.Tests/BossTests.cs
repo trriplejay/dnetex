@@ -144,15 +144,17 @@ public class BossTests
         Assert.Contains(boss, session.Enemies);
         seen.UnionWith(session.Enemies);
 
-        // During the fight every new enemy is one the boss threw (one every 3 seconds); nothing regular spawns.
+        // During the fight every new enemy is the boss's own: one it threw (one every 3 seconds) or a shield it
+        // respawned on reaching a phase. Nothing regular spawns.
         var duringFight = new List<Enemy>();
         for (var i = 0; i < 60 * 10; i++)
         {
             Step(session);
             duringFight.AddRange(session.Enemies.Where(seen.Add));
         }
-        Assert.Equal(3, duringFight.Count);
-        Assert.All(duringFight, enemy => Assert.IsType<Thrown>(enemy.Movement));
+        Assert.Contains(duringFight, enemy => enemy.Movement is Thrown);
+        Assert.All(duringFight, enemy => Assert.True(enemy.Movement is Thrown or Orbit,
+            $"{enemy.Type.Name} moving by {enemy.Movement?.GetType().Name} is not one of the boss's own"));
 
         BreakShield(boss);
         boss.TakeDamage(boss.HitPoints);
@@ -161,14 +163,14 @@ public class BossTests
         Assert.DoesNotContain(boss, session.Enemies);
         seen.UnionWith(session.Enemies);
 
-        // Spawning resumes at the regular rate (a Gemini every 0.5 seconds at 120/min) with no saved-up burst.
+        // Spawning resumes at the regular rate (a Gemini every 0.375 seconds at 160/min) with no saved-up burst.
         var afterFight = new List<Enemy>();
         for (var i = 0; i < 60 * 4; i++)
         {
             Step(session);
             afterFight.AddRange(session.Enemies.Where(seen.Add));
         }
-        Assert.Equal(8, afterFight.Count);
+        Assert.Equal(10, afterFight.Count);
         Assert.All(afterFight, enemy => Assert.IsType<ChasePlayer>(enemy.Movement));
     }
 

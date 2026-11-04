@@ -4,20 +4,14 @@ A survivors-style game written in C# with [MonoGame](https://monogame.net/) (Des
 
 Current features: the game runs full screen with a lime ship shaped like the Quarterback q/b logo (an infinity symbol with a vertical line through it) in the middle. W/A/S/D fly the ship up, left, down and right on screen, and the ship always turns to face the mouse pointer instantly, so it fires toward the mouse. It fires a laser from its nose once a second, faster with the attack speed upgrade.
 
-Enemies are white line-art logos of AI companies, each with its own hit points, speed and movement pattern. They spawn just off a random screen edge, and tougher types join as the clock runs. Each type has its own spawn rate (spawns per minute) that can be changed mid-game through `GameSession.Spawner.SetSpawnsPerMinute`. All enemy stats live in `EnemyRoster.cs`.
+Enemies are white line-art logos of AI companies, each with its own hit points, speed and movement pattern. They spawn just off a random screen edge. Gemini starts alone, and a new type joins with each of the first three bosses: Hugging Face at 3:00, ChatGPT at 6:00 and Claude at 9:00; once a type has joined it stays for the rest of the run. Each type has its own spawn rate (spawns per minute) that can be changed mid-game through `GameSession.Spawner.SetSpawnsPerMinute`. All enemy stats live in `EnemyRoster.cs`.
 
 | Enemy | HP | Movement | XP | Arrives |
 |---|---|---|---|---|
 | Gemini | 3 | Chases | 2 | 0:00 |
-| Hugging Face | 1 | Chases fast, in swarms | 1 | 0:30 |
-| ChatGPT | 4 | Weaves side to side | 3 | 1:00 |
-| Claude | 3 | Creeps, then lunges in a straight line | 3 | 1:30 |
-| Grok | 4 | Spirals in fast | 4 | 2:00 |
-| Copilot | 6 | Weaves with a tight, quick sway | 5 | 3:00 |
-| Cursor | 8 | Starts slow and keeps accelerating | 7 | 4:00 |
-| Perplexity | 7 | Creeps and teleports closer | 6 | 5:00 |
-| Apple Intelligence | 10 | Spirals in wide | 9 | 6:00 |
-| Meta | 20 | Slow tank | 15 | 7:00 |
+| Hugging Face | 1 | Chases fast, in swarms | 1 | 3:00 |
+| ChatGPT | 4 | Weaves side to side | 3 | 6:00 |
+| Claude | 3 | Creeps, then lunges in a straight line | 3 | 9:00 |
 
 **Lull and ring.** From 1:20 to 1:30 regular spawning stops. At 1:30 it resumes at the normal rates, and 32 Geminis appear in a ring 500 px around the ship and close in from every side; they are spaced so you can still slip between two of them if you fly straight at the ring. Lulls and rings are scheduled in `EnemyRoster.SpawnPauses` and `EnemyRoster.Rings`.
 
@@ -37,7 +31,7 @@ Each weapon the ship owns (up to 3) has its own level, damage, attack speed and 
 
 The Ricochet Disc (2 damage, one throw every 2 s) is thrown at the nearest enemy, or straight ahead with none, flies out 250 px at 400 px/s and back to the ship, and hits every enemy it passes through once each way. Proximity Mines drops a mine at the ship every 2 s (3 damage, 60 px blast). A mine arms after 0.5 s, explodes when an enemy touches it and damages every enemy within its blast once; an untouched mine is gone after 10 s, and at most 12 lie at once (a new one removes the oldest).
 
-The ship starts with 100 hit points. Anything that touches it deals contact damage the moment it first touches and again every 0.5 s while it stays in contact, each enemy or hazard on its own timer, so a swarm hurts in proportion to how many are touching. Enemies survive the contact. Regular enemies deal 5–8 per tick, bosses 15, a boss's trail 4, the closing ring's band 6, and a bullet 8 once before it vanishes. All contact damage grows with the clock: base × (1 + minutes / 10), so twice the base at 10:00 (`EnemyRoster.ScaledContactDamage`). Hit points are shown as whole numbers rounded up, so a living ship never shows 0.
+The ship starts with 100 hit points. Anything that touches it deals contact damage the moment it first touches and again every 0.5 s while it stays in contact, each enemy or hazard on its own timer, so a swarm hurts in proportion to how many are touching. Enemies survive the contact. Regular enemies deal 5–6 per tick, bosses 15, a boss's trail 4, the closing ring's band 6, and a bullet 8 once before it vanishes. All contact damage grows with the clock: base × (1 + minutes / 10), so twice the base at 10:00 (`EnemyRoster.ScaledContactDamage`). Hit points are shown as whole numbers rounded up, so a living ship never shows 0.
 
 A clock at the top of the screen counts up in minutes and seconds; your level, experience bar and hit points are in the top-left corner. Killing the Claude Boss, who arrives at 12:00, wins. Each enemy killed is worth 1 point. If the ship's hit points run out first, the game freezes and shows GAME OVER. On a win you can type up to three initials to save your score to the high-score table, which lasts until the game is closed.
 

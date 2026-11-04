@@ -48,7 +48,7 @@ public class PacingTests
         session.Stats.Laser().Damage = 1000f;
 
         // One kill worth exactly two levels.
-        var prize = EnemyRoster.Meta with { Experience = Leveling.Required(1) + Leveling.Required(2) };
+        var prize = EnemyRoster.ChatGpt with { Experience = Leveling.Required(1) + Leveling.Required(2) };
         session.AddEnemy(TestEnemies.Stationary(prize, session.Ship.Nose - new Vector2(0, 150)));
         for (var i = 0; i < 60 * 3 && session.Leveling.Level < 3; i++)
             session.Update(Vector2.Zero, null, Frame, Width, Height);
@@ -202,26 +202,20 @@ public class PacingTests
     }
 
     [Fact]
-    public void Combined_regular_spawn_rates_are_four_times_baseline_at_key_times_and_boss_rates_are_zero()
+    public void Combined_regular_spawn_rates_step_up_with_each_boss_and_boss_rates_are_zero()
     {
         float SumArrivedBy(float seconds) =>
             EnemyRoster.All.Where(type => type.ArrivesAtSeconds <= seconds).Sum(type => type.DefaultSpawnsPerMinute);
 
-        // At t = 0: Gemini (120) = 4 * 30
-        Assert.Equal(120f, SumArrivedBy(0f));
-        Assert.Equal(4f * 30f, SumArrivedBy(0f));
+        // Until the first boss at 3:00: Gemini alone.
+        Assert.Equal(160f, SumArrivedBy(0f));
+        Assert.Equal(160f, SumArrivedBy(179.9f));
 
-        // At t = 60: Gemini (120) + Hugging Face (96) + ChatGPT (56) = 272 = 4 * 68
-        Assert.Equal(272f, SumArrivedBy(60f));
-        Assert.Equal(4f * 68f, SumArrivedBy(60f));
-
-        // At t = 180: Gemini + Hugging Face + ChatGPT + Claude + Grok + Copilot = 384 = 4 * 96
-        Assert.Equal(384f, SumArrivedBy(180f));
-        Assert.Equal(4f * 96f, SumArrivedBy(180f));
-
-        // At t = 420: all regular types = 460 = 4 * 115
-        Assert.Equal(460f, SumArrivedBy(420f));
-        Assert.Equal(4f * 115f, SumArrivedBy(420f));
+        // Each of the first three bosses brings one more type, and earlier types stay.
+        Assert.Equal(160f + 240f, SumArrivedBy(180f));
+        Assert.Equal(160f + 240f + 50f, SumArrivedBy(360f));
+        Assert.Equal(160f + 240f + 50f + 20f, SumArrivedBy(540f));
+        Assert.Equal(470f, SumArrivedBy(720f));
 
         // All boss types keep rate of 0
         Assert.All(EnemyRoster.Bosses, arrival => Assert.Equal(0f, arrival.Type.DefaultSpawnsPerMinute));

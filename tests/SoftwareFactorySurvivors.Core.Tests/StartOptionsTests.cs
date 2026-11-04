@@ -51,7 +51,9 @@ public class StartOptionsTests
         var session = new GameSession(Center, new Random(1), start: new StartOptions(StartSeconds: 200f)).WithLaser();
 
         Assert.Equal(200f, session.ElapsedSeconds);
-        Assert.Equal(EnemyRoster.All.Where(type => type.ArrivesAtSeconds <= 200f), session.Spawner.Types);
+        Assert.Equal(
+            new HashSet<EnemyType> { EnemyRoster.Gemini, EnemyRoster.HuggingFace },
+            session.Spawner.Types.ToHashSet());
     }
 
     [Fact]

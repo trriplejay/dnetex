@@ -41,9 +41,9 @@ public class ShipEnhancementTests
     }
 
     [Fact]
-    public void Regular_enemies_deal_5_to_8_base_contact_damage_and_bosses_15()
+    public void Regular_enemies_deal_5_to_6_base_contact_damage_and_bosses_15()
     {
-        Assert.All(EnemyRoster.All, type => Assert.InRange(type.ContactDamage, 5f, 8f));
+        Assert.All(EnemyRoster.All, type => Assert.InRange(type.ContactDamage, 5f, 6f));
         Assert.All(EnemyRoster.Bosses, arrival => Assert.Equal(15f, arrival.Type.ContactDamage));
     }
 
@@ -53,7 +53,7 @@ public class ShipEnhancementTests
         var atStart = FirstTouchLoss(0f);
         var atTen = FirstTouchLoss(600f);
 
-        Assert.Equal(EnemyRoster.Grok.ContactDamage, atStart);
+        Assert.Equal(EnemyRoster.ChatGpt.ContactDamage, atStart);
         Assert.Equal(2f * atStart, atTen);
     }
 
@@ -61,7 +61,7 @@ public class ShipEnhancementTests
     {
         var session = new GameSession(Center, new Random(1), roster: [], bosses: [], rings: [],
             start: new StartOptions(StartSeconds: startSeconds)).WithLaser();
-        session.AddEnemy(TestEnemies.Stationary(EnemyRoster.Grok with { HitPoints = 1_000f }, Center));
+        session.AddEnemy(TestEnemies.Stationary(EnemyRoster.ChatGpt with { HitPoints = 1_000f }, Center));
 
         // A frame too short to move the clock's scale off its hundredths.
         session.Update(Vector2.Zero, null, 0.0001f, Width, Height);
@@ -435,7 +435,7 @@ public class ShipEnhancementTests
 
     private static void EarnOneLevel(GameSession session)
     {
-        var prize = EnemyRoster.Meta with { Experience = Leveling.Required(session.Leveling.Level) };
+        var prize = EnemyRoster.ChatGpt with { Experience = Leveling.Required(session.Leveling.Level) };
         session.AddEnemy(TestEnemies.Stationary(prize, session.Ship.Nose - new Vector2(0, 150)));
         var level = session.Leveling.Level;
         for (var i = 0; i < 60 * 3 && session.Leveling.Level == level; i++)

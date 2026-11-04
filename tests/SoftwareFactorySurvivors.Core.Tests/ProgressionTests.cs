@@ -559,7 +559,7 @@ public class ProgressionTests
     {
         var session = TestEnemies.QuietSession(Center);
         // One kill worth 18 experience: 2 for level 2, 5 for level 3 and 8 for level 4, with 3 left over.
-        var bigPrize = EnemyRoster.Meta with { Experience = 18 };
+        var bigPrize = EnemyRoster.ChatGpt with { Experience = 18 };
         session.AddEnemy(TestEnemies.Stationary(bigPrize, Center + new Vector2(0, -150)));
         session.Stats.Laser().Damage = 100f;
 
@@ -824,19 +824,44 @@ public class ProgressionTests
     {
         var session = new GameSession(Center, new Random(1)).WithLaser();
         Assert.Equal([EnemyRoster.Gemini], session.Spawner.Types);
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+        var seen = new HashSet<Enemy>();
 
-        session.Spawner.SetSpawnsPerMinute(EnemyRoster.Gemini, 0f);
-        session.Stats.MaxHitPoints = 1000f;
-        session.Stats.HitPoints = 1000f;
-        for (var t = 0; t < 31 && !session.IsFinished; t++)
+        void Step()
         {
-            session.Update(Vector2.Zero, null, 1f, Width, Height);
+            session.Update(Vector2.Zero, null, Frame, Width, Height);
             while (session.IsChoosingUpgrade)
                 session.ChooseUpgrade(0);
+            seen.UnionWith(session.Enemies);
         }
 
+        // Until just before the first boss at 3:00, Gemini is the only type that has joined or spawned.
+        while (session.ElapsedSeconds < 179.9f)
+            Step();
+        Assert.NotEmpty(seen);
+        Assert.All(seen, enemy => Assert.Same(EnemyRoster.Gemini, enemy.Type));
+        Assert.Equal([EnemyRoster.Gemini], session.Spawner.Types);
+
+        // Hugging Face joins as the Gemini Boss arrives, but nothing regular spawns while the boss lives.
+        while (!session.IsBossActive)
+            Step();
+        var boss = Assert.Single(session.Bosses);
         Assert.Contains(EnemyRoster.HuggingFace, session.Spawner.Types);
+        for (var i = 0; i < 60 * 5; i++)
+            Step();
+        Assert.DoesNotContain(seen, enemy => ReferenceEquals(enemy.Type, EnemyRoster.HuggingFace));
+
+        // Once it is dead, Hugging Face appears; ChatGPT has not joined yet.
+        foreach (var shield in boss.Shields)
+            shield.TakeDamage(shield.HitPoints);
+        boss.TakeDamage(boss.HitPoints);
+        for (var i = 0; i < 60 * 5; i++)
+            Step();
+        Assert.False(session.IsBossActive);
+        Assert.Contains(seen, enemy => ReferenceEquals(enemy.Type, EnemyRoster.HuggingFace));
         Assert.DoesNotContain(EnemyRoster.ChatGpt, session.Spawner.Types);
+        Assert.DoesNotContain(seen, enemy => ReferenceEquals(enemy.Type, EnemyRoster.ChatGpt));
     }
 
     [Fact]

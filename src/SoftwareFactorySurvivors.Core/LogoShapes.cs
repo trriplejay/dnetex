@@ -64,23 +64,6 @@ public static class LogoShapes
         ];
     }
 
-    /// <summary>Grok: a ring cut by a diagonal slash that runs out past its top-right edge.</summary>
-    public static Vector2[][] Grok(float r) =>
-    [
-        Ellipse(Vector2.Zero, r * 0.68f, r * 0.68f, 0f, 32),
-        [new Vector2(-0.55f, 0.55f) * r, new Vector2(0.7f, -0.7f) * r],
-    ];
-
-    /// <summary>Copilot (GitHub): a rounded pilot's head wearing two big goggles.</summary>
-    public static Vector2[][] Copilot(float r) =>
-    [
-        Ellipse(Vector2.Zero, r, r * 0.78f, 0f, 32),
-        Ellipse(new Vector2(-0.4f, -0.1f) * r, r * 0.3f, r * 0.26f, 0f, 20),
-        Ellipse(new Vector2(0.4f, -0.1f) * r, r * 0.3f, r * 0.26f, 0f, 20),
-        [new Vector2(-0.15f, 0.32f) * r, new Vector2(-0.15f, 0.52f) * r],
-        [new Vector2(0.15f, 0.32f) * r, new Vector2(0.15f, 0.52f) * r],
-    ];
-
     /// <summary>Perplexity: a central stem through a crossbar box, with folded wings above and pages below.</summary>
     public static Vector2[][] Perplexity(float r) =>
     [
@@ -112,35 +95,6 @@ public static class LogoShapes
             Ellipse(new Vector2(-0.5f, 0.55f) * r, r * 0.24f, r * 0.17f, -0.5f, 12),
             Ellipse(new Vector2(0.5f, 0.55f) * r, r * 0.24f, r * 0.17f, 0.5f, 12),
         ];
-    }
-
-    /// <summary>Meta: a wide, looping infinity sign with tall rounded lobes.</summary>
-    public static Vector2[][] Meta(float r)
-    {
-        const int segments = 64;
-        var points = new List<Vector2>();
-        for (var i = 0; i < segments; i++)
-        {
-            // Lemniscate of Bernoulli, stretched vertically so the lobes stand taller than the classic shape.
-            var t = MathF.Tau * i / segments;
-            var denominator = 1f + MathF.Sin(t) * MathF.Sin(t);
-            points.Add(new Vector2(r * MathF.Cos(t) / denominator, 1.5f * r * MathF.Sin(t) * MathF.Cos(t) / denominator));
-        }
-        return [Close(points)];
-    }
-
-    /// <summary>Apple Intelligence: one continuous line looping around a ring in six petals.</summary>
-    public static Vector2[][] AppleIntelligence(float r)
-    {
-        const int segments = 96;
-        var points = new List<Vector2>();
-        for (var i = 0; i < segments; i++)
-        {
-            // A large circle plus a small counter-rotating one traces six inward loops.
-            var t = MathF.Tau * i / segments;
-            points.Add(Direction(t) * r * 0.7f + Direction(-5f * t) * r * 0.3f);
-        }
-        return [Close(points)];
     }
 
     private static Vector2 Direction(float angle) => new(MathF.Cos(angle), MathF.Sin(angle));

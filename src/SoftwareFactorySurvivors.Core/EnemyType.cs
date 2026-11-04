@@ -32,7 +32,7 @@ public sealed record EnemyType(
     EnemyShield? Shield = null,
     float ContactDamage = EnemyType.DefaultContactDamage)
 {
-    /// <summary>Contact damage of a type that names none: the low end of a regular enemy's 5-8.</summary>
+    /// <summary>Contact damage of a type that names none: the low end of a regular enemy's 5-6.</summary>
     public const float DefaultContactDamage = 5f;
 
     public Enemy Create(Vector2 position) => new(this, position);
