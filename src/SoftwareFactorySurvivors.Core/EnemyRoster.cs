@@ -1,95 +1,67 @@
 namespace SoftwareFactorySurvivors.Core;
 
 /// <summary>
-/// Every enemy type in the game, roughly weakest to toughest. Tougher types are worth more experience and
-/// arrive later in the 10-minute run, so the pressure builds over time. Tune the numbers here.
+/// Every enemy type in the game. The four regular types (All) join the spawner one at a time: Gemini from the
+/// start, then one more as each of the first three bosses arrives (Hugging Face at 3:00, ChatGPT at 6:00, Claude
+/// at 9:00), so the pressure builds over the 12-minute run. Once a type has joined it stays for the rest of the run.
+/// Tune the numbers here.
 /// For reference, the ship moves at 200 px/s.
 /// </summary>
 public static class EnemyRoster
 {
-    /// <summary>Fragile and fast; arrives in swarms early on.</summary>
+    /// <summary>
+    /// The one owner of the boss schedule. Each regular type after Gemini joins at its paired boss's arrival,
+    /// so its ArrivesAtSeconds names the same constant.
+    /// </summary>
+    public const float GeminiBossArrivesAtSeconds = 3 * 60;
+    /// <summary>Autocomplete's arrival (6:00); ChatGPT joins then.</summary>
+    public const float AutocompleteArrivesAtSeconds = 6 * 60;
+    /// <summary>Hallucination's arrival (9:00); Claude joins then.</summary>
+    public const float HallucinationArrivesAtSeconds = 9 * 60;
+    /// <summary>The final Claude Boss's arrival (12:00); GameSession.SurvivalSeconds reads it.</summary>
+    public const float ClaudeBossArrivesAtSeconds = 12 * 60;
+
+    /// <summary>Fragile and fast; swarms in from 3:00, joining with the Gemini Boss.</summary>
     public static readonly EnemyType HuggingFace = new(
         "Hugging Face", Radius: 14f, HitPoints: 1f, Speed: 160f, Experience: 1,
-        DefaultSpawnsPerMinute: 96f, ArrivesAtSeconds: 30f, SpinSpeed: 0f,
+        DefaultSpawnsPerMinute: 240f, ArrivesAtSeconds: GeminiBossArrivesAtSeconds, SpinSpeed: 0f,
         speed => new ChasePlayer(speed), LogoShapes.HuggingFace(14f),
         ContactDamage: 5f);
 
-    /// <summary>The steady baseline chaser.</summary>
+    /// <summary>The steady baseline chaser; the only regular type until 3:00.</summary>
     public static readonly EnemyType Gemini = new(
         "Gemini", Radius: 20f, HitPoints: 3f, Speed: 90f, Experience: 2,
-        DefaultSpawnsPerMinute: 120f, ArrivesAtSeconds: 0f, SpinSpeed: 0f,
+        DefaultSpawnsPerMinute: 160f, ArrivesAtSeconds: 0f, SpinSpeed: 0f,
         speed => new ChasePlayer(speed), LogoShapes.Gemini(20f),
         ContactDamage: 5f);
 
-    /// <summary>Snakes toward the player, harder to line up a shot on.</summary>
+    /// <summary>Snakes toward the player, harder to line up a shot on; joins at 6:00 with Autocomplete.</summary>
     public static readonly EnemyType ChatGpt = new(
         "ChatGPT", Radius: 22f, HitPoints: 4f, Speed: 85f, Experience: 3,
-        DefaultSpawnsPerMinute: 56f, ArrivesAtSeconds: 60f, SpinSpeed: 1f,
+        DefaultSpawnsPerMinute: 50f, ArrivesAtSeconds: AutocompleteArrivesAtSeconds, SpinSpeed: 1f,
         speed => new Weave(speed, amplitude: 60f, cyclesPerSecond: 0.8f), LogoShapes.ChatGpt(22f),
         ContactDamage: 6f);
 
-    /// <summary>Creeps, then lunges in a straight line; sidestep the lunge.</summary>
+    /// <summary>Creeps, then lunges in a straight line; sidestep the lunge. Joins at 9:00 with Hallucination.</summary>
     public static readonly EnemyType Claude = new(
         "Claude", Radius: 20f, HitPoints: 3f, Speed: 60f, Experience: 3,
-        DefaultSpawnsPerMinute: 40f, ArrivesAtSeconds: 90f, SpinSpeed: 1.5f,
+        DefaultSpawnsPerMinute: 20f, ArrivesAtSeconds: HallucinationArrivesAtSeconds, SpinSpeed: 1.5f,
         speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(20f),
         ContactDamage: 6f);
-
-    /// <summary>Fast, circling inward in a tight spiral.</summary>
-    public static readonly EnemyType Grok = new(
-        "Grok", Radius: 20f, HitPoints: 4f, Speed: 130f, Experience: 4,
-        DefaultSpawnsPerMinute: 40f, ArrivesAtSeconds: 120f, SpinSpeed: 0f,
-        speed => new SpiralIn(speed, offsetDegrees: 60f), LogoShapes.Grok(20f),
-        ContactDamage: 6f);
-
-    /// <summary>A sturdier weaver with a quick, narrow sway.</summary>
-    public static readonly EnemyType Copilot = new(
-        "Copilot", Radius: 22f, HitPoints: 6f, Speed: 80f, Experience: 5,
-        DefaultSpawnsPerMinute: 32f, ArrivesAtSeconds: 180f, SpinSpeed: 0f,
-        speed => new Weave(speed, amplitude: 25f, cyclesPerSecond: 2f), LogoShapes.Copilot(22f),
-        ContactDamage: 7f);
-
-    /// <summary>Starts slow but keeps accelerating; kill it early.</summary>
-    public static readonly EnemyType Cursor = new(
-        "Cursor", Radius: 22f, HitPoints: 8f, Speed: 40f, Experience: 7,
-        DefaultSpawnsPerMinute: 24f, ArrivesAtSeconds: 240f, SpinSpeed: 0.6f,
-        speed => new Accelerate(speed, acceleration: 18f, maxSpeed: 190f), LogoShapes.Cursor(22f),
-        ContactDamage: 7f);
-
-    /// <summary>Creeps, then teleports a chunk closer every couple of seconds.</summary>
-    public static readonly EnemyType Perplexity = new(
-        "Perplexity", Radius: 22f, HitPoints: 7f, Speed: 40f, Experience: 6,
-        DefaultSpawnsPerMinute: 24f, ArrivesAtSeconds: 300f, SpinSpeed: 0f,
-        speed => new Blink(speed, jumpDistance: 90f, secondsBetweenJumps: 1.75f), LogoShapes.Perplexity(22f),
-        ContactDamage: 7f);
-
-    /// <summary>Tough and spinning, closing in on a wide spiral.</summary>
-    public static readonly EnemyType AppleIntelligence = new(
-        "Apple Intelligence", Radius: 26f, HitPoints: 10f, Speed: 75f, Experience: 9,
-        DefaultSpawnsPerMinute: 16f, ArrivesAtSeconds: 360f, SpinSpeed: 0.8f,
-        speed => new SpiralIn(speed, offsetDegrees: 40f), LogoShapes.AppleIntelligence(26f),
-        ContactDamage: 8f);
-
-    /// <summary>A slow, huge tank that soaks up damage.</summary>
-    public static readonly EnemyType Meta = new(
-        "Meta", Radius: 32f, HitPoints: 20f, Speed: 50f, Experience: 15,
-        DefaultSpawnsPerMinute: 12f, ArrivesAtSeconds: 420f, SpinSpeed: 0f,
-        speed => new ChasePlayer(speed), LogoShapes.Meta(32f),
-        ContactDamage: 8f);
 
     /// <summary>Base contact damage per tick of every boss, before time scaling.</summary>
     public const float BossContactDamage = 15f;
 
     /// <summary>
-    /// The one owner of how contact damage grows with the clock: base damage x (1 + elapsedMinutes / 10), uncapped and
-    /// rounded to hundredths. So the base value at 0:00, twice it at 10:00 and three times it at 20:00. Every contact
+    /// The one owner of how contact damage grows with the clock: base damage x (1 + elapsedMinutes / 10), capped at 2x
+    /// from 10:00 and rounded to hundredths. So the base value at 0:00, and twice it at 10:00 and beyond. Every contact
     /// source (enemy, boss, bullet, trail, ring) reads its damage through here.
     /// </summary>
     public static float ScaledContactDamage(float baseDamage, float elapsedSeconds) =>
         MathF.Round(baseDamage * ContactDamageScale(elapsedSeconds), 2);
 
-    /// <summary>The time multiplier on contact damage: 1 + elapsedMinutes / 10, uncapped.</summary>
-    public static float ContactDamageScale(float elapsedSeconds) => 1f + elapsedSeconds / 600f;
+    /// <summary>The time multiplier on contact damage: 1 + elapsedMinutes / 10, capped at 2x from 10:00.</summary>
+    public static float ContactDamageScale(float elapsedSeconds) => MathF.Min(1f + elapsedSeconds / 600f, 2f);
 
     private const float GeminiBossSpeed = 30f;
 
@@ -124,7 +96,7 @@ public static class EnemyRoster
         ContactDamage: BossContactDamage);
 
     /// <summary>
-    /// Boss arriving at 4:30. Base behaviour alternates a 1.2 s telegraph and a straight charge
+    /// Boss arriving at 6:00. Base behaviour alternates a 1.2 s telegraph and a straight charge
     /// at 400 px/s reaching up to 700 px and stopping where the ship was at lock.
     /// At 75% health it charges faster and farther (550 px/s, up to 900 px); at 50% it also fires
     /// rings of slow bullets with an escape gap; at 25% it charges at 700 px/s with a 1.0 s wind-up,
@@ -145,7 +117,7 @@ public static class EnemyRoster
         ContactDamage: BossContactDamage);
 
     /// <summary>
-    /// Boss arriving at 7:00. Chases at 70 px/s and splits into 2 look-alike copies every 5 s.
+    /// Boss arriving at 9:00. Chases at 70 px/s and splits into 2 look-alike copies every 5 s.
     /// At 75% it splits every 3.5 s; at 50% it makes 3 copies per split and chases at 100 px/s; at 25% it
     /// splits every 2.5 s and moves like Claude Boss, creeping for 1.2 s before each lunge. The split timer
     /// carries over each phase change, so a phase never delays or doubles a split.
@@ -165,7 +137,7 @@ public static class EnemyRoster
         ContactDamage: BossContactDamage);
 
     /// <summary>
-    /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
+    /// Final boss arriving at 12:00. Distinct from regular EnemyRoster.Claude.
     /// Its health bar is notched at 75%, 50% and 25%.
     /// At 75% bullet rings come more often (every 3 s → 2 s) with more bullets (12 → 16), still with an escape gap;
     /// at 50% its closing ring returns sooner (every 10 s → 6 s), shrinks faster (40 → 60 px/s) and lasts 6 s instead
@@ -219,10 +191,10 @@ public static class EnemyRoster
     /// <summary>Bosses and when they appear. While any boss is alive, regular spawning pauses.</summary>
     public static IReadOnlyList<BossArrival> Bosses { get; } =
     [
-        new(180f, GeminiBoss),
-        new(270f, Autocomplete),
-        new(420f, Hallucination),
-        new(600f, ClaudeBoss),
+        new(GeminiBossArrivesAtSeconds, GeminiBoss),
+        new(AutocompleteArrivesAtSeconds, Autocomplete),
+        new(HallucinationArrivesAtSeconds, Hallucination),
+        new(ClaudeBossArrivesAtSeconds, ClaudeBoss),
     ];
 
     /// <summary>Stretches of the clock when regular spawning stops.</summary>
@@ -235,5 +207,5 @@ public static class EnemyRoster
     public static IReadOnlyList<RingSpawn> Rings { get; } = [new(90f, Gemini, Count: 32, Radius: 500f)];
 
     public static IReadOnlyList<EnemyType> All { get; } =
-        [HuggingFace, Gemini, ChatGpt, Claude, Grok, Copilot, Cursor, Perplexity, AppleIntelligence, Meta];
+        [HuggingFace, Gemini, ChatGpt, Claude];
 }

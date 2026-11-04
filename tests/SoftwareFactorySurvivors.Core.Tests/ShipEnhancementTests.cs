@@ -12,30 +12,38 @@ public class ShipEnhancementTests
     // ---- Contact damage growing with time ----
 
     [Fact]
-    public void Contact_damage_scale_is_1_at_the_start_2_at_ten_minutes_3_at_twenty_and_keeps_rising()
+    public void Contact_damage_scale_caps_at_double_from_ten_minutes()
     {
         Assert.Equal(1f, EnemyRoster.ContactDamageScale(0f));
         Assert.Equal(2f, EnemyRoster.ContactDamageScale(600f));
-        Assert.Equal(3f, EnemyRoster.ContactDamageScale(1200f));
+        Assert.Equal(2f, EnemyRoster.ContactDamageScale(720f));
+        Assert.Equal(2f, EnemyRoster.ContactDamageScale(900f));
 
         var previous = EnemyRoster.ContactDamageScale(0f);
-        for (var seconds = 15f; seconds <= 1800f; seconds += 15f)
+        for (var seconds = 15f; seconds <= 600f; seconds += 15f)
         {
             var scale = EnemyRoster.ContactDamageScale(seconds);
             Assert.True(scale > previous, $"Scale at {seconds} s ({scale}) is not above {previous}");
             previous = scale;
         }
 
+        for (var seconds = 615f; seconds <= 1800f; seconds += 15f)
+        {
+            Assert.Equal(2f, EnemyRoster.ContactDamageScale(seconds));
+        }
+
         // Damage is base x scale, rounded to hundredths: 7 at 1:17 is 7.898... -> 7.90.
         Assert.Equal(6f, EnemyRoster.ScaledContactDamage(6f, 0f));
         Assert.Equal(30f, EnemyRoster.ScaledContactDamage(15f, 600f));
+        Assert.Equal(30f, EnemyRoster.ScaledContactDamage(15f, 720f));
+        Assert.Equal(30f, EnemyRoster.ScaledContactDamage(15f, 900f));
         Assert.Equal(7.9f, EnemyRoster.ScaledContactDamage(7f, 77f));
     }
 
     [Fact]
-    public void Regular_enemies_deal_5_to_8_base_contact_damage_and_bosses_15()
+    public void Regular_enemies_deal_5_to_6_base_contact_damage_and_bosses_15()
     {
-        Assert.All(EnemyRoster.All, type => Assert.InRange(type.ContactDamage, 5f, 8f));
+        Assert.All(EnemyRoster.All, type => Assert.InRange(type.ContactDamage, 5f, 6f));
         Assert.All(EnemyRoster.Bosses, arrival => Assert.Equal(15f, arrival.Type.ContactDamage));
     }
 
@@ -45,7 +53,7 @@ public class ShipEnhancementTests
         var atStart = FirstTouchLoss(0f);
         var atTen = FirstTouchLoss(600f);
 
-        Assert.Equal(EnemyRoster.Grok.ContactDamage, atStart);
+        Assert.Equal(EnemyRoster.ChatGpt.ContactDamage, atStart);
         Assert.Equal(2f * atStart, atTen);
     }
 
@@ -53,7 +61,7 @@ public class ShipEnhancementTests
     {
         var session = new GameSession(Center, new Random(1), roster: [], bosses: [], rings: [],
             start: new StartOptions(StartSeconds: startSeconds)).WithLaser();
-        session.AddEnemy(TestEnemies.Stationary(EnemyRoster.Grok with { HitPoints = 1_000f }, Center));
+        session.AddEnemy(TestEnemies.Stationary(EnemyRoster.ChatGpt with { HitPoints = 1_000f }, Center));
 
         // A frame too short to move the clock's scale off its hundredths.
         session.Update(Vector2.Zero, null, 0.0001f, Width, Height);
@@ -427,7 +435,7 @@ public class ShipEnhancementTests
 
     private static void EarnOneLevel(GameSession session)
     {
-        var prize = EnemyRoster.Meta with { Experience = Leveling.Required(session.Leveling.Level) };
+        var prize = EnemyRoster.ChatGpt with { Experience = Leveling.Required(session.Leveling.Level) };
         session.AddEnemy(TestEnemies.Stationary(prize, session.Ship.Nose - new Vector2(0, 150)));
         var level = session.Leveling.Level;
         for (var i = 0; i < 60 * 3 && session.Leveling.Level == level; i++)

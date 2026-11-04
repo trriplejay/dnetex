@@ -29,7 +29,7 @@ public class SpawnScheduleTests
         Assert.NotEmpty(seen);
         Assert.False(session.IsSpawningPaused);
 
-        // A Gemini spawns every 0.5 seconds at 120/min (the one due at 1:20 may land on the boundary frame);
+        // A Gemini spawns every 0.375 seconds at 160/min (the one due at 1:20 may land on the boundary frame);
         // after that nothing new appears during the lull.
         RunUntil(session, seen, 80.1f);
         Assert.Empty(RunUntil(session, seen, 89.9f));
@@ -37,7 +37,8 @@ public class SpawnScheduleTests
 
         RunUntil(session, seen, 90f);
         Assert.False(session.IsSpawningPaused);
-        Assert.Equal(8, RunUntil(session, seen, 94f).Count);
+        // 4 s at 160/min is 10.67 spawns, plus the progress frozen when the lull began: 11 with this seed.
+        Assert.Equal(11, RunUntil(session, seen, 94f).Count);
     }
 
     [Fact]

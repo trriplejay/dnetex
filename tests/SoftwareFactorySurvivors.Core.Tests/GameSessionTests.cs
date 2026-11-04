@@ -403,7 +403,7 @@ public class GameSessionTests
     private static void KillFor(GameSession session, int experience, List<Projectile>? fired = null)
     {
         session.Stats.Laser().Damage = 1000f;
-        var prize = EnemyRoster.Meta with { Experience = experience };
+        var prize = EnemyRoster.ChatGpt with { Experience = experience };
         session.AddEnemy(TestEnemies.Stationary(prize, session.Ship.Nose - new Vector2(0, 150)));
         for (var i = 0; i < 60 * 3 && !session.IsChoosingUpgrade; i++)
         {
@@ -444,7 +444,7 @@ public class GameSessionTests
         Assert.Empty(Upgrades.Eligible(session.Stats));
 
         session.Stats.Laser().Damage = 1000f;
-        var prize = EnemyRoster.Meta with { Experience = Leveling.Required(1) };
+        var prize = EnemyRoster.ChatGpt with { Experience = Leveling.Required(1) };
         session.AddEnemy(TestEnemies.Stationary(prize, session.Ship.Nose - new Vector2(0, 150)));
 
         for (var i = 0; i < 60 * 3 && session.Leveling.Level < 2; i++)

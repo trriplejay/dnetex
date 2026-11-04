@@ -26,15 +26,15 @@ public class EnemyTests
     }
 
     [Fact]
-    public void Roster_has_all_ten_logos_with_varied_toughness_speed_and_movement()
+    public void Roster_is_exactly_the_four_regular_logos_with_varied_toughness_speed_and_movement()
     {
-        string[] expected = ["Hugging Face", "Gemini", "ChatGPT", "Claude", "Grok", "Copilot", "Cursor", "Perplexity", "Apple Intelligence", "Meta"];
+        string[] expected = ["Hugging Face", "Gemini", "ChatGPT", "Claude"];
         Assert.Equal(expected, EnemyRoster.All.Select(type => type.Name));
 
-        Assert.True(EnemyRoster.All.Select(type => type.HitPoints).Distinct().Count() >= 6);
-        Assert.True(EnemyRoster.All.Select(type => type.Speed).Distinct().Count() >= 6);
-        var patterns = EnemyRoster.All.Select(type => type.CreateMovement(type.Speed).GetType()).Distinct().ToArray();
-        Assert.True(patterns.Length >= 6, $"Only {patterns.Length} movement patterns");
+        Assert.Equal(3, EnemyRoster.All.Select(type => type.HitPoints).Distinct().Count());
+        Assert.Equal(4, EnemyRoster.All.Select(type => type.Speed).Distinct().Count());
+        var patterns = EnemyRoster.All.Select(type => type.CreateMovement(type.Speed).GetType()).Distinct().ToHashSet();
+        Assert.Equal([typeof(ChasePlayer), typeof(Weave), typeof(Dash)], patterns);
     }
 
     [Fact]
@@ -47,7 +47,7 @@ public class EnemyTests
                 Assert.True(byToughness[i].Experience >= byToughness[i - 1].Experience,
                     $"{byToughness[i].Name} is tougher than {byToughness[i - 1].Name} but worth less experience");
         }
-        Assert.True(EnemyRoster.Meta.Experience > EnemyRoster.HuggingFace.Experience * 10);
+        Assert.True(EnemyRoster.ChatGpt.Experience > EnemyRoster.HuggingFace.Experience);
     }
 
     [Theory]
@@ -108,19 +108,6 @@ public class EnemyTests
     }
 
     [Fact]
-    public void Spiral_in_circles_while_slowly_closing_the_distance()
-    {
-        var spiral = new SpiralIn(100f, offsetDegrees: 60f);
-        var position = new Vector2(300, 0);
-
-        var next = spiral.Move(position, Vector2.Zero, 0.1f);
-
-        Assert.Equal(10f, Vector2.Distance(position, next), precision: 3);
-        Assert.Equal(300f - 5f, next.Length(), precision: 0);
-        Assert.NotEqual(0f, next.Y);
-    }
-
-    [Fact]
     public void Dash_creeps_then_lunges_straight_at_where_the_player_was()
     {
         var dash = new Dash(20f, dashSpeed: 400f, creepSeconds: 1f, dashSeconds: 0.5f);
@@ -136,31 +123,6 @@ public class EnemyTests
 
         Assert.Equal(100f, position.X - lungeStart.X, precision: 3);
         Assert.Equal(lungeStart.Y, position.Y, precision: 3);
-    }
-
-    [Fact]
-    public void Blink_teleports_closer_every_interval()
-    {
-        var blink = new Blink(0f, jumpDistance: 90f, secondsBetweenJumps: 1f);
-        var position = new Vector2(500, 0);
-
-        position = blink.Move(position, Vector2.Zero, 0.5f);
-        Assert.Equal(500f, position.X);
-
-        position = blink.Move(position, Vector2.Zero, 0.5f);
-        Assert.Equal(410f, position.X, precision: 3);
-    }
-
-    [Fact]
-    public void Accelerate_speeds_up_to_its_top_speed()
-    {
-        var accelerate = new Accelerate(40f, acceleration: 20f, maxSpeed: 100f);
-
-        accelerate.Move(new Vector2(10000, 0), Vector2.Zero, 1f);
-        Assert.Equal(60f, accelerate.CurrentSpeed);
-
-        accelerate.Move(new Vector2(10000, 0), Vector2.Zero, 10f);
-        Assert.Equal(100f, accelerate.CurrentSpeed);
     }
 
     [Fact]

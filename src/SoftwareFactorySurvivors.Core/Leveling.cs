@@ -3,8 +3,8 @@ namespace SoftwareFactorySurvivors.Core;
 /// <summary>
 /// Experience and level. Each level needs max(1, round(2.0 × level^1.25)) experience: 2, 5, 8, 11, 15, 19, 23, 27, 31, 36 …
 /// The cost grows faster than linearly, so early levels come quickly to get the build going, while later
-/// levels slow down; but it grows far slower than exponentially, so the tougher, higher-experience enemies
-/// arriving later still keep upgrades coming at a steady pace all the way to 10:00.
+/// levels slow down; but it grows far slower than exponentially, so the swelling numbers of enemies as each new
+/// type joins, and the large experience each boss gives, still keep upgrades coming all the way to 12:00.
 /// </summary>
 public sealed class Leveling
 {

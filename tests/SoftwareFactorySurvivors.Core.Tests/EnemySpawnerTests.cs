@@ -11,16 +11,17 @@ public class EnemySpawnerTests
     private static readonly EnemyType Square = EnemyRoster.Gemini with { Name = "Square", Radius = 10f, DefaultSpawnsPerMinute = 60f };
 
     [Fact]
-    public void Gemini_spawns_every_half_second_by_default_just_off_screen()
+    public void Gemini_spawns_at_its_default_rate_just_off_screen()
     {
         var spawner = new EnemySpawner(new Random(7));
         spawner.Add(EnemyRoster.Gemini);
-        Assert.Equal(120f, spawner.GetSpawnsPerMinute(EnemyRoster.Gemini));
+        Assert.Equal(160f, spawner.GetSpawnsPerMinute(EnemyRoster.Gemini));
 
-        Assert.Empty(spawner.Update(0.4f, Width, Height));
-        var spawned = spawner.Update(0.1f, Width, Height).Concat(spawner.Update(1.5f, Width, Height)).ToArray();
+        // 160/min is one every 0.375 s: none by 0.37 s, five by 2 s.
+        Assert.Empty(spawner.Update(0.37f, Width, Height));
+        var spawned = spawner.Update(0.13f, Width, Height).Concat(spawner.Update(1.5f, Width, Height)).ToArray();
 
-        Assert.Equal(4, spawned.Length);
+        Assert.Equal(5, spawned.Length);
         Assert.All(spawned, enemy =>
         {
             var p = enemy.Position;
@@ -39,7 +40,7 @@ public class EnemySpawnerTests
 
         var spawned = spawner.Update(4f, Width, Height);
 
-        Assert.Equal(8 + 4, spawned.Count);
+        Assert.Equal(10 + 4, spawned.Count);
     }
 
     [Fact]
