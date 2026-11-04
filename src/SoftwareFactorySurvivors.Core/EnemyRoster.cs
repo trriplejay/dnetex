@@ -9,10 +9,22 @@ namespace SoftwareFactorySurvivors.Core;
 /// </summary>
 public static class EnemyRoster
 {
+    /// <summary>
+    /// The one owner of the boss schedule. Each regular type after Gemini joins at its paired boss's arrival,
+    /// so its ArrivesAtSeconds names the same constant.
+    /// </summary>
+    public const float GeminiBossArrivesAtSeconds = 3 * 60;
+    /// <summary>Autocomplete's arrival (6:00); ChatGPT joins then.</summary>
+    public const float AutocompleteArrivesAtSeconds = 6 * 60;
+    /// <summary>Hallucination's arrival (9:00); Claude joins then.</summary>
+    public const float HallucinationArrivesAtSeconds = 9 * 60;
+    /// <summary>The final Claude Boss's arrival (12:00); GameSession.SurvivalSeconds reads it.</summary>
+    public const float ClaudeBossArrivesAtSeconds = 12 * 60;
+
     /// <summary>Fragile and fast; swarms in from 3:00, joining with the Gemini Boss.</summary>
     public static readonly EnemyType HuggingFace = new(
         "Hugging Face", Radius: 14f, HitPoints: 1f, Speed: 160f, Experience: 1,
-        DefaultSpawnsPerMinute: 240f, ArrivesAtSeconds: 180f, SpinSpeed: 0f,
+        DefaultSpawnsPerMinute: 240f, ArrivesAtSeconds: GeminiBossArrivesAtSeconds, SpinSpeed: 0f,
         speed => new ChasePlayer(speed), LogoShapes.HuggingFace(14f),
         ContactDamage: 5f);
 
@@ -26,14 +38,14 @@ public static class EnemyRoster
     /// <summary>Snakes toward the player, harder to line up a shot on; joins at 6:00 with Autocomplete.</summary>
     public static readonly EnemyType ChatGpt = new(
         "ChatGPT", Radius: 22f, HitPoints: 4f, Speed: 85f, Experience: 3,
-        DefaultSpawnsPerMinute: 50f, ArrivesAtSeconds: 360f, SpinSpeed: 1f,
+        DefaultSpawnsPerMinute: 50f, ArrivesAtSeconds: AutocompleteArrivesAtSeconds, SpinSpeed: 1f,
         speed => new Weave(speed, amplitude: 60f, cyclesPerSecond: 0.8f), LogoShapes.ChatGpt(22f),
         ContactDamage: 6f);
 
     /// <summary>Creeps, then lunges in a straight line; sidestep the lunge. Joins at 9:00 with Hallucination.</summary>
     public static readonly EnemyType Claude = new(
         "Claude", Radius: 20f, HitPoints: 3f, Speed: 60f, Experience: 3,
-        DefaultSpawnsPerMinute: 20f, ArrivesAtSeconds: 540f, SpinSpeed: 1.5f,
+        DefaultSpawnsPerMinute: 20f, ArrivesAtSeconds: HallucinationArrivesAtSeconds, SpinSpeed: 1.5f,
         speed => new Dash(speed, dashSpeed: 420f, creepSeconds: 1.6f, dashSeconds: 0.45f), LogoShapes.Claude(20f),
         ContactDamage: 6f);
 
@@ -179,10 +191,10 @@ public static class EnemyRoster
     /// <summary>Bosses and when they appear. While any boss is alive, regular spawning pauses.</summary>
     public static IReadOnlyList<BossArrival> Bosses { get; } =
     [
-        new(180f, GeminiBoss),
-        new(360f, Autocomplete),
-        new(540f, Hallucination),
-        new(720f, ClaudeBoss),
+        new(GeminiBossArrivesAtSeconds, GeminiBoss),
+        new(AutocompleteArrivesAtSeconds, Autocomplete),
+        new(HallucinationArrivesAtSeconds, Hallucination),
+        new(ClaudeBossArrivesAtSeconds, ClaudeBoss),
     ];
 
     /// <summary>Stretches of the clock when regular spawning stops.</summary>

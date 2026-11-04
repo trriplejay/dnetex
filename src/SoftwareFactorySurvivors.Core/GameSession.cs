@@ -20,7 +20,7 @@ public sealed class GameSession
     public const int PointsPerKill = 1;
 
     /// <summary>Arrival time of the final boss (12:00) and the upper limit for the --time start option.</summary>
-    public const float SurvivalSeconds = 12 * 60;
+    public const float SurvivalSeconds = EnemyRoster.ClaudeBossArrivesAtSeconds;
 
     /// <summary>Angle between neighbouring lasers in a multi-laser volley.</summary>
     public const float VolleySpreadRadians = 10f * MathF.PI / 180f;

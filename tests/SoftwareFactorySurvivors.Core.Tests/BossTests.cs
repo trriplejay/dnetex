@@ -61,14 +61,24 @@ public class BossTests
         s3.Update(Vector2.Zero, null, 0.15f, Width, Height);
         Assert.Single(s3.Bosses, b => b.Type == EnemyRoster.Hallucination);
 
-        // Check Claude Boss at 720 s (using session with SurvivalSeconds override / bosses list)
-        var s4 = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(720f, EnemyRoster.ClaudeBoss)], start: new StartOptions(StartSeconds: 599f)).WithLaser();
+        // Check Claude Boss at 720 s, against the real schedule (EnemyRoster.Bosses)
+        var s4 = new GameSession(Center, new Random(1), roster: [], start: new StartOptions(StartSeconds: 719.9f)).WithLaser();
         s4.Stats.MaxHitPoints = 1_000_000f;
         s4.Stats.HitPoints = 1_000_000f;
         s4.Stats.Laser().Damage = 0f;
         Assert.Empty(s4.Bosses);
-        s4.Update(Vector2.Zero, null, 1f, Width, Height);
-        Assert.Empty(s4.Bosses);
+        s4.Update(Vector2.Zero, null, 0.15f, Width, Height);
+        Assert.Single(s4.Bosses, b => b.Type == EnemyRoster.ClaudeBoss);
+    }
+
+    [Fact]
+    public void The_end_of_the_run_and_each_join_time_follow_the_boss_schedule()
+    {
+        Assert.Equal(GameSession.SurvivalSeconds, EnemyRoster.Bosses[^1].AtSeconds);
+        Assert.Same(EnemyRoster.ClaudeBoss, EnemyRoster.Bosses[^1].Type);
+        Assert.Equal(EnemyRoster.Bosses[0].AtSeconds, EnemyRoster.HuggingFace.ArrivesAtSeconds);
+        Assert.Equal(EnemyRoster.Bosses[1].AtSeconds, EnemyRoster.ChatGpt.ArrivesAtSeconds);
+        Assert.Equal(EnemyRoster.Bosses[2].AtSeconds, EnemyRoster.Claude.ArrivesAtSeconds);
     }
 
     [Fact]
