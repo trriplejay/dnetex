@@ -19,8 +19,8 @@ public sealed class GameSession
     /// <summary>Points for each enemy the player kills.</summary>
     public const int PointsPerKill = 1;
 
-    /// <summary>Surviving this long (10:00) wins the game.</summary>
-    public const float SurvivalSeconds = 10 * 60;
+    /// <summary>Arrival time of the final boss (12:00) and the upper limit for the --time start option.</summary>
+    public const float SurvivalSeconds = 12 * 60;
 
     /// <summary>Angle between neighbouring lasers in a multi-laser volley.</summary>
     public const float VolleySpreadRadians = 10f * MathF.PI / 180f;
@@ -138,7 +138,7 @@ public sealed class GameSession
     /// <summary>True during a scheduled lull, when regular spawning stops.</summary>
     public bool IsSpawningPaused => _spawnPauses.Any(pause => pause.Covers(ElapsedSeconds));
 
-    /// <summary>Seconds survived, stopping at SurvivalSeconds.</summary>
+    /// <summary>Seconds survived, stopping when the run is won or lost.</summary>
     public float ElapsedSeconds { get; private set; }
 
     public int Score { get; private set; }
@@ -201,7 +201,7 @@ public sealed class GameSession
         if (IsFinished || IsChoosingUpgrade)
             return;
 
-        ElapsedSeconds = MathF.Min(ElapsedSeconds + elapsedSeconds, SurvivalSeconds);
+        ElapsedSeconds += elapsedSeconds;
         AddArrivedEnemyTypes();
 
         UpdateShieldRecharge(elapsedSeconds);

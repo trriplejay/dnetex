@@ -2,7 +2,7 @@ namespace SoftwareFactorySurvivors.Core;
 
 /// <summary>
 /// Every enemy type in the game, roughly weakest to toughest. Tougher types are worth more experience and
-/// arrive later in the 10-minute run, so the pressure builds over time. Tune the numbers here.
+/// arrive later in the 12-minute run, so the pressure builds over time. Tune the numbers here.
 /// For reference, the ship moves at 200 px/s.
 /// </summary>
 public static class EnemyRoster
@@ -81,15 +81,15 @@ public static class EnemyRoster
     public const float BossContactDamage = 15f;
 
     /// <summary>
-    /// The one owner of how contact damage grows with the clock: base damage x (1 + elapsedMinutes / 10), uncapped and
-    /// rounded to hundredths. So the base value at 0:00, twice it at 10:00 and three times it at 20:00. Every contact
+    /// The one owner of how contact damage grows with the clock: base damage x (1 + elapsedMinutes / 10), capped at 2x
+    /// from 10:00 and rounded to hundredths. So the base value at 0:00, and twice it at 10:00 and beyond. Every contact
     /// source (enemy, boss, bullet, trail, ring) reads its damage through here.
     /// </summary>
     public static float ScaledContactDamage(float baseDamage, float elapsedSeconds) =>
         MathF.Round(baseDamage * ContactDamageScale(elapsedSeconds), 2);
 
-    /// <summary>The time multiplier on contact damage: 1 + elapsedMinutes / 10, uncapped.</summary>
-    public static float ContactDamageScale(float elapsedSeconds) => 1f + elapsedSeconds / 600f;
+    /// <summary>The time multiplier on contact damage: 1 + elapsedMinutes / 10, capped at 2x from 10:00.</summary>
+    public static float ContactDamageScale(float elapsedSeconds) => MathF.Min(1f + elapsedSeconds / 600f, 2f);
 
     private const float GeminiBossSpeed = 30f;
 
@@ -124,7 +124,7 @@ public static class EnemyRoster
         ContactDamage: BossContactDamage);
 
     /// <summary>
-    /// Boss arriving at 4:30. Base behaviour alternates a 1.2 s telegraph and a straight charge
+    /// Boss arriving at 6:00. Base behaviour alternates a 1.2 s telegraph and a straight charge
     /// at 400 px/s reaching up to 700 px and stopping where the ship was at lock.
     /// At 75% health it charges faster and farther (550 px/s, up to 900 px); at 50% it also fires
     /// rings of slow bullets with an escape gap; at 25% it charges at 700 px/s with a 1.0 s wind-up,
@@ -145,7 +145,7 @@ public static class EnemyRoster
         ContactDamage: BossContactDamage);
 
     /// <summary>
-    /// Boss arriving at 7:00. Chases at 70 px/s and splits into 2 look-alike copies every 5 s.
+    /// Boss arriving at 9:00. Chases at 70 px/s and splits into 2 look-alike copies every 5 s.
     /// At 75% it splits every 3.5 s; at 50% it makes 3 copies per split and chases at 100 px/s; at 25% it
     /// splits every 2.5 s and moves like Claude Boss, creeping for 1.2 s before each lunge. The split timer
     /// carries over each phase change, so a phase never delays or doubles a split.
@@ -165,7 +165,7 @@ public static class EnemyRoster
         ContactDamage: BossContactDamage);
 
     /// <summary>
-    /// Final boss arriving at 10:00. Distinct from regular EnemyRoster.Claude.
+    /// Final boss arriving at 12:00. Distinct from regular EnemyRoster.Claude.
     /// Its health bar is notched at 75%, 50% and 25%.
     /// At 75% bullet rings come more often (every 3 s → 2 s) with more bullets (12 → 16), still with an escape gap;
     /// at 50% its closing ring returns sooner (every 10 s → 6 s), shrinks faster (40 → 60 px/s) and lasts 6 s instead
@@ -220,9 +220,9 @@ public static class EnemyRoster
     public static IReadOnlyList<BossArrival> Bosses { get; } =
     [
         new(180f, GeminiBoss),
-        new(270f, Autocomplete),
-        new(420f, Hallucination),
-        new(600f, ClaudeBoss),
+        new(360f, Autocomplete),
+        new(540f, Hallucination),
+        new(720f, ClaudeBoss),
     ];
 
     /// <summary>Stretches of the clock when regular spawning stops.</summary>

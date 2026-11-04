@@ -18,6 +18,7 @@ public class StartOptionsTests
     [InlineData(new[] { "--level=3", "--time=1:30" }, 90f, 3)]
     [InlineData(new[] { "--time", "150" }, 150f, 1)]
     [InlineData(new[] { "--time", "09:59" }, 599f, 1)]
+    [InlineData(new[] { "--time", "11:59" }, 719f, 1)]
     public void Reads_time_and_level(string[] args, float seconds, int level)
     {
         Assert.Equal(new StartOptions(seconds, level), StartOptions.Parse(args));
@@ -25,7 +26,7 @@ public class StartOptionsTests
 
     [Theory]
     [InlineData("--speed", "2")]
-    [InlineData("--time", "10:00")]
+    [InlineData("--time", "12:00")]
     [InlineData("--time", "1:75")]
     [InlineData("--time", "abc")]
     [InlineData("--time", "-5")]
@@ -33,7 +34,9 @@ public class StartOptionsTests
     [InlineData("--level", "two")]
     public void Rejects_bad_options(string name, string value)
     {
-        Assert.Throws<ArgumentException>(() => StartOptions.Parse([name, value]));
+        var ex = Assert.Throws<ArgumentException>(() => StartOptions.Parse([name, value]));
+        if (name == "--time" && value == "12:00")
+            Assert.Contains("must be before 12:00", ex.Message);
     }
 
     [Fact]
@@ -62,6 +65,42 @@ public class StartOptionsTests
         for (var i = 0; i < 60; i++)
             afterBoss.Update(Vector2.Zero, null, 1f / 60f, 1000f, 800f);
         Assert.False(afterBoss.IsBossActive);
+    }
+
+    [Fact]
+    public void Starting_late_skips_bosses_due_earlier()
+    {
+        var session = new GameSession(Center, new Random(1), start: new StartOptions(StartSeconds: 420f)).WithLaser();
+        session.Stats.MaxHitPoints = 1_000_000f;
+        session.Stats.HitPoints = 1_000_000f;
+        session.Stats.Laser().Damage = 0f;
+
+        Assert.Equal(420f, session.ElapsedSeconds);
+        Assert.False(session.IsBossActive);
+        Assert.DoesNotContain(session.Bosses, b => b.Type == EnemyRoster.GeminiBoss || b.Type == EnemyRoster.Autocomplete);
+
+        // Advance to 539.9 s: no Gemini Boss, Autocomplete, or Hallucination has appeared
+        AdvanceTo(session, 539.9f);
+        Assert.False(session.IsBossActive);
+        Assert.DoesNotContain(session.Bosses, b => b.Type == EnemyRoster.GeminiBoss || b.Type == EnemyRoster.Autocomplete || b.Type == EnemyRoster.Hallucination);
+
+        // Advance to 540 s: Hallucination enters
+        AdvanceTo(session, 540f);
+        Assert.True(session.IsBossActive);
+        var boss = Assert.Single(session.Bosses);
+        Assert.Same(EnemyRoster.Hallucination, boss.Type);
+        Assert.DoesNotContain(session.Bosses, b => b.Type == EnemyRoster.GeminiBoss || b.Type == EnemyRoster.Autocomplete);
+    }
+
+    private static void AdvanceTo(GameSession session, float targetSeconds)
+    {
+        while (session.ElapsedSeconds < targetSeconds)
+        {
+            if (session.IsChoosingUpgrade)
+                session.ChooseUpgrade(0);
+            var dt = MathF.Min(targetSeconds - session.ElapsedSeconds, 1f / 60f);
+            session.Update(Vector2.Zero, null, dt, 1000f, 800f);
+        }
     }
 
     [Fact]

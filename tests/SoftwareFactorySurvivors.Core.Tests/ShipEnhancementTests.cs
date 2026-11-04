@@ -12,23 +12,31 @@ public class ShipEnhancementTests
     // ---- Contact damage growing with time ----
 
     [Fact]
-    public void Contact_damage_scale_is_1_at_the_start_2_at_ten_minutes_3_at_twenty_and_keeps_rising()
+    public void Contact_damage_scale_caps_at_double_from_ten_minutes()
     {
         Assert.Equal(1f, EnemyRoster.ContactDamageScale(0f));
         Assert.Equal(2f, EnemyRoster.ContactDamageScale(600f));
-        Assert.Equal(3f, EnemyRoster.ContactDamageScale(1200f));
+        Assert.Equal(2f, EnemyRoster.ContactDamageScale(720f));
+        Assert.Equal(2f, EnemyRoster.ContactDamageScale(900f));
 
         var previous = EnemyRoster.ContactDamageScale(0f);
-        for (var seconds = 15f; seconds <= 1800f; seconds += 15f)
+        for (var seconds = 15f; seconds <= 600f; seconds += 15f)
         {
             var scale = EnemyRoster.ContactDamageScale(seconds);
             Assert.True(scale > previous, $"Scale at {seconds} s ({scale}) is not above {previous}");
             previous = scale;
         }
 
+        for (var seconds = 615f; seconds <= 1800f; seconds += 15f)
+        {
+            Assert.Equal(2f, EnemyRoster.ContactDamageScale(seconds));
+        }
+
         // Damage is base x scale, rounded to hundredths: 7 at 1:17 is 7.898... -> 7.90.
         Assert.Equal(6f, EnemyRoster.ScaledContactDamage(6f, 0f));
         Assert.Equal(30f, EnemyRoster.ScaledContactDamage(15f, 600f));
+        Assert.Equal(30f, EnemyRoster.ScaledContactDamage(15f, 720f));
+        Assert.Equal(30f, EnemyRoster.ScaledContactDamage(15f, 900f));
         Assert.Equal(7.9f, EnemyRoster.ScaledContactDamage(7f, 77f));
     }
 

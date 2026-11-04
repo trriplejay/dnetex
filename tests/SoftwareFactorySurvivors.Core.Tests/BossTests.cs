@@ -23,12 +23,52 @@ public class BossTests
             Assert.True(Vector2.Distance(pair.First, pair.Second * 4f) < 0.01f));
         Assert.Equal([
             new BossArrival(180f, EnemyRoster.GeminiBoss),
-            new BossArrival(270f, EnemyRoster.Autocomplete),
-            new BossArrival(420f, EnemyRoster.Hallucination),
-            new BossArrival(600f, EnemyRoster.ClaudeBoss),
+            new BossArrival(360f, EnemyRoster.Autocomplete),
+            new BossArrival(540f, EnemyRoster.Hallucination),
+            new BossArrival(720f, EnemyRoster.ClaudeBoss),
         ], EnemyRoster.Bosses);
         Assert.NotSame(EnemyRoster.Claude, EnemyRoster.ClaudeBoss);
         Assert.DoesNotContain(boss, EnemyRoster.All);
+    }
+
+    [Fact]
+    public void Each_boss_enters_at_exactly_its_scheduled_minute_and_not_before()
+    {
+        // Check Gemini Boss at 180 s
+        var s1 = new GameSession(Center, new Random(1), roster: [], start: new StartOptions(StartSeconds: 179.9f)).WithLaser();
+        s1.Stats.MaxHitPoints = 1_000_000f;
+        s1.Stats.HitPoints = 1_000_000f;
+        s1.Stats.Laser().Damage = 0f;
+        Assert.Empty(s1.Bosses);
+        s1.Update(Vector2.Zero, null, 0.15f, Width, Height);
+        Assert.Single(s1.Bosses, b => b.Type == EnemyRoster.GeminiBoss);
+
+        // Check Autocomplete at 360 s
+        var s2 = new GameSession(Center, new Random(1), roster: [], start: new StartOptions(StartSeconds: 359.9f)).WithLaser();
+        s2.Stats.MaxHitPoints = 1_000_000f;
+        s2.Stats.HitPoints = 1_000_000f;
+        s2.Stats.Laser().Damage = 0f;
+        Assert.Empty(s2.Bosses);
+        s2.Update(Vector2.Zero, null, 0.15f, Width, Height);
+        Assert.Single(s2.Bosses, b => b.Type == EnemyRoster.Autocomplete);
+
+        // Check Hallucination at 540 s
+        var s3 = new GameSession(Center, new Random(1), roster: [], start: new StartOptions(StartSeconds: 539.9f)).WithLaser();
+        s3.Stats.MaxHitPoints = 1_000_000f;
+        s3.Stats.HitPoints = 1_000_000f;
+        s3.Stats.Laser().Damage = 0f;
+        Assert.Empty(s3.Bosses);
+        s3.Update(Vector2.Zero, null, 0.15f, Width, Height);
+        Assert.Single(s3.Bosses, b => b.Type == EnemyRoster.Hallucination);
+
+        // Check Claude Boss at 720 s (using session with SurvivalSeconds override / bosses list)
+        var s4 = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(720f, EnemyRoster.ClaudeBoss)], start: new StartOptions(StartSeconds: 599f)).WithLaser();
+        s4.Stats.MaxHitPoints = 1_000_000f;
+        s4.Stats.HitPoints = 1_000_000f;
+        s4.Stats.Laser().Damage = 0f;
+        Assert.Empty(s4.Bosses);
+        s4.Update(Vector2.Zero, null, 1f, Width, Height);
+        Assert.Empty(s4.Bosses);
     }
 
     [Fact]
@@ -133,7 +173,7 @@ public class BossTests
     }
 
     [Fact]
-    public void Autocomplete_arrives_on_schedule_at_270s_while_gemini_boss_lives_and_regular_spawning_remains_paused()
+    public void Autocomplete_arrives_on_schedule_at_360s_while_gemini_boss_lives_and_regular_spawning_remains_paused()
     {
         var session = new GameSession(Center, new Random(2), roster: [EnemyRoster.ChatGpt], start: new StartOptions(StartSeconds: 175f)).WithLaser();
         session.Stats.MaxHitPoints = 1_000_000f;
@@ -150,8 +190,8 @@ public class BossTests
 
         var regularCountAtGemini = session.Enemies.Count(e => e.Type == EnemyRoster.ChatGpt);
 
-        // Keep Gemini boss alive (do not hit it) and advance past 270s, evading the regular enemy so contact does not destroy it
-        RunUntil(session, () => session.ElapsedSeconds >= 270.1f, () =>
+        // Keep Gemini boss alive (do not hit it) and advance past 360s, evading the regular enemy so contact does not destroy it
+        RunUntil(session, () => session.ElapsedSeconds >= 360.1f, () =>
         {
             var chatGpt = session.Enemies.FirstOrDefault(e => e.Type == EnemyRoster.ChatGpt);
             return chatGpt is not null && Vector2.Distance(session.Ship.Position, chatGpt.Position) < 200f
@@ -168,8 +208,8 @@ public class BossTests
         Assert.Equal(2, session.Bosses.Select(b => b.Type).Distinct().Count());
 
         // Regular-type enemies did not grow while IsBossActive
-        var regularCountAt270 = session.Enemies.Count(e => e.Type == EnemyRoster.ChatGpt);
-        Assert.Equal(regularCountAtGemini, regularCountAt270);
+        var regularCountAt360 = session.Enemies.Count(e => e.Type == EnemyRoster.ChatGpt);
+        Assert.Equal(regularCountAtGemini, regularCountAt360);
     }
 
     [Fact]

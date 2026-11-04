@@ -15,29 +15,37 @@ public class ScoringTests
     [InlineData(83.9f, "01:23")]
     [InlineData(599.99f, "09:59")]
     [InlineData(600f, "10:00")]
+    [InlineData(720f, "12:00")]
+    [InlineData(750f, "12:30")]
     public void Clock_shows_whole_minutes_and_seconds(float seconds, string expected)
     {
         Assert.Equal(expected, GameClock.Format(seconds));
     }
 
     [Fact]
-    public void Surviving_ten_minutes_wins_and_stops_the_clock_at_ten()
+    public void Surviving_twelve_minutes_wins_when_claude_boss_is_killed_and_stops_the_clock()
     {
-        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(600f, EnemyRoster.ClaudeBoss)], rings: []).WithLaser();
+        var session = new GameSession(Center, new Random(1), roster: [], bosses: [new BossArrival(720f, EnemyRoster.ClaudeBoss)], rings: []).WithLaser();
 
-        session.Update(Vector2.Zero, null, 600f, Width, Height);
+        session.Update(Vector2.Zero, null, 720f, Width, Height);
         var claudeBoss = Assert.Single(session.Bosses);
         Assert.Same(EnemyRoster.ClaudeBoss, claudeBoss.Type);
 
-        // At 600+ s with ClaudeBoss alive, IsVictory is false and ElapsedSeconds == 600 with GameClock.Format == "10:00" over several Updates
+        // At 720+ s with ClaudeBoss alive, IsVictory is false, ElapsedSeconds advances past 720, and GameClock.Format shows past 12:00
+        session.Update(Vector2.Zero, null, 30f, Width, Height);
+        Assert.False(session.IsVictory);
+        Assert.False(session.IsGameOver);
+        Assert.True(session.ElapsedSeconds > 720f);
+        Assert.Equal(750f, session.ElapsedSeconds);
+        Assert.Equal("12:30", GameClock.Format(session.ElapsedSeconds));
+
         for (var i = 0; i < 3; i++)
         {
             session.Update(Vector2.Zero, null, 1f, Width, Height);
             Assert.False(session.IsVictory);
             Assert.False(session.IsGameOver);
-            Assert.Equal(GameSession.SurvivalSeconds, session.ElapsedSeconds);
-            Assert.Equal("10:00", GameClock.Format(session.ElapsedSeconds));
         }
+        Assert.Equal(753f, session.ElapsedSeconds);
 
         // Killing ClaudeBoss sets IsVictory on that Update with IsGameOver false
         claudeBoss.TakeDamage(claudeBoss.HitPoints);
@@ -45,7 +53,15 @@ public class ScoringTests
 
         Assert.True(session.IsVictory);
         Assert.False(session.IsGameOver);
-        Assert.Equal(GameSession.SurvivalSeconds, session.ElapsedSeconds);
+        var winTime = session.ElapsedSeconds;
+
+        // Further Update calls leave ElapsedSeconds unchanged
+        for (var i = 0; i < 3; i++)
+        {
+            session.Update(Vector2.Zero, null, 1f, Width, Height);
+            Assert.Equal(winTime, session.ElapsedSeconds);
+            Assert.True(session.IsVictory);
+        }
 
         // A session where only GeminiBoss dies is not a victory
         var geminiSession = new GameSession(Center, new Random(2), roster: [], bosses: [new BossArrival(180f, EnemyRoster.GeminiBoss)], rings: []).WithLaser();
